@@ -535,12 +535,14 @@
     stroke-dasharray: 5 4;
     opacity: 0.7;
 }
-/* The initial place → first step: fixed by the definition, drawn heavier. */
+/* The initial place → first step: fixed by the definition (it can't be
+ * removed or rewired on the canvas), drawn heavier and double-dashed. */
 .wf-editor .vue-flow__edge.wf-edge-locked .vue-flow__edge-path {
     stroke-width: 2.5;
+    stroke-dasharray: 10 3 2 3;
 }
 
-/* Handles: connection points only, not interactive while read-only. */
+/* Handles: lines start at an output (right) and end at an input (left). */
 .wf-editor .vue-flow__handle {
     width: 10px;
     height: 10px;
@@ -549,6 +551,91 @@
     border: 2px solid var(--wf-handle);
     border-radius: 9999px;
     background-color: var(--wf-node-bg);
+}
+.wf-editor .vue-flow__handle.connectable {
+    cursor: crosshair;
+}
+.wf-editor .vue-flow__handle-source.connectable:hover,
+.wf-editor .vue-flow__node:hover .vue-flow__handle-source.connectable {
+    border-color: var(--wf-edge-active);
+}
+/* While a line is drawn: where it can (green) or can't (red) end. */
+.wf-editor .vue-flow__handle.connecting.valid {
+    border-color: #16a34a;
+    background-color: #16a34a;
+}
+.wf-editor .vue-flow__handle.connecting:not(.valid) {
+    border-color: var(--wf-error);
+}
+.wf-editor .vue-flow__connection-path {
+    stroke: var(--wf-edge-active);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+}
+
+/* The "+" beside a node's output: shown on hover, focus and selection. */
+.wf-transition {
+    position: relative;
+}
+.wf-node-add {
+    position: absolute;
+    top: 50%;
+    right: -30px;
+    display: flex;
+    width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--wf-node-border);
+    border-radius: 9999px;
+    background-color: var(--wf-node-bg);
+    box-shadow: var(--wf-shadow);
+    color: var(--wf-node-muted);
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity 120ms ease;
+    cursor: pointer;
+}
+.wf-node-add:hover {
+    border-color: var(--wf-edge-active);
+    color: var(--wf-edge-active);
+}
+.wf-editor .vue-flow__node:hover .wf-node-add,
+.wf-editor .vue-flow__node.selected .wf-node-add,
+.wf-editor .vue-flow__node:focus-visible .wf-node-add,
+.wf-node-add:focus-visible {
+    opacity: 1;
+}
+.wf-node-add:focus-visible {
+    outline: 2px solid var(--wf-focus);
+    outline-offset: 1px;
+}
+
+/* The add menu's anchor (AddNodeMenu) and its entries. */
+.wf-add-anchor {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+}
+.wf-add-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    text-align: left;
+}
+.wf-add-item--active {
+    background-color: var(--theme-color-gray-100, #f3f4f6);
+}
+.wf-add-item--active:where(.dark, .dark *) {
+    background-color: var(--theme-color-gray-700, #374151);
+}
+.wf-add-item[aria-disabled="true"] {
+    opacity: 0.5;
 }
 
 /* Nodes: focus ring and selection on the node's own box. */

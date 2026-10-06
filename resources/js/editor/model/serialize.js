@@ -334,13 +334,21 @@ export function cleanPlaceActions(places, ctx = {}) {
     return out;
 }
 
-// Slugify: lowercase, non-alphanumeric → underscore, collapse & trim.
+// Letters spelled out rather than stripped — the same table as
+// components/createWorkflowForm.js slugifyHandle().
+const TRANSLIT = { ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss', æ: 'ae', ø: 'oe', å: 'aa', œ: 'oe' };
+
+// Slugify: lowercase, umlauts spelled out ("Prüfung" → "pruefung"), other
+// diacritics stripped, non-alphanumeric → underscore, collapse & trim. The
+// transliteration has to come first: NFKD splits "ü" into "u" + a combining
+// mark, so after stripping there is no "ü" left to spell out.
 // Same shape as the YAML handles the editor already accepts.
 export function slugify(value) {
     return String(value ?? '')
         .toLowerCase()
-        .normalize('NFKD').replace(/[̀-ͯ]/g, '')  // strip diacritics
-        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+        .normalize('NFC')
+        .replace(/[äöüßæøåœ]/g, (c) => TRANSLIT[c] ?? c)
+        .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')  // strip remaining diacritics
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '');
 }

@@ -139,7 +139,7 @@ export function buildElements(model, graph, { showSystem = true, ctx = {} } = {}
                 data: placeInfo(model, place.handle, ctx),
                 selectable: true,
                 draggable: true,
-                connectable: false,
+                connectable: true,
                 focusable: true,
                 class: 'wf-node-place',
             });
@@ -160,7 +160,7 @@ export function buildElements(model, graph, { showSystem = true, ctx = {} } = {}
             data: transitionInfo(model, transition.handle),
             selectable: true,
             draggable: true,
-            connectable: false,
+            connectable: true,
             focusable: true,
             class: 'wf-node-transition',
         });
@@ -188,18 +188,25 @@ export function buildElements(model, graph, { showSystem = true, ctx = {} } = {}
             const classes = ['wf-edge'];
             if (ghosts.has(source) || ghosts.has(target)) classes.push('wf-edge-ghost');
             if (id === lockedEdge) classes.push('wf-edge-locked');
+            const ghostly = ghosts.has(source) || ghosts.has(target);
+            // Removing an edge (Delete, context menu) is the canvas's own
+            // business — Vue Flow's deleting stays off.
             edges.push({
                 id,
                 source,
                 target,
                 type: 'default',
                 markerEnd: MARKER,
-                selectable: !ghosts.has(source) && !ghosts.has(target),
+                selectable: !ghostly,
                 updatable: false,
                 deletable: false,
-                focusable: false,
+                focusable: !ghostly,
                 class: classes.join(' '),
-                data: { transition: transition.id, direction: parseId(source)?.kind === 'place' ? 'in' : 'out' },
+                data: {
+                    transition: transition.id,
+                    direction: parseId(source)?.kind === 'place' ? 'in' : 'out',
+                    locked: id === lockedEdge,
+                },
             });
         }
     }

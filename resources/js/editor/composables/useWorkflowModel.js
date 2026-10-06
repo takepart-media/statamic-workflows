@@ -9,6 +9,8 @@
 
 import { computed, reactive, ref } from 'vue';
 import * as M from '../model/editorModel.js';
+import * as C from '../model/connections.js';
+import * as A from '../model/canvasActions.js';
 
 /**
  * @param {object} definition         the stored definition (editSettings() `definition`)
@@ -91,6 +93,19 @@ export function useWorkflowModel(definition, ctx) {
         removePlace: (id, options) => M.removePlace(model, id, options),
         restoreDeletion: (id) => M.restoreDeletion(model, id),
         setMigrationTarget: (id, target) => M.setMigrationTarget(model, id, target),
+
+        // Drawing on the canvas (model/connections.js, model/canvasActions.js).
+        // `labelOf(placeId)` names places for the "<A> → <B>" label of a
+        // transition created between two of them.
+        canConnect: (source, target) => C.canConnect(model, source, target),
+        connect: (source, target, { position = null, labelOf = null } = {}) => C.applyConnect(model, source, target, { position, labelOf, ctx }),
+        canDisconnect: (edge) => C.canDisconnect(model, edge),
+        disconnect: (edge) => C.applyDisconnect(model, edge),
+        isCoupledStart: (id) => C.isCoupledStart(model, id),
+        addMenuEntries: (source) => A.addMenuEntries(model, source),
+        checkAddAction: (source, entry) => A.checkAddAction(model, source, entry),
+        runAddAction: (source, entry, { anchor, labelOf = null } = {}) => A.runAddAction(model, source, entry, { anchor, labelOf, labelLocales: ctx.labelLocales, ctx }),
+
         setDeletionUsage(handle, usage) {
             const deletion = model.deletions.find((d) => d.handle === handle);
             if (deletion) deletion.usage = Number(usage) || 0;

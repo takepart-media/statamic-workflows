@@ -39,11 +39,13 @@
                 </Field>
 
                 <Field :label="__('workflows::messages.label_placeholder')" :instructions="__('workflows::messages.editor_transition_label_hint', { key: `action_${key}` })">
-                    <Input
-                        :model-value="transition.metadata.label ?? ''"
-                        :placeholder="key"
-                        @update:model-value="(v) => update({ metadata: { label: v } })"
-                    />
+                    <div ref="labelField">
+                        <Input
+                            :model-value="transition.metadata.label ?? ''"
+                            :placeholder="key"
+                            @update:model-value="(v) => update({ metadata: { label: v } })"
+                        />
+                    </div>
                 </Field>
 
                 <Field :label="__('workflows::messages.settings_field_variant')">
@@ -149,6 +151,7 @@
 <script setup>
 import { computed, inject, ref } from 'vue';
 import { Badge, Button, Field, Input, Select, TabContent, TabList, TabTrigger, Tabs } from '@statamic/cms/ui';
+import { useFocusRequest } from '../../composables/useFocusRequest.js';
 import { explicitStartTransitionId, keyOf, startingTransitionId } from '../../model/editorModel.js';
 import { defaultVariant, placeDisplayName } from '../../model/labels.js';
 import { EDITOR_CONTEXT } from '../context.js';
@@ -163,6 +166,13 @@ const props = defineProps({
 const editor = inject(EDITOR_CONTEXT);
 
 const tab = ref('general');
+
+// A node just created on the canvas: straight into its name.
+const labelField = ref(null);
+useFocusRequest(editor, () => props.transition.id, 'label', () => {
+    tab.value = 'general';
+    return labelField;
+});
 
 const key = computed(() => keyOf(props.transition));
 const index = computed(() => editor.api.model.transitions.indexOf(props.transition));

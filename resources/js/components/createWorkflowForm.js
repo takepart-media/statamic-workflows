@@ -15,7 +15,8 @@ const TRANSLIT = { ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss', æ: 'ae', ø: 'oe', �
  * is empty (nothing usable typed yet, or only digits/symbols).
  */
 export function slugifyHandle(text, max = 64) {
-    let s = String(text ?? '').toLowerCase();
+    // NFC first: a decomposed "u + ¨" must still be spelled out as "ue".
+    let s = String(text ?? '').toLowerCase().normalize('NFC');
     s = s.replace(/[äöüßæøåœ]/g, (c) => TRANSLIT[c] ?? c);
     s = s.normalize('NFD').replace(/[̀-ͯ]/g, '');
     s = s.replace(/[^a-z0-9]+/g, '_');

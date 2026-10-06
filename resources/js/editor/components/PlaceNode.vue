@@ -1,6 +1,7 @@
 <template>
     <div class="wf-place" :title="data.handle">
-        <Handle type="target" :position="Position.Left" :connectable="false" />
+        <!-- Lines are drawn from an output to an input, never the other way. -->
+        <Handle type="target" :position="Position.Left" :connectable-start="false" />
         <span class="wf-place-stripe" :class="colorClasses.dot" aria-hidden="true" />
         <div class="wf-place-body">
             <div class="flex items-start gap-2">
@@ -39,7 +40,20 @@
                 </span>
             </div>
         </div>
-        <Handle type="source" :position="Position.Right" :connectable="false" />
+        <Handle type="source" :position="Position.Right" />
+        <!-- n8n's "+": add the next step right here (also Tab). -->
+        <button
+            v-if="editor.openAddMenu"
+            type="button"
+            class="wf-node-add nodrag nopan"
+            :aria-label="__('workflows::messages.editor_add_next')"
+            :title="__('workflows::messages.editor_add_next')"
+            @pointerdown.stop
+            @dblclick.stop
+            @click.stop="editor.openAddMenu(id)"
+        >
+            <Icon name="plus" class="size-3" />
+        </button>
     </div>
 </template>
 

@@ -1,6 +1,7 @@
 <template>
     <div class="wf-transition" :data-variant="data.variant" :title="data.handle">
-        <Handle type="target" :position="Position.Left" :connectable="false" />
+        <!-- Lines are drawn from an output to an input, never the other way. -->
+        <Handle type="target" :position="Position.Left" :connectable-start="false" />
         <div class="flex max-w-full items-center gap-1.5">
             <span class="truncate text-xs font-semibold">{{ data.label }}</span>
             <Badge
@@ -25,7 +26,20 @@
                 {{ chipText(chip) }}
             </span>
         </div>
-        <Handle type="source" :position="Position.Right" :connectable="false" />
+        <Handle type="source" :position="Position.Right" />
+        <!-- n8n's "+": add the next step right here (also Tab). -->
+        <button
+            v-if="editor.openAddMenu"
+            type="button"
+            class="wf-node-add nodrag nopan"
+            :aria-label="__('workflows::messages.editor_add_next')"
+            :title="__('workflows::messages.editor_add_next')"
+            @pointerdown.stop
+            @dblclick.stop
+            @click.stop="editor.openAddMenu(id)"
+        >
+            <Icon name="plus" class="size-3" />
+        </button>
     </div>
 </template>
 

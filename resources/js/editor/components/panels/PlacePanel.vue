@@ -44,7 +44,7 @@
                      place is called without one (language file, else the other
                      name) — see labels.placeLabelFallback(). -->
                 <Field :label="__('workflows::messages.editor_field_labels')" :instructions="__('workflows::messages.editor_labels_hint', { key: `state_${key}` })">
-                    <div class="space-y-2">
+                    <div ref="labelFields" class="space-y-2">
                         <div v-for="locale in editor.options.labelLocales" :key="locale" class="flex items-center gap-2">
                             <span class="w-6 shrink-0 font-mono text-2xs uppercase text-gray-500 dark:text-gray-400">{{ locale }}</span>
                             <Input
@@ -186,6 +186,7 @@
 
 <script setup>
 import { computed, defineComponent, h, inject, ref, watch } from 'vue';
+import { useFocusRequest } from '../../composables/useFocusRequest.js';
 import { Badge, Button, Checkbox, Field, Icon, Input, Select, TabContent, TabList, TabTrigger, Tabs } from '@statamic/cms/ui';
 import { placeColorClasses } from '../../../support/placeColors.js';
 import { stateColor } from '../../../support/states.js';
@@ -208,6 +209,13 @@ const editor = inject(EDITOR_CONTEXT);
 
 const tab = ref(props.initialTab);
 watch(() => props.initialTab, (value) => { tab.value = value; });
+
+// A node just created on the canvas: straight into its name.
+const labelFields = ref(null);
+useFocusRequest(editor, () => props.place?.id, 'label', () => {
+    tab.value = 'general';
+    return labelFields;
+});
 
 const key = computed(() => keyOf(props.place));
 const index = computed(() => editor.api.model.places.indexOf(props.place));

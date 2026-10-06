@@ -7,6 +7,7 @@ describe('slugifyHandle', () => {
     it('transliterates and joins with underscores', () => {
         expect(slugifyHandle('Übersetzung (EN)')).toBe('uebersetzung_en');
         expect(slugifyHandle('  Café — Straße  ')).toBe('cafe_strasse');
+        expect(slugifyHandle('Pru\u0308fung')).toBe('pruefung');
     });
 
     it('starts with a letter and respects max', () => {

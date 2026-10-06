@@ -119,7 +119,10 @@ describe('refs registry', () => {
 
 describe('new-row handles', () => {
     it('slugifies labels', () => {
-        expect(slugify('  Größe & Übersicht ')).toBe('grosse_ubersicht');
+        expect(slugify('  Größe & Übersicht ')).toBe('groesse_uebersicht');
+        expect(slugify('Café — Straße')).toBe('cafe_strasse');
+        // Decomposed input (u + combining diaeresis) spells out the same way.
+        expect(slugify('Pru\u0308fung')).toBe('pruefung');
         expect(slugify('Ready for review!')).toBe('ready_for_review');
     });
 

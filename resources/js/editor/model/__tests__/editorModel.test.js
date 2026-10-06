@@ -155,8 +155,7 @@ describe('mutations', () => {
         expect(id).toBe('p~1');
         expect(handleProblem(m, id)).toBe('missing');
         updatePlace(m, id, { labels: { de: 'In Prüfung' } });
-        // slugify() strips the diacritic before its umlaut rules can see it.
-        expect(m.places.at(-1).handle).toBe('in_prufung');
+        expect(m.places.at(-1).handle).toBe('in_pruefung');
         updatePlace(m, id, { labels: { de: 'Review' } });
         // "review" is taken → suffixed.
         expect(m.places.at(-1).handle).toBe('review_2');

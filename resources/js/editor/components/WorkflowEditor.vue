@@ -35,10 +35,55 @@
                             :show-system="showSystem"
                             :show-minimap="minimap"
                             :selected="selectedId"
+                            :connection-rule="api.canConnect"
                             @select="select"
                             @node-moved="({ id, position }) => api.setPosition(id, position)"
                             @positions="({ positions, touched }) => api.setPositions(positions, { touched })"
-                        />
+                            @connect="onConnect"
+                            @connect-refused="({ reason }) => refuse(reason)"
+                            @connect-drop="onConnectDrop"
+                            @pane-dblclick="({ position }) => createAt('place', position)"
+                            @delete="onDelete"
+                            @add-menu="({ id }) => openAddMenuFor(id)"
+                        >
+                            <template #context-menu="{ target }">
+                                <!-- A place -->
+                                <template v-if="target.kind === 'node' && target.type === 'place'">
+                                    <ContextItem icon="eye" :text="__('workflows::messages.editor_open')" @select="select(target.id)" />
+                                    <ContextItem icon="plus" :text="__('workflows::messages.editor_add_next')" @select="openAddMenuFor(target.id, { delay: MENU_CLOSE_DELAY })" />
+                                    <ContextItem
+                                        v-if="api.model.workflow.initial_place !== target.id"
+                                        icon="pin"
+                                        :text="__('workflows::messages.editor_set_initial')"
+                                        @select="api.setInitialPlace(target.id)"
+                                    />
+                                    <ContextSeparator />
+                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes([target.id])" />
+                                </template>
+                                <!-- A transition -->
+                                <template v-else-if="target.kind === 'node' && target.type === 'transition'">
+                                    <ContextItem icon="eye" :text="__('workflows::messages.editor_open')" @select="select(target.id)" />
+                                    <ContextItem icon="plus" :text="__('workflows::messages.editor_add_next')" @select="openAddMenuFor(target.id, { delay: MENU_CLOSE_DELAY })" />
+                                    <ContextSeparator />
+                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes([target.id])" />
+                                </template>
+                                <!-- A line -->
+                                <template v-else-if="target.kind === 'edge'">
+                                    <ContextItem icon="eye" :text="__('workflows::messages.editor_open')" @select="select(target.edge.transition)" />
+                                    <ContextSeparator />
+                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.editor_disconnect')" @select="disconnect([target.edge])" />
+                                </template>
+                                <!-- Several nodes (selection box) -->
+                                <template v-else-if="target.kind === 'selection'">
+                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes(target.ids)" />
+                                </template>
+                                <!-- The empty canvas -->
+                                <template v-else>
+                                    <ContextItem icon="plus" :text="__('workflows::messages.editor_add_place_here')" @select="createAt('place', target.position, { delay: MENU_CLOSE_DELAY })" />
+                                    <ContextItem icon="plus" :text="__('workflows::messages.editor_add_transition_here')" @select="createAt('transition', target.position, { delay: MENU_CLOSE_DELAY })" />
+                                </template>
+                            </template>
+                        </Canvas>
                     </div>
                 </SplitterPanel>
                 <template v-if="!panelCollapsed">
@@ -54,6 +99,16 @@
                 </template>
             </SplitterGroup>
         </div>
+
+        <AddNodeMenu
+            v-model:open="addMenu.open"
+            :x="addMenu.x"
+            :y="addMenu.y"
+            :title="addMenu.title"
+            :items="addMenuItems"
+            :group-labels="addMenuGroups"
+            @pick="pickAddMenu"
+        />
 
         <CollectionRemovalDialog
             v-model:open="collectionRemoval.open"
@@ -84,13 +139,16 @@
 </template>
 
 <script setup>
-import { computed, getCurrentInstance, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue';
-import { Button, ConfirmationModal, SplitterGroup, SplitterPanel, SplitterResizeHandle } from '@statamic/cms/ui';
+import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue';
+import { Button, ConfirmationModal, ContextItem, ContextSeparator, SplitterGroup, SplitterPanel, SplitterResizeHandle } from '@statamic/cms/ui';
 import { humanize } from '../../support/states.js';
 import { ACTION_TYPES, PLACE_ACTION_TYPES, SHARED_ACTION_TYPES } from '../model/constants.js';
-import { placeIdOf, transitionIdOf } from '../model/editorModel.js';
+import { keyOf, placeIdOf, transitionIdOf } from '../model/editorModel.js';
+import { besideAnchor, centredAt } from '../model/canvasActions.js';
+import { placeDisplayName } from '../model/labels.js';
 import { useWorkflowModel } from '../composables/useWorkflowModel.js';
 import { useSaveErrors } from '../composables/useSaveErrors.js';
+import AddNodeMenu from './AddNodeMenu.vue';
 import Canvas from './Canvas.vue';
 import Toolbar from './Toolbar.vue';
 import NodePanel from './panels/NodePanel.vue';
@@ -205,10 +263,20 @@ const graph = computed(() => api.graph(props.injected));
 
 const selectedId = ref(null);
 const placeTab = ref('general');
+// A field the panel of a node should focus once it shows (useFocusRequest.js).
+const focusRequest = ref(null);
 
-function select(id, { tab = 'general' } = {}) {
+/**
+ * @param {string|null} id
+ * @param {object} [options]
+ * @param {string} [options.tab]    the place tab to open
+ * @param {string} [options.focus]  a field of the node's panel to focus ('label')
+ * @param {number} [options.delay]  ms before focusing (after a menu closed)
+ */
+function select(id, { tab = 'general', focus = null, delay = 0 } = {}) {
     placeTab.value = tab;
     selectedId.value = id ?? null;
+    focusRequest.value = id && focus ? { id, field: focus, delay } : null;
     if (id && panelCollapsed.value) panelCollapsed.value = false;
 }
 
@@ -220,6 +288,15 @@ provide(EDITOR_CONTEXT, {
     ruleCtx,
     stateUsage,
     select,
+    get focusRequest() { return focusRequest.value; },
+    takeFocus(id, field) {
+        const request = focusRequest.value;
+        if (!request || request.id !== id || request.field !== field) return false;
+        focusRequest.value = null;
+        return true;
+    },
+    // The "+" beside a node's output.
+    openAddMenu: (id) => openAddMenuFor(id),
 });
 
 const hasSystemSteps = computed(() =>
@@ -293,16 +370,222 @@ onBeforeUnmount(() => {
     observer?.disconnect();
 });
 
-// --- adding (button-based; drawing on the canvas comes later) ---
+// --- adding from the toolbar ---
 
 function addPlace() {
-    select(api.addPlace());
+    select(api.addPlace(), { focus: 'label' });
 }
 
-// A selected place is the natural source of a new step.
+// A selected place is the natural source of a new step — unless that would
+// break the start coupling (a first transition leaves the initial place).
 function addTransition() {
-    const from = selectedId.value && api.findPlace(selectedId.value) ? selectedId.value : null;
-    select(api.addTransition({ from }));
+    let from = selectedId.value && api.findPlace(selectedId.value) ? selectedId.value : null;
+    if (from && !api.checkAddAction({ kind: 'place', id: from }, { action: 'transition_new_place' }).ok) from = null;
+    select(api.addTransition({ from }), { focus: 'label' });
+}
+
+// --- editing on the canvas ---
+
+// How long a context menu needs to close (and hand focus back to the canvas)
+// before something else may take the focus.
+const MENU_CLOSE_DELAY = 200;
+
+// A place's name as the canvas shows it — for "<A> → <B>" labels and the menus.
+const placeName = (id) => {
+    const place = api.findPlace(id);
+    return place ? placeDisplayName(api.view.value, keyOf(place), labelCtx.value) : id;
+};
+const transitionName = (id) => {
+    const transition = api.findTransition(id);
+    return transition ? (transition.metadata?.label || keyOf(transition)) : id;
+};
+
+// Why something was refused, as a toast.
+function refuse(reason) {
+    Statamic.$toast.error(__(`workflows::messages.editor_connect_${reason || 'unknown'}`));
+}
+
+// A line drawn between two handles (or dropped onto a node's body).
+function onConnect({ source, target, position }) {
+    const result = api.connect(source, target, { position, labelOf: placeName });
+    if (!result.ok) {
+        if (result.reason !== 'exists') refuse(result.reason);
+        return;
+    }
+    // place → place: the new transition in between, ready to be named.
+    if (result.created) {
+        select(result.transition, { focus: 'label' });
+    } else if (selectedId.value !== result.transition) {
+        select(result.transition);
+    }
+}
+
+// Remove lines: a `from` entry, or a transition's `to`.
+function disconnect(edges) {
+    let refused = null;
+    for (const edge of edges) {
+        const result = api.disconnect(edge);
+        if (!result.ok && result.reason !== 'unknown') refused = result.reason;
+    }
+    if (refused) refuse(refused);
+}
+
+// A new lone place / transition at a point of the canvas (double-click, pane
+// context menu).
+function createAt(kind, point, { delay = 0 } = {}) {
+    const position = centredAt(point, kind);
+    const id = kind === 'place' ? api.addPlace({ position }) : api.addTransition({ position });
+    select(id, { focus: 'label', delay });
+}
+
+// Delete/Backspace on the canvas.
+function onDelete({ nodes, edges }) {
+    if (edges.length) {
+        disconnect(edges);
+    } else {
+        deleteNodes(nodes);
+    }
+}
+
+const usageOf = (id) => {
+    const place = api.findPlace(id);
+    return place && !place.isNew ? Number(stateUsage[place.handle] ?? 0) : 0;
+};
+
+/**
+ * Delete nodes the way the panel does. Places that still hold entries need a
+ * migration target first: their panel opens on the delete section instead
+ * (the full dialog is F4). The start place can't go at all.
+ */
+function deleteNodes(ids) {
+    const transitions = ids.filter((id) => api.findTransition(id));
+    const places = ids.filter((id) => api.findPlace(id));
+    const initial = places.find((id) => id === api.model.workflow.initial_place) ?? null;
+    const needsTarget = places.find((id) => id !== initial && usageOf(id) > 0) ?? null;
+    const removable = places.filter((id) => id !== initial && id !== needsTarget && usageOf(id) === 0);
+
+    const count = transitions.length + removable.length;
+    if (count > 0) {
+        const message = count > 1
+            ? __('workflows::messages.editor_confirm_delete_nodes', { count })
+            : transitions.length
+                ? __('workflows::messages.confirm_delete_transition', { handle: keyOf(api.findTransition(transitions[0])) })
+                : __('workflows::messages.confirm_delete_place', { handle: keyOf(api.findPlace(removable[0])) });
+        if (!window.confirm(message)) return;
+
+        transitions.forEach((id) => api.removeTransition(id));
+        const savedPlaces = removable.filter((id) => !api.findPlace(id)?.isNew);
+        removable.forEach((id) => api.removePlace(id, { usage: 0 }));
+        // One saved place: show its pending deletion (with "restore"), like the panel.
+        select(count === 1 && savedPlaces.length === 1 ? savedPlaces[0] : null);
+    }
+
+    if (needsTarget) {
+        select(needsTarget, { tab: 'connections' });
+        Statamic.$toast.error(__('workflows::messages.editor_delete_needs_target', { place: placeName(needsTarget) }));
+    } else if (initial) {
+        Statamic.$toast.error(__('workflows::messages.editor_delete_initial_blocked'));
+    }
+}
+
+// --- the add menu ---
+
+const addMenu = reactive({ open: false, x: 0, y: 0, title: '', source: null, anchor: null });
+
+/**
+ * Open the add menu.
+ *
+ * @param {{kind: string, id: string}|null} source  the node it adds after
+ * @param {{x: number, y: number}} client           where it opens (viewport px)
+ * @param {{x: number, y: number}} anchor           where new nodes go (flow coords)
+ */
+function openAddMenu(source, client, anchor) {
+    const box = root.value?.getBoundingClientRect();
+    const show = () => {
+        addMenu.x = Math.round(client.x - (box?.left ?? 0));
+        addMenu.y = Math.round(client.y - (box?.top ?? 0));
+        addMenu.source = source;
+        addMenu.anchor = anchor;
+        addMenu.title = source?.kind === 'place'
+            ? placeName(source.id)
+            : source?.kind === 'transition' ? transitionName(source.id) : __('workflows::messages.editor_add_next');
+        addMenu.open = true;
+    };
+    // Re-anchoring an open menu: close it first so it is placed afresh.
+    if (addMenu.open) {
+        addMenu.open = false;
+        nextTick(show);
+    } else {
+        show();
+    }
+}
+
+// Beside a node: the "+", Tab, the node's context menu.
+function openAddMenuFor(id, { delay = 0 } = {}) {
+    const kind = api.findPlace(id) ? 'place' : api.findTransition(id) ? 'transition' : null;
+    const rect = kind ? canvas.value?.nodeRect(id) : null;
+    if (!rect) return;
+    const anchor = besideAnchor(rect);
+    const client = canvas.value.flowToClient(anchor);
+    if (delay) {
+        setTimeout(() => openAddMenu({ kind, id }, client, anchor), delay);
+    } else {
+        openAddMenu({ kind, id }, client, anchor);
+    }
+}
+
+// A line from an output dropped on the empty canvas: new nodes go where it ended.
+function onConnectDrop({ source, client, position }) {
+    const kind = api.findPlace(source) ? 'place' : api.findTransition(source) ? 'transition' : null;
+    if (kind) openAddMenu({ kind, id: source }, client, position);
+}
+
+const ADD_ICONS = {
+    transition_new_place: 'hierarchy',
+    place: 'add-circle',
+    transition: 'arrow-right',
+    transition_to_place: 'arrow-right',
+    target_new_place: 'add-circle',
+    target_place: 'arrow-right',
+};
+
+const addMenuGroups = computed(() => ({
+    create: '',
+    connect: addMenu.source?.kind === 'transition'
+        ? __('workflows::messages.editor_add_target_place')
+        : __('workflows::messages.editor_add_transition_to_place'),
+}));
+
+const addMenuItems = computed(() => {
+    if (!addMenu.open) return [];
+    const source = addMenu.source;
+    return api.addMenuEntries(source).map((entry) => {
+        const check = api.checkAddAction(source, entry);
+        const place = entry.target ? api.findPlace(entry.target) : null;
+        return {
+            key: entry.target ? `${entry.action}:${entry.target}` : entry.action,
+            entry,
+            group: entry.group,
+            icon: ADD_ICONS[entry.action] ?? 'plus',
+            text: place
+                ? (entry.target === source?.id ? `${placeName(entry.target)} ↺` : placeName(entry.target))
+                : __(`workflows::messages.editor_add_${entry.action}`),
+            hint: place ? keyOf(place) : null,
+            disabled: !check.ok,
+            title: check.ok ? null : __(`workflows::messages.editor_connect_${check.reason}`),
+        };
+    });
+});
+
+function pickAddMenu(item) {
+    const result = api.runAddAction(addMenu.source, item.entry, { anchor: addMenu.anchor, labelOf: placeName });
+    if (!result.ok) {
+        refuse(result.reason);
+        return;
+    }
+    addMenu.open = false;
+    // After the popover has closed and handed the focus back.
+    select(result.select, { focus: result.created.length ? 'label' : null, delay: MENU_CLOSE_DELAY });
 }
 
 function resetPositions() {
