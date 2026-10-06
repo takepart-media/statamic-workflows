@@ -12,6 +12,7 @@ import CreatedByMeWidget from './components/CreatedByMeWidget.vue'
 import WatchedWidget from './components/WatchedWidget.vue'
 import QueueStatsWidget from './components/QueueStatsWidget.vue'
 import WorkflowStatusWidget from './components/WorkflowStatusWidget.vue'
+import WorkflowsOverviewWidget from './components/WorkflowsOverviewWidget.vue'
 
 Statamic.booting(() => {
     Statamic.$inertia.register('WorkflowsQueue', WorkflowQueue)
@@ -52,4 +53,9 @@ Statamic.booting(() => {
     // drawn after mount — there is no server-rendered form of it — and because
     // the card shell is the CP's own `Card`/`Heading`/`Subheading`.
     Statamic.component('workflows-status-widget', WorkflowStatusWidget)
+
+    // "Alle Beiträge": the manager pages' pivot listing across every workflow,
+    // as a dashboard card. A component widget because it IS the listing — the
+    // same WorkflowListing, search, filters and paging included.
+    Statamic.component('workflows-overview-widget', WorkflowsOverviewWidget)
 })

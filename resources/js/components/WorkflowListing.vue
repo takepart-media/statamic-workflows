@@ -5,6 +5,7 @@
         :filters="showToolbar ? filters : []"
         :additional-parameters="additionalParameters"
         :preferences-prefix="preferencesPrefix"
+        :per-page="perPage"
         :allow-bulk-actions="false"
         :allow-presets="false"
     >
@@ -20,9 +21,11 @@
                 <ListingCustomizeColumns />
             </div>
 
-            <Panel class="relative">
+            <!-- `bare` drops the Panel shell for a host that already is a card (the
+                 dashboard widget); table and pagination stay. -->
+            <component :is="bare ? 'div' : Panel" class="relative">
                 <!-- Single scroll container (both axes) so the table header can stick. -->
-                <div class="max-h-[calc(100vh-16rem)] overflow-auto">
+                <div :class="bare ? 'max-h-[28rem] overflow-auto' : 'max-h-[calc(100vh-16rem)] overflow-auto'">
                     <GroupedListingTable sticky-header>
                         <!-- One cell slot per column, rendered by the column's type. -->
                         <template v-for="col in columns" :key="col.field" #[`cell-${col.field}`]="{ row }">
@@ -32,6 +35,23 @@
                                 class="text-blue-600 hover:underline dark:text-blue-400"
                                 @click="onTitleClick($event, row)"
                             >{{ row.title }}</a>
+                            <!-- The overview's workflow column: the workflow's dot and
+                                 label, linked to its manager page where it has one. -->
+                            <component
+                                :is="row.manager_url ? 'a' : 'span'"
+                                v-else-if="col.type === 'workflow'"
+                                :href="row.manager_url || undefined"
+                                class="inline-flex items-center gap-1.5 whitespace-nowrap text-gray-700 dark:text-gray-300"
+                                :class="{ 'hover:underline': row.manager_url }"
+                            >
+                                <span class="size-[6px] flex-none rounded-full" :class="dotClass(row.workflow_color)" aria-hidden="true"></span>
+                                {{ row.workflow_label }}
+                            </component>
+                            <!-- A site the row's workflow does not manage (overview
+                                 only, where `sites` says which it does): no state can
+                                 exist there, so the cell stays empty rather than
+                                 showing the "not started" dash. -->
+                            <template v-else-if="col.type === 'state' && row.sites && !row.sites.includes(col.field)"></template>
                             <a
                                 v-else-if="col.type === 'state' && row[col.field] && row.urls?.[col.field]"
                                 :href="row.urls[col.field]"
@@ -109,10 +129,10 @@
                         </template>
                     </GroupedListingTable>
                 </div>
-                <PanelFooter>
+                <component :is="bare ? 'div' : PanelFooter" :class="bare ? 'px-4 py-2' : null">
                     <ListingPagination />
-                </PanelFooter>
-            </Panel>
+                </component>
+            </component>
         </template>
     </Listing>
 
@@ -134,6 +154,7 @@ import {
 import { defineComponent, inject, watch } from 'vue';
 import GroupedListingTable from './GroupedListingTable.vue';
 import { stateColor, humanize } from '../support/states.js';
+import { dotClass } from '../support/widgetColors.js';
 import { openPreviewWindow, previewPresentation } from '../support/preview.js';
 
 /**
@@ -179,6 +200,12 @@ defineProps({
     // Edit button there jumps to the editor. Prop remains so existing usage keeps
     // working, but is no longer consulted here.
     promptOnRowClick: { type: Boolean, default: false },
+    // Rows per page, forwarded to Listing. Undefined keeps Listing's own default
+    // (the CP's `paginationSize`).
+    perPage: { type: Number, default: undefined },
+    // Without the Panel shell, for a host that already draws a card (the
+    // dashboard widget). Toolbar, table and pagination are unchanged.
+    bare: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['open-summary']);

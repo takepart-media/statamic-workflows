@@ -45,6 +45,7 @@ class ServiceProvider extends AddonServiceProvider
         \TakepartMedia\Workflows\Widgets\UserHeader::class,
         \TakepartMedia\Workflows\Widgets\Watched::class,
         \TakepartMedia\Workflows\Widgets\WorkflowStatus::class,
+        \TakepartMedia\Workflows\Widgets\WorkflowsOverview::class,
     ];
 
     protected $listen = [
