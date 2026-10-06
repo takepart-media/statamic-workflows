@@ -5,3 +5,4 @@ composer.lock
 .phpunit.result.cache
 resources/dist/dev
 .idea/
+CLAUDE.local.md
