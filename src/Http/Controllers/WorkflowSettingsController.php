@@ -2,6 +2,7 @@
 
 namespace TakepartMedia\Workflows\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Statamic\Facades\Collection;
@@ -35,6 +36,13 @@ use TakepartMedia\Workflows\Workflow\WorkflowStateStore;
 class WorkflowSettingsController extends CpController
 {
     use WorkflowControllerHelpers;
+
+    /**
+     * The top-level definition keys an editor save may carry. `name` is not
+     * among them (the writer pins it to the file name), nor `active` (that has
+     * its own switch).
+     */
+    private const DEFINITION_KEYS = ['places', 'transitions', 'metadata', 'collections', 'initial_place', 'marking_store', 'type'];
 
     /**
      * Super-admin-only index of every workflow in the project. Landing page for
@@ -297,6 +305,17 @@ class WorkflowSettingsController extends CpController
 
         return Inertia::render('WorkflowsSettings', [
             'workflow' => $name,
+            'handle' => $name,
+            // Sent back with every save: a mismatch means the file changed under
+            // the editor and the save answers 409 instead of overwriting it.
+            'version' => app(WorkflowDefinitionWriter::class)->fingerprint($name),
+            'active' => $loader->isActive($name),
+            'activeUrl' => cp_route('workflows.settings.active', ['workflow' => $name]),
+            'saveDefinitionUrl' => cp_route('workflows.settings.save', ['workflow' => $name]),
+            // What DefinitionLoader adds at read time (pending_revision and its
+            // two system transitions) — not part of `definition`, never saved,
+            // but shown read-only so the graph matches what runs.
+            'injected' => $this->injectedParts($raw, $editable),
             // Empty for a workflow without `metadata.nav` — the editor shows the
             // slug read-only and expects a string.
             'slug' => (string) ($slug ?? ''),
@@ -573,41 +592,17 @@ class WorkflowSettingsController extends CpController
         $name = $this->workflowByHandleOrSlug($workflow, $loader);
         abort_if($name === null, 404);
 
-        $payload = $request->only(['places', 'transitions', 'metadata', 'collections', 'initial_place', 'marking_store', 'type']);
+        $payload = $request->only(self::DEFINITION_KEYS);
+        $collections = $request->has('collections') ? (array) $request->input('collections', []) : null;
 
-        // Reject unknown collection handles up front. The writer validates them
-        // too (it is the authority), but the removal gate below would otherwise
-        // fire first and make the user confirm a destructive purge before ever
-        // learning that the payload was invalid and nothing would be saved.
-        foreach ((array) $request->input('collections', []) as $handle) {
-            if (! is_string($handle) || Collection::find($handle) === null) {
-                return response()->json([
-                    'message' => __('workflows::messages.collection_unknown', [
-                        'collection' => is_string($handle) ? $handle : gettype($handle),
-                    ]),
-                ], 422);
-            }
+        if ($response = $this->unknownCollectionResponse((array) $collections)) {
+            return $response;
         }
 
-        // Read the current collections BEFORE writing — afterwards the removed
-        // ones are gone and their entries can no longer be resolved.
-        $before = (array) ($loader->raw($name)['collections'] ?? []);
-        $removed = $request->has('collections')
-            ? array_values(array_diff($before, (array) $request->input('collections', [])))
-            : [];
-        $added = $request->has('collections')
-            ? array_values(array_diff((array) $request->input('collections', []), $before))
-            : [];
+        $change = $this->collectionChange($name, $collections, $loader);
 
-        $orphaned = $removed === [] ? [] : $this->subjectIdsInCollections($name, $removed);
-
-        if ($orphaned !== [] && ! $request->boolean('confirm_collection_removal')) {
-            return response()->json([
-                'message' => __('workflows::messages.collection_removal_needs_confirmation'),
-                'needs_collection_confirmation' => true,
-                'removed_collections' => $removed,
-                'affected_count' => count($orphaned),
-            ], 422);
+        if ($response = $this->collectionRemovalResponse($change, $request->boolean('confirm_collection_removal'))) {
+            return $response;
         }
 
         try {
@@ -616,27 +611,9 @@ class WorkflowSettingsController extends CpController
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        $events = app(WorkflowEventStore::class);
+        $seeded = $this->applyCollectionChange($name, $change);
 
-        // Purge only after the YAML is safely written: a validation failure above
-        // leaves both the definition and the workflow data untouched.
-        if ($orphaned !== []) {
-            $this->purgeWorkflowData($name, $orphaned);
-
-            $events->log('workflow:'.$name, $name, 'collections_removed', [
-                'note' => __('workflows::messages.event_note_collections_removed', [
-                    'collections' => implode(', ', $removed),
-                    'count' => count($orphaned),
-                ]),
-            ]);
-        }
-
-        // Counterpart to the purge: entries of a freshly added collection get their
-        // state row now, so they take part in SLA aging and show up in personal
-        // queues instead of only existing via the derived display default.
-        $seeded = $added === [] ? 0 : app(WorkflowStateSeeder::class)->seed($name, $added);
-
-        $events->log(
+        app(WorkflowEventStore::class)->log(
             'workflow:'.$name,
             $name,
             'definition_saved',
@@ -648,13 +625,245 @@ class WorkflowSettingsController extends CpController
         return response()->json([
             'data' => [
                 'definition' => $this->stripAutoInjected($raw),
-                'purged' => count($orphaned),
+                'purged' => count($change['orphaned']),
                 'seeded' => $seeded,
                 // Recomputed because a purge changes the per-place counts the
                 // editor uses for its "place still holds entries" prompt.
-                'state_usage' => collect(app(WorkflowStateStore::class)->statesFor($name))->countBy()->all(),
+                'state_usage' => $this->stateUsage($name),
             ],
         ]);
+    }
+
+    /**
+     * The graph editor's save. Same writer, same collection gate as
+     * saveSettings(), with three differences:
+     *
+     * - optimistic locking: `version` must be the fingerprint the editor was
+     *   loaded with (WorkflowDefinitionWriter::fingerprint()). Anything else
+     *   means the file changed underneath it — 409 with the current definition
+     *   and version, unless `force` says to overwrite;
+     * - the payload is nested under `definition` and must name every existing
+     *   place. Places are still never deleted by omission; until removals are
+     *   part of this payload, a missing place is a 422 (`places_mismatch`)
+     *   rather than something the additive merge silently puts back;
+     * - `definition_saved` is only logged when something besides
+     *   `metadata.editor` changed — dragging nodes around is not a workflow
+     *   change worth a history line.
+     */
+    public function saveDefinition(Request $request, string $workflow)
+    {
+        abort_unless($this->isSuperAdmin(), 403);
+
+        $loader = app(DefinitionLoader::class);
+        abort_unless(in_array($workflow, $loader->allIncludingInactive(), true), 404);
+
+        $name = $workflow;
+        $writer = app(WorkflowDefinitionWriter::class);
+        $version = $writer->fingerprint($name);
+        $before = $this->stripAutoInjected($loader->raw($name));
+
+        if ((string) $request->input('version', '') !== $version && ! $request->boolean('force')) {
+            return response()->json([
+                'message' => $this->t('settings_version_conflict'),
+                'conflict' => true,
+                'version' => $version,
+                'definition' => $before,
+            ], 409);
+        }
+
+        $input = $request->input('definition');
+        $input = is_array($input) ? $input : [];
+        $payload = array_intersect_key($input, array_flip(self::DEFINITION_KEYS));
+
+        $sent = is_array($payload['places'] ?? null) ? array_map('strval', array_keys($payload['places'])) : [];
+        $missing = array_values(array_diff(array_map('strval', array_keys($before['places'] ?? [])), $sent));
+
+        if ($missing !== []) {
+            return response()->json([
+                'message' => $this->t('writer_places_mismatch', ['places' => implode(', ', $missing)]),
+                'places_mismatch' => true,
+                'missing_places' => $missing,
+            ], 422);
+        }
+
+        $collections = array_key_exists('collections', $payload) ? (array) $payload['collections'] : null;
+
+        if ($response = $this->unknownCollectionResponse((array) $collections)) {
+            return $response;
+        }
+
+        $change = $this->collectionChange($name, $collections, $loader);
+
+        if ($response = $this->collectionRemovalResponse($change, $request->boolean('confirm_collection_removal'))) {
+            return $response;
+        }
+
+        try {
+            $writer->save($name, $payload);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $seeded = $this->applyCollectionChange($name, $change);
+        $after = $this->stripAutoInjected($loader->raw($name));
+
+        if ($this->withoutEditorMeta($before) !== $this->withoutEditorMeta($after)) {
+            app(WorkflowEventStore::class)->log(
+                'workflow:'.$name,
+                $name,
+                'definition_saved',
+                ['note' => __('workflows::messages.event_note_definition_saved')]
+            );
+        }
+
+        return response()->json([
+            'data' => [
+                'definition' => $after,
+                'version' => $writer->fingerprint($name),
+                'purged' => count($change['orphaned']),
+                'seeded' => $seeded,
+                'state_usage' => $this->stateUsage($name),
+            ],
+        ]);
+    }
+
+    /**
+     * Reject unknown collection handles up front. The writer validates them too
+     * (it is the authority), but the removal gate would otherwise fire first and
+     * make the user confirm a destructive purge before ever learning that the
+     * payload was invalid and nothing would be saved.
+     *
+     * @param  array<int, mixed>  $collections
+     */
+    private function unknownCollectionResponse(array $collections): ?JsonResponse
+    {
+        foreach ($collections as $handle) {
+            if (! is_string($handle) || Collection::find($handle) === null) {
+                return response()->json([
+                    'message' => __('workflows::messages.collection_unknown', [
+                        'collection' => is_string($handle) ? $handle : gettype($handle),
+                    ]),
+                ], 422);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Which collections a save removes and adds, and which subjects removing
+     * them orphans. Read BEFORE writing — afterwards the removed collections
+     * are gone and their entries can no longer be resolved. `$collections` is
+     * null when the payload does not touch them.
+     *
+     * @param  array<int, string>|null  $collections
+     * @return array{removed: array<int, string>, added: array<int, string>, orphaned: array<int, string>}
+     */
+    private function collectionChange(string $name, ?array $collections, DefinitionLoader $loader): array
+    {
+        if ($collections === null) {
+            return ['removed' => [], 'added' => [], 'orphaned' => []];
+        }
+
+        $before = (array) ($loader->raw($name)['collections'] ?? []);
+        $removed = array_values(array_diff($before, $collections));
+
+        return [
+            'removed' => $removed,
+            'added' => array_values(array_diff($collections, $before)),
+            'orphaned' => $removed === [] ? [] : $this->subjectIdsInCollections($name, $removed),
+        ];
+    }
+
+    /**
+     * Removing a collection is destructive: its entries leave the workflow and
+     * their data is purged. Without `confirm_collection_removal` the save stops
+     * here with the affected count, so the editor can prompt first.
+     *
+     * @param  array{removed: array<int, string>, added: array<int, string>, orphaned: array<int, string>}  $change
+     */
+    private function collectionRemovalResponse(array $change, bool $confirmed): ?JsonResponse
+    {
+        if ($change['orphaned'] === [] || $confirmed) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => __('workflows::messages.collection_removal_needs_confirmation'),
+            'needs_collection_confirmation' => true,
+            'removed_collections' => $change['removed'],
+            'affected_count' => count($change['orphaned']),
+        ], 422);
+    }
+
+    /**
+     * The data side of a collection change, run only after the YAML is safely
+     * written — a validation failure leaves both the definition and the
+     * workflow data untouched. Purges the orphaned subjects (and logs it), then
+     * seeds state rows for entries of freshly added collections, so they take
+     * part in SLA aging and show up in personal queues instead of only existing
+     * via the derived display default. Returns the number of rows seeded.
+     *
+     * @param  array{removed: array<int, string>, added: array<int, string>, orphaned: array<int, string>}  $change
+     */
+    private function applyCollectionChange(string $name, array $change): int
+    {
+        if ($change['orphaned'] !== []) {
+            $this->purgeWorkflowData($name, $change['orphaned']);
+
+            app(WorkflowEventStore::class)->log('workflow:'.$name, $name, 'collections_removed', [
+                'note' => __('workflows::messages.event_note_collections_removed', [
+                    'collections' => implode(', ', $change['removed']),
+                    'count' => count($change['orphaned']),
+                ]),
+            ]);
+        }
+
+        return $change['added'] === [] ? 0 : app(WorkflowStateSeeder::class)->seed($name, $change['added']);
+    }
+
+    /**
+     * Entries per place — what the editor's "place still holds entries"
+     * prompts and usage badges read.
+     *
+     * @return array<string, int>
+     */
+    private function stateUsage(string $name): array
+    {
+        return collect(app(WorkflowStateStore::class)->statesFor($name))->countBy()->all();
+    }
+
+    /**
+     * A definition without `metadata.editor` — the comparison basis for
+     * "did this save change the workflow, or only its layout".
+     *
+     * @param  array<string, mixed>  $definition
+     * @return array<string, mixed>
+     */
+    private function withoutEditorMeta(array $definition): array
+    {
+        if (is_array($definition['metadata'] ?? null)) {
+            unset($definition['metadata']['editor']);
+        }
+
+        return $definition;
+    }
+
+    /**
+     * The places and transitions DefinitionLoader injected into `$raw` that the
+     * editable definition does not carry. Objects rather than arrays, so an
+     * empty side still serialises as `{}`.
+     *
+     * @param  array<string, mixed>  $raw
+     * @param  array<string, mixed>  $editable
+     * @return array{places: object, transitions: object}
+     */
+    private function injectedParts(array $raw, array $editable): array
+    {
+        return [
+            'places' => (object) array_diff_key((array) ($raw['places'] ?? []), (array) ($editable['places'] ?? [])),
+            'transitions' => (object) array_diff_key((array) ($raw['transitions'] ?? []), (array) ($editable['transitions'] ?? [])),
+        ];
     }
 
     /**

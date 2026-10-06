@@ -436,6 +436,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Settings editor backups
+    |--------------------------------------------------------------------------
+    |
+    | Before the settings editor (or the installer, or the on/off switch, or
+    | deleting a workflow) rewrites a workflow YAML, the current file is copied
+    | to storage/app/workflows/backups/<handle>/<timestamp>.yaml. This is how
+    | many copies are kept per workflow; older ones are pruned. The editor's
+    | YAML dump drops comments, so a hand-annotated file survives here. 0
+    | switches backups off.
+    |
+    */
+
+    'editor_backups' => 20,
+
+    /*
+    |--------------------------------------------------------------------------
     | Dashboard widgets
     |--------------------------------------------------------------------------
     |

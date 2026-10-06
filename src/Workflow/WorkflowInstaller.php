@@ -19,6 +19,7 @@ class WorkflowInstaller
     public function __construct(
         private DefinitionLoader $loader,
         private WorkflowStateSeeder $seeder,
+        private WorkflowDefinitionWriter $writer,
     ) {}
 
     /**
@@ -195,6 +196,9 @@ class WorkflowInstaller
         $path = $this->loader->path($type);
         $raw = Yaml::parseFile($path) ?: [];
         $raw['collections'] = $sanitised;
+
+        $this->writer->backup($type);
+
         File::replace($path, Yaml::dump($raw, 6, 2));
 
         DefinitionLoader::flush();

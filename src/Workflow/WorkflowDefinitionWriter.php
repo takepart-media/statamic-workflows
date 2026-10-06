@@ -71,9 +71,11 @@ class WorkflowDefinitionWriter
      * top-level keys are pulled from the current on-disk YAML so the editor
      * only needs to POST the parts it edits.
      *
+     * The three steps are public on their own (prepare → check → persist) so a
+     * caller can dry-run a payload, or run work of its own between validating
+     * and writing; save() is simply all three in a row.
+     *
      * @param  array<string, mixed>  $definition
-     */
-    /**
      * @param  array<int, string>  $removePlaces  Place handles to drop even though
      *                                            the merge is otherwise additive.
      *                                            The ONLY way to delete a place —
@@ -81,22 +83,177 @@ class WorkflowDefinitionWriter
      */
     public function save(string $name, array $definition, array $removePlaces = []): void
     {
+        $prepared = $this->prepare($name, $definition, $removePlaces);
+
+        $this->check($prepared);
+
+        $this->persist($name, $prepared);
+    }
+
+    /**
+     * Everything save() does except writing: merge, strip, validate. Throws the
+     * same InvalidArgumentException save() would.
+     *
+     * @param  array<string, mixed>  $definition
+     * @param  array<int, string>  $removePlaces  see save()
+     * @return array{definition: array<string, mixed>}
+     */
+    public function dryRun(string $name, array $definition, array $removePlaces = []): array
+    {
+        $prepared = $this->prepare($name, $definition, $removePlaces);
+
+        $this->check($prepared);
+
+        return ['definition' => $prepared];
+    }
+
+    /**
+     * The definition save() would write: the payload merged over the current
+     * file (see merge()) with the auto-injected pieces stripped. Not validated.
+     *
+     * @param  array<string, mixed>  $definition
+     * @param  array<int, string>  $removePlaces  see save()
+     * @return array<string, mixed>
+     */
+    public function prepare(string $name, array $definition, array $removePlaces = []): array
+    {
         $path = $this->loader->path($name);
         $current = is_file($path) ? (Yaml::parseFile($path) ?: []) : [];
 
-        $merged = $this->merge($current, $definition, $name, $removePlaces);
-        $sanitized = $this->stripAutoInjected($merged);
+        return $this->stripAutoInjected($this->merge($current, $definition, $name, $removePlaces));
+    }
 
-        $this->validate($sanitized);
+    /**
+     * Validate a prepared definition. Returns the list of problems — for now
+     * always empty, because validate() still stops at the first one and throws
+     * it as an InvalidArgumentException.
+     *
+     * @param  array<string, mixed>  $definition
+     * @return array<int, mixed>
+     */
+    public function check(array $definition): array
+    {
+        $this->validate($definition);
+
+        return [];
+    }
+
+    /**
+     * Write a prepared (and checked) definition: back the current file up,
+     * replace it atomically, drop the loader's memos.
+     *
+     * @param  array<string, mixed>  $definition
+     */
+    public function persist(string $name, array $definition): void
+    {
+        $this->backup($name);
 
         File::ensureDirectoryExists($this->loader->directory());
-        File::replace($path, Yaml::dump($sanitized, 6, 2));
+        File::replace($this->loader->path($name), Yaml::dump($definition, 6, 2));
 
         // The loader memoises parsed definitions per request; without this a
         // caller that reads the workflow back after saving it — which the
         // settings editor does, to answer with the stored version — would be
         // handed the content from before the write.
         DefinitionLoader::flush();
+    }
+
+    /**
+     * The version token of a workflow file — what the editor sends back with a
+     * save so a concurrent change (another admin, a deploy, a hand edit) is
+     * detected instead of overwritten. Content-based rather than mtime-based,
+     * so a touch without a change does not count as one. Empty when the file
+     * does not exist.
+     */
+    public function fingerprint(string $name): string
+    {
+        $path = $this->loader->path($name);
+
+        return is_file($path) ? (string) sha1_file($path) : '';
+    }
+
+    /**
+     * Copy the current file to `storage/app/workflows/backups/<handle>/` before
+     * it is overwritten or removed, keeping the newest
+     * `config('workflows.editor_backups')` copies. The editor's YAML dump loses
+     * comments; the backup is where they survive.
+     *
+     * Skipped when there is nothing to back up, when backups are switched off
+     * (a limit of 0), or when the newest backup already holds exactly this
+     * content — a series of layout-only saves would otherwise push every real
+     * earlier version out of the window.
+     *
+     * Returns the path of the backup that holds the current content, or null.
+     */
+    public function backup(string $name): ?string
+    {
+        $path = $this->loader->path($name);
+        $keep = (int) config('workflows.editor_backups', 20);
+
+        if ($keep < 1 || ! is_file($path)) {
+            return null;
+        }
+
+        $directory = $this->backupDirectory($name);
+        $existing = $this->backups($name);
+        $latest = end($existing) ?: null;
+
+        if ($latest !== null && sha1_file($latest) === sha1_file($path)) {
+            return $latest;
+        }
+
+        File::ensureDirectoryExists($directory);
+
+        $target = $directory.'/'.(new \DateTimeImmutable)->format('Ymd_His_u').'.yaml';
+        File::copy($path, $target);
+
+        $all = $this->backups($name);
+
+        foreach (array_slice($all, 0, max(0, count($all) - $keep)) as $stale) {
+            File::delete($stale);
+        }
+
+        return $target;
+    }
+
+    /**
+     * Put a backup back in place — the compensation step for a save whose
+     * follow-up work (e.g. a state migration) failed after the YAML was
+     * written. `$file` is a path returned by backup() or just its basename;
+     * either way only files inside this workflow's own backup directory are
+     * accepted.
+     */
+    public function restoreBackup(string $name, string $file): void
+    {
+        $source = $this->backupDirectory($name).'/'.basename($file);
+
+        if (! is_file($source)) {
+            $this->fail('workflow_file_missing', ['workflow' => $name, 'path' => $source]);
+        }
+
+        File::ensureDirectoryExists($this->loader->directory());
+        File::copy($source, $this->loader->path($name));
+
+        DefinitionLoader::flush();
+    }
+
+    /**
+     * Existing backups of a workflow, oldest first (the timestamped names sort
+     * chronologically).
+     *
+     * @return array<int, string>
+     */
+    public function backups(string $name): array
+    {
+        $files = glob($this->backupDirectory($name).'/*.yaml') ?: [];
+        sort($files);
+
+        return $files;
+    }
+
+    public function backupDirectory(string $name): string
+    {
+        return storage_path('app/workflows/backups/'.$name);
     }
 
     /**
@@ -115,6 +272,8 @@ class WorkflowDefinitionWriter
         // transitions, so a reset must not quietly switch a deactivated
         // workflow back on.
         $wasActive = $this->loader->isActive($name);
+
+        $this->backup($name);
 
         File::ensureDirectoryExists($this->loader->directory());
         File::copy($source, $this->loader->path($name));
@@ -145,6 +304,8 @@ class WorkflowDefinitionWriter
         $raw = Yaml::parseFile($path) ?: [];
         $raw['active'] = $active;
 
+        $this->backup($name);
+
         File::replace($path, Yaml::dump($raw, 6, 2));
 
         DefinitionLoader::flush();
@@ -165,6 +326,8 @@ class WorkflowDefinitionWriter
         if (! is_file($path)) {
             $this->fail('workflow_file_missing', ['workflow' => $name, 'path' => $path]);
         }
+
+        $this->backup($name);
 
         File::delete($path);
 
@@ -224,6 +387,8 @@ class WorkflowDefinitionWriter
 
         $merged['places'] = $places;
 
+        $merged = $this->normalizeEditorMeta($merged);
+
         // Preserve nav.slug — it's the URL identifier for the workflow's manager page.
         $currentSlug = $current['metadata']['nav']['slug'] ?? null;
         if ($currentSlug !== null) {
@@ -231,6 +396,151 @@ class WorkflowDefinitionWriter
         }
 
         return $merged;
+    }
+
+    /**
+     * Largest canvas coordinate stored for a node. Anything further out is a
+     * client bug, not a layout — clamped rather than refused.
+     */
+    private const EDITOR_COORDINATE_LIMIT = 100000;
+
+    /**
+     * `metadata.editor` — the graph editor's own bookkeeping: node positions
+     * under `places.<handle>` / `transitions.<handle>` as `{x, y}`, plus flat
+     * view settings (e.g. `viewport: {x, y, zoom}`). Nothing at runtime reads
+     * it, so it is cleaned rather than validated — a bad position must never
+     * be the reason a workflow cannot be saved:
+     *
+     * - positions of handles the merged definition no longer has are pruned
+     *   (that is how a removed node's position goes away), as are positions
+     *   of the auto-injected handles, which are never stored;
+     * - x/y become rounded integers within ±EDITOR_COORDINATE_LIMIT, and a
+     *   position without two finite numbers is dropped;
+     * - any other key keeps only a scalar, or a flat map of scalars;
+     * - an empty result removes `editor` altogether.
+     *
+     * @param  array<string, mixed>  $definition
+     * @return array<string, mixed>
+     */
+    private function normalizeEditorMeta(array $definition): array
+    {
+        if (! is_array($definition['metadata'] ?? null) || ! array_key_exists('editor', $definition['metadata'])) {
+            return $definition;
+        }
+
+        $editor = $definition['metadata']['editor'];
+        unset($definition['metadata']['editor']);
+
+        if (! is_array($editor)) {
+            return $definition;
+        }
+
+        $reserved = [
+            'places' => self::RESERVED_PLACE_HANDLES,
+            'transitions' => self::RESERVED_TRANSITION_HANDLES,
+        ];
+
+        $clean = [];
+
+        foreach ($editor as $key => $value) {
+            if (! is_string($key) || $key === '') {
+                continue;
+            }
+
+            if (isset($reserved[$key])) {
+                $known = is_array($definition[$key] ?? null) ? $definition[$key] : [];
+                $positions = [];
+
+                foreach (is_array($value) ? $value : [] as $handle => $point) {
+                    $handle = (string) $handle;
+
+                    if (! array_key_exists($handle, $known) || in_array($handle, $reserved[$key], true)) {
+                        continue;
+                    }
+
+                    $point = $this->editorPoint($point);
+
+                    if ($point !== null) {
+                        $positions[$handle] = $point;
+                    }
+                }
+
+                if ($positions !== []) {
+                    $clean[$key] = $positions;
+                }
+
+                continue;
+            }
+
+            if ($this->isEditorScalar($value)) {
+                $clean[$key] = $value;
+
+                continue;
+            }
+
+            if (is_array($value)) {
+                $flat = array_filter(
+                    $value,
+                    fn ($item, $subKey) => is_string($subKey) && $subKey !== '' && $this->isEditorScalar($item),
+                    ARRAY_FILTER_USE_BOTH
+                );
+
+                if ($flat !== []) {
+                    $clean[$key] = $flat;
+                }
+            }
+        }
+
+        if ($clean !== []) {
+            $definition['metadata']['editor'] = $clean;
+        }
+
+        return $definition;
+    }
+
+    /**
+     * A node position as `{x, y}` of clamped, rounded integers — or null when
+     * either coordinate is not a finite number.
+     *
+     * @return array{x: int, y: int}|null
+     */
+    private function editorPoint(mixed $point): ?array
+    {
+        if (! is_array($point)) {
+            return null;
+        }
+
+        $coordinates = [];
+
+        foreach (['x', 'y'] as $axis) {
+            $value = $point[$axis] ?? null;
+
+            if (! is_int($value) && ! is_float($value) && ! (is_string($value) && is_numeric($value))) {
+                return null;
+            }
+
+            $value = (float) $value;
+
+            if (! is_finite($value)) {
+                return null;
+            }
+
+            $coordinates[$axis] = (int) round(max(-self::EDITOR_COORDINATE_LIMIT, min(self::EDITOR_COORDINATE_LIMIT, $value)));
+        }
+
+        return $coordinates;
+    }
+
+    /**
+     * A value `metadata.editor` may hold as-is: a bool, a finite number or a
+     * short string.
+     */
+    private function isEditorScalar(mixed $value): bool
+    {
+        return is_bool($value)
+            || is_int($value)
+            || (is_float($value) && is_finite($value))
+            || (is_string($value) && mb_strlen($value) <= 255);
     }
 
     /**

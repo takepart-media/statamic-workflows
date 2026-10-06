@@ -168,6 +168,23 @@ class DefinitionLoader
     private static array $definitions = [];
 
     /**
+     * The cross-workflow place maps behind rawPlaceLabels(), placeColors() and
+     * placeLabels() (per locale). Static and dropped by flush() like the two
+     * memos above — as function-local statics they survived a save, and the
+     * settings editor's response then carried the colours and names from
+     * before it.
+     *
+     * @var array<string, string|array<string, string>>|null
+     */
+    private static ?array $rawPlaceLabels = null;
+
+    /** @var array<string, string>|null */
+    private static ?array $placeColors = null;
+
+    /** @var array<string, array<string, string>> */
+    private static array $placeLabels = [];
+
+    /**
      * Drop the memos. Called by every writer of a definition file — see
      * WorkflowDefinitionWriter and WorkflowInstaller — so a caller reading back
      * what it just wrote never sees the previous content.
@@ -176,6 +193,9 @@ class DefinitionLoader
     {
         self::$parsed = [];
         self::$definitions = [];
+        self::$rawPlaceLabels = null;
+        self::$placeColors = null;
+        self::$placeLabels = [];
     }
 
     /**
@@ -462,9 +482,7 @@ class DefinitionLoader
      */
     private function rawPlaceLabels(): array
     {
-        static $cache = null;
-
-        if ($cache === null) {
+        if (self::$rawPlaceLabels === null) {
             $cache = [];
             foreach ($this->allIncludingInactive() as $name) {
                 foreach ($this->raw($name)['places'] ?? [] as $handle => $place) {
@@ -477,9 +495,11 @@ class DefinitionLoader
                     }
                 }
             }
+
+            self::$rawPlaceLabels = $cache;
         }
 
-        return $cache;
+        return self::$rawPlaceLabels;
     }
 
     /**
@@ -562,9 +582,7 @@ class DefinitionLoader
      */
     public function placeColors(): array
     {
-        static $cache = null;
-
-        if ($cache === null) {
+        if (self::$placeColors === null) {
             $cache = [];
             foreach ($this->allIncludingInactive() as $name) {
                 foreach ($this->raw($name)['places'] ?? [] as $handle => $place) {
@@ -577,9 +595,11 @@ class DefinitionLoader
                     }
                 }
             }
+
+            self::$placeColors = $cache;
         }
 
-        return $cache;
+        return self::$placeColors;
     }
 
     /**
@@ -609,18 +629,17 @@ class DefinitionLoader
     {
         // Keyed by locale — a per-request memo that ignored it would hand a mail
         // rendered in English the German labels of the CP page next to it.
-        static $cache = [];
-
         $locale = self::labelLocale();
 
-        if (! isset($cache[$locale])) {
-            $cache[$locale] = [];
+        if (! isset(self::$placeLabels[$locale])) {
+            $labels = [];
             foreach (array_keys($this->rawPlaceLabels()) as $handle) {
-                $cache[$locale][$handle] = $this->stateLabel($handle);
+                $labels[$handle] = $this->stateLabel($handle);
             }
+            self::$placeLabels[$locale] = $labels;
         }
 
-        return $cache[$locale];
+        return self::$placeLabels[$locale];
     }
 
     public function load(string $name): Definition

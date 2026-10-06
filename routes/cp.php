@@ -59,7 +59,12 @@ Route::post('workflows/api/settings/{workflow}/active', [WorkflowSettingsControl
 Route::post('workflows/api/settings/{workflow}/seed', [WorkflowSettingsController::class, 'seedWorkflowStates'])
     ->where('workflow', '[A-Za-z0-9_-]+')
     ->name('workflows.settings.seed');
-Route::delete('workflows/api/settings/{workflow}', [WorkflowSettingsController::class, 'destroyWorkflow'])
+// The graph editor's save: the whole definition plus the `version` it was
+// loaded with (409 on a stale version unless `force`). Keyed by handle.
+Route::post('workflows/api/settings/{workflow}/definition', [WorkflowSettingsController::class, 'saveDefinition'])
+    ->where('workflow', '[A-Za-z0-9_-]+')
+    ->name('workflows.settings.save');
+Route::delete('workflows/api/settings/{workflow}',[WorkflowSettingsController::class, 'destroyWorkflow'])
     ->where('workflow', '(?!install)[A-Za-z0-9_-]+')
     ->name('workflows.settings.destroy');
 

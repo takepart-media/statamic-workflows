@@ -804,6 +804,7 @@ dieselbe Transition, weil er immer an der ersten stand.
 | `translation_source_site` | Die Version, aus der übersetzt wird. Leer/fehlend = die **Main-Site** (Statamics Default-Site), und nur wenn der Beitrag dort keine Version hat, dessen Ursprungsversion — ein Beitrag, der direkt in einer anderen Site angelegt wurde, hat keine andere Quelle. Aufgelöst an genau einer Stelle: `WorkflowResolver::sourceSiteFor()`. Es gibt **eine** Quelle pro Manager: steht hier `simple`, entstehen alle Übersetzungen aus der Einfache-Sprache-Fassung und nicht mehr aus der deutschen. Fehlt einem Beitrag diese Version, ist die Start-Transition gesperrt (Begründung am Button, 422 am Endpoint) — kein stiller Rückfall. |
 | `translation_source_pick: true` | Hebt die Verbindlichkeit auf: der Sprach-Dialog fragt dann zusätzlich nach der Quelle, vorbelegt mit `translation_source_site` (bzw. der Main-Site) und begrenzt auf die Fassungen, die der Beitrag hat. Für Projekte, die pro Übersetzung entscheiden wollen. Standard aus. Nur in einem Lokalisierungs-Workflow **ohne** `plain_language_site` erlaubt — der Einfache-Sprache-Manager fragt nichts, dort wäre das Flag wirkungslos, und der Writer lehnt die Kombination deshalb ab. Bei eingeschaltetem Flag sperrt eine fehlende Quell-Version die Transition nicht mehr: sie ist dann eine Option unter mehreren, und der Dialog bietet nur vorhandene an. Gesetzt z. B. auf `simple`, um jede Übersetzung auf der Einfache-Sprache-Version aufzubauen statt auf dem Original. Wirkt an **einer** Stelle (`sourceEntryFor()`) und damit einheitlich auf Übersetzungslauf, Quell-Panel der Detailansicht und Payload-Vorschau. Fehlt einem Beitrag die gewählte Version, bleibt die Transition gesperrt und nennt den Grund — es wird **nie** stillschweigend auf den Ursprung zurückgefallen, weil das Ergebnis dann falsch wäre und richtig aussähe. Muss eine konfigurierte Site sein und darf nicht gleich `plain_language_site` sein. |
 | `translation_source_view: [...]` | Nur im Lokalisierungs-Workflow: wer die **Quellspalte** der Detailansicht wie sieht. Liste von Regeln, je `mode` (`hidden` = die Quelle wird gar nicht an den Browser geliefert, `collapsed` = die Seite startet einspaltig und ein Button blendet die Quelle ein), `by` (`group`, `role` oder `user`) und `handles` (Gruppen-/Rollen-Handles bzw. Benutzer-IDs). Wen keine Regel trifft, sieht die Gegenüberstellung wie bisher; treffen mehrere, gilt die strengere. **Darstellungsregel, keine Berechtigung** — Super-Admins sind nicht ausgenommen. Im CP editierbar (Übersetzungs-Abschnitt der Workflow-Einstellungen). Ausgewertet in `Workflow\SourceViewRules`, validiert vom Writer (`writer_source_view_*`). |
+| `editor.{places,transitions,…}` | **Nur für den Graph-Editor, ohne Laufzeitwirkung.** Knotenpositionen als `places.<handle>: {x, y}` und `transitions.<handle>: {x, y}`; fehlen sie, legt der Editor automatisch aus. Daneben flache Ansichtswerte wie `viewport: {x, y, zoom}`. Der Writer bereinigt statt zu validieren (`normalizeEditorMeta()`): Positionen unbekannter oder auto-injizierter Handles fliegen raus (so verschwindet die Position eines gelöschten Knotens), `x`/`y` werden zu gerundeten Ganzzahlen in ±100000, nicht-numerische Positionen werden verworfen, andere Unterschlüssel behalten nur Skalare bzw. flache Skalar-Maps; ein leeres `editor` entfällt. Löst nie einen Validierungsfehler aus. Eine Speicherung, die nur `editor` ändert, schreibt **kein** `definition_saved`-Event. |
 
 #### Der QS-Bericht des Einfache-Sprache-Dienstes
 
@@ -1921,6 +1922,7 @@ angehängt.
 | `POST workflows/api/settings/install` | `installWorkflow` | Mitgelieferten Workflow-Typ ins Projekt kopieren. Nur noch **nicht** installierte Typen. |
 | `POST workflows/api/settings/{workflow}/active` | `setWorkflowActive` | Workflow an-/abschalten (`active` in der YAML). |
 | `POST workflows/api/settings/{workflow}/seed` | `seedWorkflowStates` | Status für bestehende Einträge nachtragen (nur aktive Workflows). |
+| `POST workflows/api/settings/{workflow}/definition` | `saveDefinition`* | Speichern des Graph-Editors (Name `workflows.settings.save`). Payload `{version, definition: {places, transitions, metadata, collections, initial_place, marking_store, type}, confirm_collection_removal?, force?}`, Antwort `{data: {definition, version, purged, seeded, state_usage}}`. Siehe Versionierung und Backups unten. |
 | `DELETE workflows/api/settings/{workflow}` | `destroyWorkflow` | Definition löschen; DB-Daten bleiben. |
 | `POST workflows/api/{workflow}/settings` | `saveSettings`* | Editor-Payload speichern. `{workflow}` = Handle (Slug als Fallback). |
 | `POST workflows/api/{workflow}/places/{place}/delete` | `deletePlace`* | Place löschen, ggf. mit `migrate_to`. `{workflow}` = Handle (Slug als Fallback). |
@@ -1930,6 +1932,27 @@ Editor samt Save/Place-Löschen) laufen über `WorkflowSettingsController`, alle
 andere über `WorkflowController`. Gemeinsame Helfer (`isSuperAdmin`,
 `workflowBySlug`, `siteHandles`, `siteName`, `workflowForCollection`, `t`) liegen
 im Trait `Http/Controllers/Concerns/WorkflowControllerHelpers.php`.
+
+**Versionierung (409).** Die Editor-Seite bekommt `version` =
+`WorkflowDefinitionWriter::fingerprint()` (`sha1_file` der YAML) und schickt sie
+mit jedem `saveDefinition` zurück. Weicht sie vom aktuellen Fingerabdruck ab —
+jemand anderes hat gespeichert, ein Deploy oder eine Hand-Änderung kam
+dazwischen —, antwortet der Endpoint **409** mit `{message, conflict: true,
+version, definition}` (aktueller Stand) statt zu überschreiben; `force: true`
+überschreibt bewusst. Weitere Antworten: **422** `places_mismatch` (mit
+`missing_places`), wenn `definition.places` einen bestehenden Place weglässt —
+Places werden nie durch Weglassen gelöscht; **422** wie bei `saveSettings` für
+unbekannte Collections, die Collection-Entfernungs-Bestätigung und
+Writer-Validierungsfehler.
+
+**Backups.** Bevor der Writer eine Workflow-YAML überschreibt oder löscht
+(`persist()`/`save()`, `setActive()`, `delete()`, `resetToExample()`, außerdem
+`WorkflowInstaller::rewriteCollections()`), kopiert `backup()` die aktuelle Datei
+nach `storage/app/workflows/backups/<handle>/<Ymd_His_u>.yaml` und behält die
+neuesten `config('workflows.editor_backups')` (Default 20, 0 = aus). Ist der
+Inhalt identisch mit dem neuesten Backup, entsteht kein neues. Dort überleben
+auch die Kommentare, die der YAML-Dump des Editors verliert.
+`restoreBackup($name, $file)` spielt eines zurück.
 
 ---
 
