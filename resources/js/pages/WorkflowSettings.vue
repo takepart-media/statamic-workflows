@@ -18,16 +18,19 @@
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <!-- Beta: swaps the form below for the read-only graph of the same
-                     (unsaved) model. Remembered per browser. -->
+                <!-- Beta: swaps the form below for the graph editor. The two do
+                     not share live state — each starts from the stored definition,
+                     so switching with unsaved changes asks first. Remembered per
+                     browser. -->
                 <label class="mr-2 flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <Switch v-model="graphView" size="sm" />
+                    <Switch :model-value="graphView" size="sm" @update:model-value="switchView" />
                     {{ __('workflows::messages.editor_graph_view') }}
                 </label>
                 <Button variant="secondary" :text="__('workflows::messages.back_to_queue')" @click="$inertia.visit(queueUrl)" />
                 <!-- Called with no args on purpose — save() takes an options
-                     object, and forwarding the click event would shadow it. -->
-                <Button variant="primary" icon="save" :text="__('workflows::messages.save')" @click="save()" :loading="saving" :disabled="saving" />
+                     object, and forwarding the click event would shadow it.
+                     The graph editor saves from its own toolbar. -->
+                <Button v-if="!graphView" variant="primary" icon="save" :text="__('workflows::messages.save')" @click="save()" :loading="saving" :disabled="saving" />
             </div>
         </header>
 
@@ -1379,19 +1382,18 @@
         </section>
 
         <!-- Lazy chunk: the graph editor (Vue Flow, dagre) only loads once the
-             toggle is on. Gets the form's live model, so it shows unsaved edits. -->
+             toggle is on. It owns its model, built from the last STORED
+             definition, and saves through the graph endpoint itself. -->
         <WorkflowEditor
             v-if="graphView"
-            :definition="definition"
-            :model="form"
-            :injected="injected"
+            v-bind="$props"
+            :definition="savedDefinition"
+            :version="savedVersion"
             :state-usage="stateUsage"
-            :label-locales="labelLocales"
-            :label-locale="labelLocale"
-            :shipped-place-labels="shippedPlaceLabels"
-            :custom-actions="customActions"
             :form-view-label="__('workflows::messages.editor_form_view')"
-            @form-view="graphView = false"
+            @form-view="switchView(false)"
+            @saved="onEditorSaved"
+            @dirty-change="(dirty) => (editorDirty = dirty)"
         />
 
         <Modal :open="migrationModal.open" @update:open="(v) => v || closeMigrationModal()">
@@ -1428,40 +1430,15 @@
             </template>
         </Modal>
 
-        <!-- Removing a collection drops its entries out of the workflow and
-             erases their states, assignments, history and comments. The server
-             refuses that without `confirm_collection_removal` and answers 422
-             with the affected count, which lands here. -->
-        <Modal :open="collectionRemovalModal.open" @update:open="(v) => v || closeCollectionRemovalModal()">
-            <ModalTitle class="wf-modal-head">
-                <Icon name="warning-diamond" class="size-4" />
-                {{ __('workflows::messages.collection_removal_title') }}
-            </ModalTitle>
-            <div class="space-y-3 py-3">
-                <p class="text-sm">
-                    {{ __('workflows::messages.collection_removal_prompt', {
-                        collections: removedCollectionLabels,
-                        count: collectionRemovalModal.affectedCount,
-                    }) }}
-                </p>
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                    {{ __('workflows::messages.collection_removal_warning') }}
-                </p>
-            </div>
-            <template #footer>
-                <div class="flex justify-end gap-2 px-2 pt-3">
-                    <Button variant="ghost" :text="__('workflows::messages.cancel')" @click="closeCollectionRemovalModal" />
-                    <Button
-                        variant="destructive"
-                        icon="trash"
-                        :text="__('workflows::messages.confirm_collection_removal')"
-                        :loading="saving"
-                        :disabled="saving"
-                        @click="confirmCollectionRemoval"
-                    />
-                </div>
-            </template>
-        </Modal>
+        <!-- Removing a collection needs an explicit yes; see the dialog. -->
+        <CollectionRemovalDialog
+            v-model:open="collectionRemovalModal.open"
+            :collections="collectionRemovalModal.collections"
+            :affected-count="collectionRemovalModal.affectedCount"
+            :collection-options="collectionOptions"
+            :busy="saving"
+            @confirm="confirmCollectionRemoval"
+        />
     </div>
 </template>
 
@@ -1472,6 +1449,7 @@ import { Head } from '@statamic/cms/inertia';
 import { humanize, stateColor } from '../support/states.js';
 import EnvStatusLine from '../components/EnvStatusLine.vue';
 import MailerStatusLine from '../components/MailerStatusLine.vue';
+import CollectionRemovalDialog from '../editor/components/shared/CollectionRemovalDialog.vue';
 import {
     ACTION_TYPES,
     ASSIGNMENT_MATCHES,
@@ -1509,6 +1487,21 @@ const WorkflowEditor = defineAsyncComponent({
 // mode, blocked site data); then it just doesn't stick.
 const GRAPH_VIEW_KEY = 'workflows.settings.graphView';
 const graphView = ref(readGraphView());
+
+// The two views no longer share live state: the graph editor builds its own
+// model from the last STORED definition (`savedDefinition`) every time it is
+// opened, and the form is reset to that same definition when the graph is
+// left. Unsaved edits in the view being left would silently vanish — so
+// switching asks first and, on yes, discards them.
+function switchView(toGraph) {
+    if (toGraph === graphView.value) return;
+    const dirty = toGraph ? formDirty() : editorDirty.value;
+    if (dirty && !window.confirm(__('workflows::messages.editor_discard_on_switch'))) return;
+    if (toGraph && dirty) applyServerDefinition(savedDefinition.value);
+    if (!toGraph) applyServerDefinition(savedDefinition.value);
+    editorDirty.value = false;
+    graphView.value = toGraph;
+}
 watch(graphView, (on) => {
     try {
         window.localStorage.setItem(GRAPH_VIEW_KEY, on ? '1' : '0');
@@ -1531,6 +1524,14 @@ const axios = getCurrentInstance()?.appContext?.config?.globalProperties?.$axios
 
 const props = defineProps({
     workflow: { type: String, required: true },
+    // Declared so `v-bind="$props"` hands them to the graph editor.
+    handle: { type: String, default: '' },
+    version: { type: String, default: '' },
+    active: { type: Boolean, default: false },
+    activeUrl: { type: String, default: '' },
+    saveDefinitionUrl: { type: String, default: '' },
+    validateUrl: { type: String, default: '' },
+    usageUrl: { type: String, default: '' },
     slug: { type: String, required: true },
     definition: { type: Object, required: true },
     // What DefinitionLoader adds at read time (pending_revision and its system
@@ -1625,6 +1626,45 @@ const modelCtx = {
 const form = reactive(normalize(props.definition, modelCtx));
 const saving = ref(false);
 
+// The definition as stored right now and its fingerprint — what the graph editor
+// starts from. Kept current by both views' saves.
+const savedDefinition = ref(props.definition);
+const savedVersion = ref(props.version);
+const editorDirty = ref(false);
+
+// Unsaved form edits: the payload differs from the one taken after the last
+// load/save, or a new row is pending. Set below, once the start-coupling
+// watcher has run.
+let formBaseline = '';
+const formSnapshot = () => JSON.stringify(serialize(form, modelCtx));
+function formDirty() {
+    return Object.keys(newPlaceHandles).length > 0
+        || Object.keys(newTransitionHandles).length > 0
+        || formSnapshot() !== formBaseline;
+}
+
+// The graph editor saved (or reloaded after a conflict): its result is the new
+// stored state for both views.
+function onEditorSaved({ definition, version, stateUsage: usage }) {
+    savedDefinition.value = definition;
+    if (version) savedVersion.value = version;
+    applyStateUsage(usage);
+    applyServerDefinition(definition);
+}
+
+// The form saves through the old endpoint, which answers without a version —
+// fetch the fresh fingerprint so the graph editor doesn't run into a 409 for a
+// change made right here.
+async function refreshVersion() {
+    if (!props.usageUrl || !axios) return;
+    try {
+        const { data } = await axios.get(props.usageUrl);
+        if (data?.version) savedVersion.value = data.version;
+    } catch {
+        // the editor will report a conflict instead — and offer to reload
+    }
+}
+
 // Track auto-generated handles for freshly-added, not-yet-persisted rows. Any
 // key present here means "this row is new — show handle input, hide delete,
 // show cancel". Persisted rows never appear here.
@@ -1666,13 +1706,6 @@ const assignerHint = computed(() => {
 
     return __('workflows::messages.assigner_groups_hint');
 });
-
-// The server reports removed collections by handle; show their titles instead.
-const removedCollectionLabels = computed(() =>
-    collectionRemovalModal.collections
-        .map((handle) => props.collectionOptions.find((o) => o.value === handle)?.label ?? handle)
-        .join(', '),
-);
 
 // Selected collections that another workflow already owns. `collectionOwners`
 // is a snapshot from page load, so a collection added in this unsaved session
@@ -1934,6 +1967,8 @@ watch(
     },
     { immediate: true },
 );
+
+formBaseline = formSnapshot();
 
 // The gating rules for which action types a row may offer live in
 // editor/model/actionRules.js; these wrappers bind them to this page's form.
@@ -2292,6 +2327,8 @@ async function postDeletePlace(place, migrateTo) {
         const { data } = await axios.post(url, migrateTo ? { migrate_to: migrateTo } : {});
         Statamic.$toast.success(__('workflows::messages.place_deleted', { place }));
         applyServerDefinition(data.data.definition);
+        savedDefinition.value = data.data.definition;
+        refreshVersion();
         delete props.stateUsage[place];
     } catch (e) {
         Statamic.$toast.error(e.response?.data?.message || __('workflows::messages.place_delete_error'));
@@ -2339,6 +2376,8 @@ async function save({ confirmCollectionRemoval = false } = {}) {
             Statamic.$toast.success(__('workflows::messages.states_seeded', { count: data.data.seeded }));
         }
         applyServerDefinition(data.data.definition);
+        savedDefinition.value = data.data.definition;
+        refreshVersion();
         // A purge changes how many entries sit in each place — without this the
         // next place deletion would prompt against stale counts.
         applyStateUsage(data.data.state_usage);
@@ -2397,6 +2436,12 @@ function applyServerDefinition(def) {
     for (const key of Object.keys(newPlaceHandles)) delete newPlaceHandles[key];
     for (const key of Object.keys(newTransitionHandles)) delete newTransitionHandles[key];
     Object.assign(form, fresh);
+    // Same as the watcher above, synchronously — the baseline must include it.
+    if (!rules.explicitStartTransition(form)) {
+        const first = rules.startingTransition(form);
+        if (first && form.initial_place) form.transitions[first].from = form.initial_place;
+    }
+    formBaseline = formSnapshot();
 }
 </script>
 

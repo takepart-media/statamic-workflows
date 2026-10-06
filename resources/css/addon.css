@@ -453,6 +453,42 @@
     flex: 1 1 auto;
     min-height: 0;
 }
+/* Canvas + side panel (SplitterGroup). The group fills this box. */
+.wf-editor-body {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Side panel: the selected node's settings, or the workflow's. */
+.wf-panel {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    border-left: 1px solid var(--wf-node-border);
+    background-color: var(--wf-node-bg);
+}
+.wf-panel-head {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.625rem 0.75rem 0.5rem 1rem;
+    border-bottom: 1px solid var(--wf-node-border);
+}
+.wf-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.wf-panel-tabs [data-ui-tabs-list] {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0;
+    padding: 0.25rem 0.75rem 0;
+    background-color: var(--wf-node-bg);
+}
 
 /* Grid, markers, minimap */
 .wf-editor .vue-flow__background circle {

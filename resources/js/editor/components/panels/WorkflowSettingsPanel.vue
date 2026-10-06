@@ -1,0 +1,528 @@
+<template>
+    <Tabs v-model="tab" class="wf-panel-tabs">
+        <TabList class="flex-wrap">
+            <TabTrigger name="general" :text="__('workflows::messages.editor_tab_general')" />
+            <TabTrigger name="permissions" :text="__('workflows::messages.editor_tab_permissions')" />
+            <TabTrigger v-if="isLocalization" name="localization" :text="__('workflows::messages.editor_tab_localization')" />
+            <TabTrigger name="collections" :text="__('workflows::messages.collections')" />
+            <TabTrigger v-if="!isLocalization" name="sla" :text="__('workflows::messages.editor_tab_sla')" />
+            <TabTrigger name="order" :text="__('workflows::messages.editor_tab_order')" />
+            <TabTrigger name="advanced" :text="__('workflows::messages.editor_tab_advanced')" />
+        </TabList>
+
+        <TabContent name="general">
+            <div class="space-y-5 p-4">
+                <!-- Places marked for deletion — gone from the canvas, still
+                     reachable here until the save. -->
+                <div v-if="model.deletions.length" class="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700! dark:bg-amber-950/40!">
+                    <p class="text-sm font-medium text-amber-950 dark:text-amber-100">{{ __('workflows::messages.editor_pending_deletions') }}</p>
+                    <ul class="space-y-1">
+                        <li v-for="d in model.deletions" :key="d.id" class="flex items-center gap-2 text-sm">
+                            <code class="font-mono text-xs">{{ d.handle }}</code>
+                            <span v-if="d.usage" class="text-xs text-gray-600 dark:text-gray-300">
+                                {{ __('workflows::messages.editor_usage_count', { count: d.usage }) }}
+                            </span>
+                            <Button class="ml-auto" size="xs" variant="ghost" :text="__('workflows::messages.editor_open')" @click="editor.select(d.id)" />
+                        </li>
+                    </ul>
+                </div>
+
+                <Field :label="__('workflows::messages.workflow_active')" :instructions="__('workflows::messages.editor_active_hint')">
+                    <Switch :model-value="active" :disabled="togglingActive || !editor.options.activeUrl" @update:model-value="setActive" />
+                </Field>
+
+                <Field :label="__('workflows::messages.nav_label')" :instructions="__('workflows::messages.nav_label_hint')">
+                    <Input :model-value="nav.label ?? ''" @update:model-value="(v) => setNav('label', v)" />
+                </Field>
+                <div class="grid grid-cols-2 gap-4">
+                    <Field :label="__('workflows::messages.nav_icon')">
+                        <Input :model-value="nav.icon ?? ''" @update:model-value="(v) => setNav('icon', v)" />
+                    </Field>
+                    <Field :label="__('workflows::messages.nav_order')">
+                        <Input type="number" :model-value="nav.order ?? ''" @update:model-value="(v) => setNav('order', v === '' || v === null ? undefined : Number(v))" />
+                    </Field>
+                </div>
+                <Field :label="__('workflows::messages.settings_field_nav_slug')">
+                    <Input :model-value="editor.options.slug" disabled />
+                </Field>
+
+                <Field :label="__('workflows::messages.settings_field_initial_place')">
+                    <Select
+                        adaptive-width
+                        :model-value="model.workflow.initial_place"
+                        :options="placeOptions"
+                        @update:model-value="(v) => editor.api.setInitialPlace(v)"
+                    />
+                </Field>
+
+                <Field
+                    :label="__('workflows::messages.settings_field_progress_orientation')"
+                    :instructions="__('workflows::messages.settings_field_progress_orientation_hint')"
+                >
+                    <Select
+                        adaptive-width
+                        :model-value="meta.progress_orientation"
+                        :options="editor.options.progressOrientationOptions"
+                        @update:model-value="(v) => setMeta('progress_orientation', v)"
+                    />
+                </Field>
+
+                <!-- Only when auto-detection would fail (no allow_publish place)
+                     or an override is stored, so it can be cleared. -->
+                <Field
+                    v-if="showSeed"
+                    :label="__('workflows::messages.seed_published_place')"
+                    :instructions="__('workflows::messages.seed_published_place_hint')"
+                >
+                    <Select
+                        adaptive-width
+                        clearable
+                        :model-value="meta.seed_published_place"
+                        :options="placeOptions"
+                        :placeholder="__('workflows::messages.seed_published_place_none')"
+                        @update:model-value="(v) => setMeta('seed_published_place', v ?? null)"
+                    />
+                </Field>
+            </div>
+        </TabContent>
+
+        <TabContent name="permissions">
+            <div class="space-y-5 p-4">
+                <Field :label="__('workflows::messages.settings_field_default_assignee_group')">
+                    <Select
+                        adaptive-width
+                        clearable
+                        :model-value="meta.default_assignee_group"
+                        :options="defaultAssigneeGroupOptions"
+                        :placeholder="__('workflows::messages.default_assignee_group_none')"
+                        @update:model-value="(v) => setMeta('default_assignee_group', v ?? null)"
+                    />
+                </Field>
+                <Field :label="__('workflows::messages.settings_field_assign_creator')">
+                    <Checkbox solo :model-value="!!meta.assign_creator" @update:model-value="(v) => setMeta('assign_creator', v)" />
+                </Field>
+                <Field
+                    v-if="!isLocalization"
+                    :label="__('workflows::messages.post_creator_groups')"
+                    :instructions="postCreatorHint"
+                >
+                    <Select
+                        adaptive-width
+                        multiple
+                        close-on-select
+                        clearable
+                        :model-value="meta.post_creator_groups ?? []"
+                        :options="editor.options.groupOptions"
+                        :placeholder="__('workflows::messages.post_creator_groups_none')"
+                        @update:model-value="(v) => setMeta('post_creator_groups', v ?? [])"
+                    />
+                </Field>
+                <Field
+                    v-if="!isLocalization"
+                    :label="__('workflows::messages.create_transition')"
+                    :instructions="__('workflows::messages.create_transition_hint')"
+                >
+                    <Select
+                        adaptive-width
+                        clearable
+                        :model-value="meta.create_transition"
+                        :options="transitionOptions"
+                        :placeholder="__('workflows::messages.create_transition_none')"
+                        @update:model-value="(v) => setMeta('create_transition', v ?? null)"
+                    />
+                </Field>
+                <Field :label="__('workflows::messages.assigner_groups')" :instructions="assignerHint">
+                    <Select
+                        adaptive-width
+                        multiple
+                        close-on-select
+                        clearable
+                        :model-value="meta.assigner_groups ?? []"
+                        :options="editor.options.groupOptions"
+                        :placeholder="__('workflows::messages.assigner_groups_none')"
+                        @update:model-value="(v) => setMeta('assigner_groups', v ?? [])"
+                    />
+                </Field>
+            </div>
+        </TabContent>
+
+        <!-- Only what matters for THIS kind of localization manager: offering
+             plain_language_site in a translation manager would let a dropdown
+             swap the two managers' roles. -->
+        <TabContent v-if="isLocalization" name="localization">
+            <div class="space-y-5 p-4">
+                <p class="text-sm font-medium">
+                    {{ isPlainLanguage ? __('workflows::messages.plain_language_settings') : __('workflows::messages.translation_settings') }}
+                </p>
+                <Field :label="__('workflows::messages.translation_source_site')" :instructions="__('workflows::messages.translation_source_site_hint')">
+                    <Select
+                        adaptive-width
+                        clearable
+                        :model-value="meta.translation_source_site"
+                        :options="editor.options.siteOptions"
+                        :placeholder="__('workflows::messages.translation_source_site_none')"
+                        @update:model-value="(v) => setMeta('translation_source_site', v ?? null)"
+                    />
+                </Field>
+                <template v-if="isPlainLanguage">
+                    <Field :label="__('workflows::messages.plain_language_site')" :instructions="__('workflows::messages.plain_language_site_hint')">
+                        <Select
+                            adaptive-width
+                            clearable
+                            :model-value="meta.plain_language_site"
+                            :options="editor.options.siteOptions"
+                            :placeholder="__('workflows::messages.plain_language_site_none')"
+                            @update:model-value="(v) => setMeta('plain_language_site', v ?? null)"
+                        />
+                    </Field>
+                    <Field :label="__('workflows::messages.plain_language_completed_place')" :instructions="__('workflows::messages.plain_language_completed_place_hint')">
+                        <Select
+                            adaptive-width
+                            clearable
+                            :model-value="meta.plain_language_completed_place"
+                            :options="placeOptions"
+                            :placeholder="__('workflows::messages.plain_language_completed_place_none')"
+                            @update:model-value="(v) => setMeta('plain_language_completed_place', v ?? null)"
+                        />
+                    </Field>
+                    <Field :label="__('workflows::messages.plain_language_failed_place')" :instructions="__('workflows::messages.plain_language_failed_place_hint')">
+                        <Select
+                            adaptive-width
+                            clearable
+                            :model-value="meta.plain_language_failed_place"
+                            :options="placeOptions"
+                            :placeholder="__('workflows::messages.plain_language_failed_place_none')"
+                            @update:model-value="(v) => setMeta('plain_language_failed_place', v ?? null)"
+                        />
+                    </Field>
+                </template>
+                <Field
+                    v-else
+                    :label="__('workflows::messages.translation_source_pick')"
+                    :instructions="__('workflows::messages.translation_source_pick_hint')"
+                >
+                    <Checkbox solo :model-value="!!meta.translation_source_pick" @update:model-value="(v) => setMeta('translation_source_pick', v)" />
+                </Field>
+
+                <!-- Who sees the source column how: mode + audience per rule. A rule
+                     without handles is dropped on save. -->
+                <Field :label="__('workflows::messages.translation_source_view')" :instructions="__('workflows::messages.translation_source_view_hint')">
+                    <div class="space-y-2">
+                        <div
+                            v-for="(rule, i) in meta.translation_source_view"
+                            :key="i"
+                            class="space-y-2 rounded-md border border-gray-200 p-2 dark:border-gray-700!"
+                        >
+                            <div class="flex items-center gap-2">
+                                <Select adaptive-width v-model="rule.mode" :options="sourceViewModeOptions" size="sm" class="flex-1" />
+                                <Button
+                                    icon="trash"
+                                    variant="ghost"
+                                    size="sm"
+                                    icon-only
+                                    :aria-label="__('workflows::messages.translation_source_view_remove')"
+                                    @click="meta.translation_source_view.splice(i, 1)"
+                                />
+                            </div>
+                            <AudiencePicker
+                                :by="rule.by"
+                                :handles="rule.handles"
+                                :by-options="audienceOptions"
+                                :placeholder="__('workflows::messages.translation_source_view_handles_none')"
+                                @update:by="(v) => (rule.by = v)"
+                                @update:handles="(v) => (rule.handles = v)"
+                            />
+                        </div>
+                        <p v-if="!meta.translation_source_view?.length" class="text-sm text-gray-500 dark:text-gray-400">
+                            {{ __('workflows::messages.translation_source_view_empty') }}
+                        </p>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            icon="plus"
+                            :text="__('workflows::messages.translation_source_view_add')"
+                            @click="meta.translation_source_view.push({ mode: 'hidden', by: 'group', handles: [] })"
+                        />
+                    </div>
+                </Field>
+
+                <!-- Where a version falls back to when its source goes to draft. -->
+                <Field :label="__('workflows::messages.source_draft_place')" :instructions="`${__('workflows::messages.source_draft_intro')} ${__('workflows::messages.source_draft_hint')}`">
+                    <Select
+                        adaptive-width
+                        :model-value="meta.source_draft_place"
+                        :options="sourceDraftPlaceOptions"
+                        @update:model-value="(v) => setMeta('source_draft_place', v ?? null)"
+                    />
+                </Field>
+
+                <div class="space-y-1 border-t border-gray-200 pt-4 dark:border-gray-700!">
+                    <p class="mb-2 text-sm font-medium text-gray-600 dark:text-gray-300">{{ __('workflows::messages.translation_apis') }}</p>
+                    <template v-if="isPlainLanguage">
+                        <EnvStatusLine :status="editor.options.envStatus.plain_language_url" />
+                        <EnvStatusLine :status="editor.options.envStatus.plain_language_token" />
+                    </template>
+                    <EnvStatusLine v-else :status="editor.options.envStatus.deepl" />
+                </div>
+            </div>
+        </TabContent>
+
+        <TabContent name="collections">
+            <div class="space-y-3 p-4">
+                <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('workflows::messages.collections_intro') }}</p>
+                <Select
+                    adaptive-width
+                    multiple
+                    close-on-select
+                    clearable
+                    :model-value="model.workflow.collections"
+                    :options="editor.options.collectionOptions"
+                    :placeholder="__('workflows::messages.select_collections')"
+                    @update:model-value="(v) => editor.api.updateWorkflow({ collections: v ?? [] })"
+                />
+                <!-- The alphabetically first workflow owns a shared collection; a
+                     non-owner only governs entries with a stored state. -->
+                <ul v-if="foreignCollections.length" class="space-y-1">
+                    <li v-for="item in foreignCollections" :key="item.handle" class="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <Icon name="info" class="mt-0.5 size-3.5 shrink-0" />
+                        <span>{{ __('workflows::messages.collections_owned_by', { collection: item.label, workflow: item.owner }) }}</span>
+                    </li>
+                </ul>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.collections_hint') }}</p>
+            </div>
+        </TabContent>
+
+        <!-- Ageing belongs to the workflow that owns the posts; a localization
+             workflow reacts to that one's deadline instead. -->
+        <TabContent v-if="!isLocalization" name="sla">
+            <div class="space-y-5 p-4">
+                <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('workflows::messages.sla_intro') }}</p>
+                <div v-for="stage in SLA_STAGES" :key="stage" class="space-y-3 rounded-md border border-gray-200 p-3 dark:border-gray-700!">
+                    <div class="grid grid-cols-2 gap-3">
+                        <Field :label="__(`workflows::messages.sla_${stage}_days`)">
+                            <Input
+                                type="number"
+                                min="0"
+                                :model-value="sla[`${stage}_days`] ?? ''"
+                                :placeholder="__('workflows::messages.sla_placeholder_disabled')"
+                                @update:model-value="(v) => (sla[`${stage}_days`] = v === '' || v === null ? null : Number(v))"
+                            />
+                        </Field>
+                        <Field :label="__(`workflows::messages.sla_${stage}_place`)">
+                            <Select
+                                adaptive-width
+                                :model-value="sla[`${stage}_place`]"
+                                :options="slaPlaceOptions"
+                                @update:model-value="(v) => (sla[`${stage}_place`] = v ?? null)"
+                            />
+                        </Field>
+                    </div>
+                    <!-- Nobody clicks into an ageing stage — the scheduler moves it —
+                         so who takes over is set here. Empty = keep. -->
+                    <Field :label="__(`workflows::messages.sla_${stage}_assign`)">
+                        <AudiencePicker
+                            :by="sla[`${stage}_assign`]?.by ?? null"
+                            :handles="sla[`${stage}_assign`]?.handles ?? []"
+                            :by-options="slaAssignByOptions"
+                            :placeholder="__('workflows::messages.sla_assign_handles_none')"
+                            @update:by="(v) => (assignOf(stage).by = v)"
+                            @update:handles="(v) => (assignOf(stage).handles = v)"
+                        />
+                    </Field>
+                </div>
+                <div class="space-y-1">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.sla_hint') }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.sla_place_hint') }}</p>
+                    <p class="flex items-start gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                        <Icon name="time-clock" class="mt-0.5 size-3.5 shrink-0" />
+                        <span>{{ __('workflows::messages.sla_clock_hint') }}</span>
+                    </p>
+                    <p class="flex items-start gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                        <Icon name="time-clock" class="mt-0.5 size-3.5 shrink-0" />
+                        <span>{{ __('workflows::messages.sla_cron_hint') }}</span>
+                    </p>
+                </div>
+            </div>
+        </TabContent>
+
+        <TabContent name="order">
+            <div class="space-y-5 p-4">
+                <Field :label="__('workflows::messages.places')" :instructions="__('workflows::messages.editor_order_places_hint')">
+                    <OrderList kind="place" />
+                </Field>
+                <Field :label="__('workflows::messages.transitions')" :instructions="__('workflows::messages.editor_order_transitions_hint')">
+                    <OrderList kind="transition" />
+                </Field>
+            </div>
+        </TabContent>
+
+        <TabContent name="advanced">
+            <div class="space-y-5 p-4">
+                <Field :label="__('workflows::messages.editor_reset_positions')" :instructions="__('workflows::messages.editor_reset_positions_hint')">
+                    <Button size="sm" icon="hierarchy" :text="__('workflows::messages.editor_reset_positions')" @click="$emit('reset-positions')" />
+                </Field>
+                <Field :label="__('workflows::messages.editor_payload_preview')" :instructions="__('workflows::messages.editor_payload_preview_hint')">
+                    <CodeEditor
+                        v-if="tab === 'advanced'"
+                        read-only
+                        mode="application/json"
+                        :allow-mode-selection="false"
+                        :show-mode-label="false"
+                        :model-value="payloadPreview"
+                    />
+                </Field>
+            </div>
+        </TabContent>
+    </Tabs>
+</template>
+
+<script setup>
+import { computed, getCurrentInstance, inject, ref } from 'vue';
+import {
+    Button,
+    Checkbox,
+    CodeEditor,
+    Field,
+    Icon,
+    Input,
+    Select,
+    Switch,
+    TabContent,
+    TabList,
+    TabTrigger,
+    Tabs,
+} from '@statamic/cms/ui';
+import EnvStatusLine from '../../../components/EnvStatusLine.vue';
+import { SLA_STAGES } from '../../model/constants.js';
+import { hasPublishPlace, isLocalizationWorkflow, isPlainLanguageWorkflow } from '../../model/actionRules.js';
+import { keyOf } from '../../model/editorModel.js';
+import { placeDisplayName } from '../../model/labels.js';
+import { EDITOR_CONTEXT } from '../context.js';
+import AudiencePicker from '../shared/AudiencePicker.vue';
+import OrderList from './OrderList.vue';
+
+defineEmits(['reset-positions']);
+
+const editor = inject(EDITOR_CONTEXT);
+const axios = getCurrentInstance()?.appContext?.config?.globalProperties?.$axios;
+
+const tab = ref('general');
+
+const model = editor.api.model;
+const meta = computed(() => model.workflow.metadata);
+const nav = computed(() => model.workflow.metadata.nav ?? {});
+const sla = computed(() => model.workflow.metadata.sla);
+
+const setMeta = (key, value) => editor.api.updateWorkflow({ metadata: { [key]: value } });
+
+function setNav(key, value) {
+    const next = { ...(model.workflow.metadata.nav ?? {}) };
+    if (value === undefined) {
+        delete next[key];
+    } else {
+        next[key] = value;
+    }
+    setMeta('nav', next);
+}
+
+// normalize() always gives each stage an assign object; a hand-made one may not.
+function assignOf(stage) {
+    sla.value[`${stage}_assign`] ??= { by: null, handles: [] };
+    return sla.value[`${stage}_assign`];
+}
+
+const view = computed(() => editor.api.view.value);
+const isLocalization = computed(() => isLocalizationWorkflow(view.value));
+const isPlainLanguage = computed(() => isPlainLanguageWorkflow(view.value));
+const showSeed = computed(() => !hasPublishPlace(view.value) || !!meta.value.seed_published_place);
+
+const placeOptions = computed(() => model.places.map((p) => ({
+    value: p.id,
+    label: `${placeDisplayName(view.value, keyOf(p), editor.labelCtx)} (${keyOf(p)})`,
+})));
+
+const slaPlaceOptions = computed(() => [
+    { value: null, label: __('workflows::messages.sla_place_none') },
+    ...placeOptions.value,
+]);
+
+// Only into a step that takes the version offline — the writer checks the same.
+const sourceDraftPlaceOptions = computed(() => [
+    { value: null, label: __('workflows::messages.source_draft_place_none') },
+    ...placeOptions.value.filter((o) => model.places.find((p) => p.id === o.value)?.metadata?.allow_publish !== true),
+]);
+
+// Real transitions only — the injected system steps are driven by saves.
+const transitionOptions = computed(() => model.transitions
+    .filter((t) => !t.metadata?.system)
+    .map((t) => ({ value: t.id, label: `${t.metadata?.label || keyOf(t)} (${keyOf(t)})` })));
+
+// A stored group that no longer exists is listed rather than silently cleared.
+const defaultAssigneeGroupOptions = computed(() => {
+    const current = meta.value.default_assignee_group;
+    const options = editor.options.groupOptions ?? [];
+    return current && !options.some((o) => o.value === current) ? [...options, { value: current, label: current }] : options;
+});
+
+const postCreatorHint = computed(() => (editor.options.postCreatorFallback?.length
+    ? __('workflows::messages.post_creator_groups_hint_fallback', { groups: editor.options.postCreatorFallback.join(', ') })
+    : __('workflows::messages.post_creator_groups_hint')));
+
+const assignerHint = computed(() => (editor.options.assignerFallback?.length
+    ? __('workflows::messages.assigner_groups_hint_fallback', { groups: editor.options.assignerFallback.join(', ') })
+    : __('workflows::messages.assigner_groups_hint')));
+
+// `collectionOwners` is a snapshot from page load: a collection added in this
+// session has no owner yet and correctly stays out.
+const foreignCollections = computed(() => (model.workflow.collections ?? [])
+    .filter((handle) => {
+        const owner = editor.options.collectionOwners?.[handle];
+        return owner && owner !== editor.options.workflow;
+    })
+    .map((handle) => ({
+        handle,
+        label: editor.options.collectionOptions.find((o) => o.value === handle)?.label ?? handle,
+        owner: editor.options.collectionOwners[handle],
+    })));
+
+const sourceViewModeOptions = computed(() => [
+    { value: 'hidden', label: __('workflows::messages.translation_source_view_mode_hidden') },
+    { value: 'collapsed', label: __('workflows::messages.translation_source_view_mode_collapsed') },
+]);
+
+const audienceOptions = computed(() => [
+    { value: 'group', label: __('workflows::messages.assignment_criterion_group') },
+    { value: 'role', label: __('workflows::messages.assignment_criterion_role') },
+    { value: 'user', label: __('workflows::messages.translation_source_view_by_user') },
+]);
+
+const slaAssignByOptions = computed(() => [
+    { value: null, label: __('workflows::messages.sla_assign_keep') },
+    ...audienceOptions.value,
+]);
+
+// What a save would send right now — read-only, for the curious and for bug
+// reports. Only computed while the tab is open.
+const payloadPreview = computed(() => (tab.value === 'advanced'
+    ? JSON.stringify(editor.api.payload(), null, 2)
+    : ''));
+
+// Active/inactive is not part of the definition: it switches right away, like
+// on the settings index.
+const active = ref(!!editor.options.active);
+const togglingActive = ref(false);
+
+async function setActive(value) {
+    if (!axios || !editor.options.activeUrl) return;
+    togglingActive.value = true;
+    try {
+        await axios.post(editor.options.activeUrl, { active: value });
+        active.value = value;
+        Statamic.$toast.success(__(value ? 'workflows::messages.workflow_activated' : 'workflows::messages.workflow_deactivated'));
+    } catch (e) {
+        Statamic.$toast.error(e?.response?.data?.message || __('workflows::messages.workflow_active_error'));
+    } finally {
+        togglingActive.value = false;
+    }
+}
+</script>

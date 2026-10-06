@@ -13,7 +13,7 @@
 import { computed, watch } from 'vue';
 import { MarkerType } from '@vue-flow/core';
 import { explicitStartTransition, startingTransition } from '../model/actionRules.js';
-import { parseId, placeId, toGraph, transitionId, transitionLinks } from '../model/graphModel.js';
+import { parseId, toGraph, transitionLinks } from '../model/graphModel.js';
 import { placeInfo, transitionInfo } from '../model/nodeInfo.js';
 
 const MARKER = { type: MarkerType.ArrowClosed, color: 'currentColor', width: 18, height: 18 };
@@ -27,9 +27,12 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * @param {() => object} [options.injected]
  * @param {() => boolean} [options.showSystem]
  * @param {() => object} [options.ctx]     labels.js/nodeInfo.js context (incl. stateUsage)
+ * @param {() => object} [options.graph]   the graph to draw (editorModel.editorGraph());
+ *                                         default: toGraph(model, injected) — then
+ *                                         `model` must be keyed like the graph's handles
  */
-export function useGraph(flow, { model, injected = () => null, showSystem = () => true, ctx = () => ({}) }) {
-    const graph = computed(() => toGraph(model(), { injected: injected() }));
+export function useGraph(flow, { model, injected = () => null, showSystem = () => true, ctx = () => ({}), graph: graphSource = null }) {
+    const graph = computed(() => (graphSource ? graphSource() : toGraph(model(), { injected: injected() })));
 
     const elements = computed(() => buildElements(model(), graph.value, { showSystem: showSystem(), ctx: ctx() }));
 
@@ -165,8 +168,12 @@ export function buildElements(model, graph, { showSystem = true, ctx = {} } = {}
 
     // The default first step stays tied to the initial place (the form locks its
     // `from`); its edge says so.
+    // Looked up by handle rather than built with placeId(): a node created in the
+    // editor has an id (`p~1`) that is not derived from its handle.
     const start = explicitStartTransition(model) ? null : startingTransition(model);
-    const lockedEdge = start && model.initial_place ? `${placeId(model.initial_place)}->${transitionId(start)}` : null;
+    const startPlace = graph.places.find((p) => !p.injected && p.handle === model.initial_place)?.id;
+    const startStep = graph.transitions.find((t) => !t.injected && t.handle === start)?.id;
+    const lockedEdge = startPlace && startStep ? `${startPlace}->${startStep}` : null;
     const ghosts = new Set(nodes.filter((n) => n.type === 'ghost').map((n) => n.id));
 
     const edges = [];
