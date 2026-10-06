@@ -46,6 +46,8 @@ use TakepartMedia\Workflows\Workflow\Filters\AssigneeFilter;
 use TakepartMedia\Workflows\Workflow\Filters\SiteFilter;
 use TakepartMedia\Workflows\Workflow\Filters\StaleFilter;
 use TakepartMedia\Workflows\Workflow\Filters\StateFilter;
+use TakepartMedia\Workflows\Workflow\Filters\WorkflowNameFilter;
+use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
 use TakepartMedia\Workflows\Workflow\ProgressSteps;
 use TakepartMedia\Workflows\Workflow\PublishedFlag;
 use TakepartMedia\Workflows\Workflow\SubjectLinks;
@@ -561,6 +563,179 @@ class WorkflowController extends CpController
             : ($handles[0] ?? null);
 
         return $mainSite !== null ? [$mainSite] : [];
+    }
+
+    // ---- Cross-workflow overview (dashboard widget) --------------------------
+
+    /**
+     * The workflows the dashboard's "all posts" table spans: every active
+     * entry-backed workflow, in definition order. `$param` narrows that — a
+     * comma-separated string (the listing's query parameter) or a list (the
+     * widget's config). Unknown and inactive names are dropped rather than
+     * rejected; a narrowing that keeps nothing yields an empty scope.
+     *
+     * @param  string|array<int, string>|null  $param
+     * @return array<int, string>
+     */
+    private function overviewWorkflows($param): array
+    {
+        $names = collect(app(DefinitionLoader::class)->all())
+            ->filter(fn (string $name) => $this->isEntryWorkflow($name))
+            ->values();
+
+        $requested = is_array($param)
+            ? array_values(array_filter(array_map('strval', $param)))
+            : array_values(array_filter(array_map('trim', explode(',', (string) $param))));
+
+        if ($requested !== []) {
+            $names = $names->filter(fn (string $name) => in_array($name, $requested, true))->values();
+        }
+
+        return $names->all();
+    }
+
+    /**
+     * The site columns of the overview: every site at least one of the scoped
+     * workflows lists, in sites.yaml order. A site no scoped manager shows (the
+     * language columns when only the post manager is in scope) gets no column.
+     *
+     * @param  array<int, string>  $workflows
+     * @return array<int, string>
+     */
+    private function overviewSites(array $workflows): array
+    {
+        $listed = collect($workflows)
+            ->flatMap(fn (string $name) => $this->listingSitesFor($name))
+            ->unique()
+            ->all();
+
+        return array_values(array_filter(
+            $this->siteHandles(),
+            fn (string $handle) => in_array($handle, $listed, true)
+        ));
+    }
+
+    /**
+     * The pivot rows of every scoped workflow in one list — a post governed by
+     * two workflows appears once per workflow, since its place in each is a
+     * different question. The row id is prefixed with the workflow so the two
+     * stay distinct keys; nothing links by it (the cells and the title use
+     * `url`/`urls`, built per workflow in entryRows()).
+     *
+     * Each row names the sites ITS workflow lists, so the table can tell "not
+     * this workflow's column" from "no version in this site" — both arrive as
+     * a missing / null cell otherwise.
+     *
+     * @param  array<int, string>  $workflows
+     * @return array<int, array<string, mixed>>
+     */
+    private function overviewRows(array $workflows): array
+    {
+        $all = app(DefinitionLoader::class)->all();
+        $links = app(SubjectLinks::class);
+
+        return collect($workflows)
+            ->flatMap(function (string $name) use ($all, $links) {
+                $tags = [
+                    'workflow' => $name,
+                    'workflow_label' => $links->workflowLabel($name),
+                    // The same dot the dashboard's other cards paint for it.
+                    'workflow_color' => PersonalWorkItems::workflowColor($name, app(DefinitionLoader::class)->raw($name), $all),
+                    'manager_url' => $links->managerUrl($name),
+                    'sites' => $this->listingSitesFor($name),
+                ];
+
+                return collect($this->rowsFor($name))
+                    ->map(fn (array $row) => array_merge($row, $tags, ['id' => "{$name}:{$row['id']}"]));
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Columns of the overview: the post, its workflow, one state column per
+     * overview site (built like a manager's pivot columns, see columns()), and
+     * the content date.
+     *
+     * @param  array<int, string>  $workflows
+     * @return array<int, array<string, mixed>>
+     */
+    private function overviewColumns(array $workflows): array
+    {
+        $columns = [
+            ['field' => 'title', 'label' => $this->t('subject'), 'type' => 'title', 'visible' => true, 'sortable' => true, 'required' => true],
+            ['field' => 'workflow_label', 'label' => $this->t('column_workflow'), 'type' => 'workflow', 'sortable' => true, 'visible' => true],
+        ];
+
+        foreach ($this->overviewSites($workflows) as $site) {
+            $columns[] = [
+                'field' => $site,
+                'label' => $this->siteName($site),
+                'type' => 'state',
+                'visible' => true,
+                'sortable' => false,
+                'code' => $this->siteCode($site),
+            ];
+        }
+
+        // Shown when any scoped workflow owns that clock — see columns() for why a
+        // localization manager keeps it hidden on its own.
+        $resolver = app(WorkflowResolver::class);
+
+        $columns[] = [
+            'field' => 'content_updated_at',
+            'label' => $this->t('column_content_updated_at'),
+            'type' => 'text',
+            'visible' => collect($workflows)->contains(
+                fn (string $name) => ! $resolver->isLocalizationWorkflow(app(DefinitionLoader::class)->raw($name))
+            ),
+            'sortable' => true,
+            'sort_field' => '_content_updated_at',
+        ];
+
+        return $columns;
+    }
+
+    /**
+     * Initial props for the dashboard's "all posts" widget — what workflow()
+     * hands a manager page for its listing, across every scoped workflow. Null
+     * when the scope holds no workflow; the widget then renders nothing.
+     *
+     * `creates` lists the workflows the current user may create a post in, each
+     * with the same create props a manager page gets (see createOptions()).
+     *
+     * @param  array<int, string>|null  $only  Workflow names to restrict to.
+     * @return array<string, mixed>|null
+     */
+    public function overviewProps(?array $only): ?array
+    {
+        $scope = $this->overviewWorkflows($only);
+
+        if ($scope === []) {
+            return null;
+        }
+
+        $loader = app(DefinitionLoader::class);
+        $links = app(SubjectLinks::class);
+
+        return [
+            'listingUrl' => cp_route('workflows.listing'),
+            'columns' => $this->overviewColumns($scope),
+            'filters' => $this->filters($this->overviewRows($scope), null, $scope),
+            'stateColors' => $loader->placeColors(),
+            'stateLabels' => $loader->placeLabels(),
+            'creates' => collect($scope)
+                ->map(function (string $name) use ($loader, $links) {
+                    $options = $this->createOptions($name, $loader->raw($name));
+
+                    return $options === null
+                        ? null
+                        : ['workflow' => $name, 'label' => $links->workflowLabel($name)] + $options;
+                })
+                ->filter()
+                ->values()
+                ->all(),
+        ];
     }
 
     private function siteName(string $handle): string
@@ -1099,21 +1274,40 @@ class WorkflowController extends CpController
     /**
      * The select options for each filter, derived from the available rows.
      *
+     * `$scope` is the cross-workflow listing of the dashboard widget (see
+     * overviewRows()): its states are the union of every scoped workflow's
+     * places, and it gets a workflow select of its own. Without it nothing here
+     * changes for the single-workflow listings.
+     *
+     * @param  array<int, string>|null  $scope
      * @return array<string, array<string, string>>
      */
-    private function filterOptions(array $rows, ?string $workflow = null): array
+    private function filterOptions(array $rows, ?string $workflow = null, ?array $scope = null): array
     {
         $rows = collect($rows);
+        $loader = app(DefinitionLoader::class);
 
         // For a known workflow the states come from its definition (authoritative —
         // includes places not yet present in any row); otherwise from the rows.
-        $stateOptions = $this->isKnownWorkflow($workflow)
-            ? collect(array_keys(app(DefinitionLoader::class)->raw($workflow)['places'] ?? []))
-                ->mapWithKeys(fn ($s) => [$s => $this->stateLabel($s)])->all()
-            : $rows->pluck('state')->filter()->unique()->sort()
-                ->mapWithKeys(fn ($v) => [$v => $this->stateLabel($v)])->all();
+        // A scope reads every one of its definitions the same way, in scope order,
+        // a place shared by two workflows offered once.
+        $stateOptions = match (true) {
+            $scope !== null => collect($scope)
+                ->flatMap(fn (string $name) => array_keys($loader->raw($name)['places'] ?? []))
+                ->unique()
+                ->mapWithKeys(fn ($s) => [$s => $this->stateLabel($s)])->all(),
+            $this->isKnownWorkflow($workflow) => collect(array_keys($loader->raw($workflow)['places'] ?? []))
+                ->mapWithKeys(fn ($s) => [$s => $this->stateLabel($s)])->all(),
+            default => $rows->pluck('state')->filter()->unique()->sort()
+                ->mapWithKeys(fn ($v) => [$v => $this->stateLabel($v)])->all(),
+        };
 
         return [
+            'workflow' => $scope === null
+                ? []
+                : collect($scope)
+                    ->mapWithKeys(fn (string $name) => [$name => app(SubjectLinks::class)->workflowLabel($name)])
+                    ->all(),
             'site' => $rows->pluck('site')->filter()->unique()->sort()
                 ->mapWithKeys(fn ($v) => [$v => $v])->all(),
             'state' => $stateOptions,
@@ -1136,11 +1330,24 @@ class WorkflowController extends CpController
      * Native CP filter definitions (site / state / assignee), scoped to the
      * options actually present in the given rows.
      *
+     * @param  array<int, string>|null  $scope  See filterOptions().
      * @return array<int, array<string, mixed>>
      */
-    private function filters(array $rows, ?string $workflow = null): array
+    private function filters(array $rows, ?string $workflow = null, ?array $scope = null): array
     {
-        $options = $this->filterOptions($rows, $workflow);
+        $options = $this->filterOptions($rows, $workflow, $scope);
+
+        // The cross-workflow pivot of the dashboard widget: the same pair as a
+        // manager's pivot, behind a select that narrows it to one workflow.
+        if ($scope !== null) {
+            return array_values(array_filter([
+                (new WorkflowNameFilter)->context(['options' => $options['workflow']])->toArray(),
+                (new StateFilter)->context(['options' => $options['state']])->toArray(),
+                $options['stale'] === []
+                    ? null
+                    : (new StaleFilter)->context(['options' => $options['stale']])->toArray(),
+            ]));
+        }
 
         // Pivot view: site becomes columns, so only the (any-site) state filter
         // remains — plus the out-of-date question, which is a property of the post
@@ -1915,19 +2122,14 @@ class WorkflowController extends CpController
 
     // ---- Inertia pages -----------------------------------------------------
 
+    /**
+     * The bare `/cp/workflows` page. The cross-workflow "all posts" table lives
+     * on the dashboard now (see overviewProps()), so this only forwards there —
+     * the route stays for bookmarks and for the links that still name it.
+     */
     public function queue()
     {
-        return Inertia::render('WorkflowsQueue', [
-            'currentUser' => $this->currentUserName(),
-            'workflow' => null,
-            'workflowName' => null,
-            'listingUrl' => cp_route('workflows.listing'),
-            'columns' => $this->columns(),
-            'myColumns' => $this->columns(null, true),
-            'filters' => $this->filters($this->rowsFor(null)),
-            'stateColors' => app(DefinitionLoader::class)->placeColors(),
-            'stateLabels' => app(DefinitionLoader::class)->placeLabels(),
-        ]);
+        return redirect(cp_route('dashboard'));
     }
 
     public function workflow(string $slug, DefinitionLoader $loader)
@@ -1940,23 +2142,7 @@ class WorkflowController extends CpController
 
         $raw = $loader->raw($name);
         $collections = $raw['collections'] ?? [];
-
-        // Creating entries belongs to the workflow that OWNS a collection (the
-        // first entry-backed workflow for it). A secondary workflow such as
-        // translation governs shared collections but must not create into them,
-        // so it gets no "new post" button.
-        $ownCollections = collect($collections)
-            ->filter(fn (string $handle) => $this->workflowForCollection($handle) === $name)
-            ->values();
-
-        // A localization workflow never creates: it only ever moves entries that
-        // already exist into further sites, and that runs through transfer(). Note
-        // this is NOT covered by the ownership check above — a translation workflow
-        // can legitimately be the only one governing a collection and would
-        // otherwise own it, and offer a create button.
-        $canCreate = $ownCollections->isNotEmpty()
-            && ! app(WorkflowResolver::class)->isLocalizationWorkflow($raw)
-            && $this->canCreatePost($raw);
+        $create = $this->createOptions($name, $raw);
 
         return Inertia::render('WorkflowsQueue', [
             'currentUser' => $this->currentUserName(),
@@ -1983,22 +2169,57 @@ class WorkflowController extends CpController
                 ->map(fn (string $handle) => ['handle' => $handle, 'title' => $this->collectionTitle($handle)])
                 ->values()
                 ->all(),
-            'createUrl' => $canCreate ? cp_route('workflows.api.posts') : null,
-            // What the modal's confirm button does besides creating: the coupled
-            // transition, with the people to pick from when its assignment is
-            // manual — see createCta() and storePost(). Null for a plain "create".
-            'createCta' => $canCreate && $ownCollections->isNotEmpty()
-                ? $this->createCta($raw, (string) $ownCollections->first())
-                : null,
-            'createCollections' => $canCreate
-                ? $ownCollections
-                    ->map(fn (string $handle) => ['value' => $handle, 'label' => $this->collectionTitle($handle)])
-                    ->values()
-                    ->all()
-                : [],
+            'createUrl' => $create['createUrl'] ?? null,
+            'createCta' => $create['createCta'] ?? null,
+            'createCollections' => $create['createCollections'] ?? [],
             'stateColors' => $loader->placeColors(),
             'stateLabels' => $loader->placeLabels(),
         ]);
+    }
+
+    /**
+     * The "New post" props of a workflow — `createUrl`, `createCta`,
+     * `createCollections` — or null when the current user may not create in it.
+     * Shared by the manager page and the dashboard's overview widget, so both
+     * offer creating under the same rules.
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array{createUrl: string, createCta: array<string, mixed>|null, createCollections: array<int, array{value: string, label: string}>}|null
+     */
+    private function createOptions(string $name, array $raw): ?array
+    {
+        // Creating entries belongs to the workflow that OWNS a collection (the
+        // first entry-backed workflow for it). A secondary workflow such as
+        // translation governs shared collections but must not create into them,
+        // so it gets no "new post" button.
+        $ownCollections = collect($raw['collections'] ?? [])
+            ->filter(fn (string $handle) => $this->workflowForCollection($handle) === $name)
+            ->values();
+
+        // A localization workflow never creates: it only ever moves entries that
+        // already exist into further sites, and that runs through transfer(). Note
+        // this is NOT covered by the ownership check above — a translation workflow
+        // can legitimately be the only one governing a collection and would
+        // otherwise own it, and offer a create button.
+        $canCreate = $ownCollections->isNotEmpty()
+            && ! app(WorkflowResolver::class)->isLocalizationWorkflow($raw)
+            && $this->canCreatePost($raw);
+
+        if (! $canCreate) {
+            return null;
+        }
+
+        return [
+            'createUrl' => cp_route('workflows.api.posts'),
+            // What the modal's confirm button does besides creating: the coupled
+            // transition, with the people to pick from when its assignment is
+            // manual — see createCta() and storePost(). Null for a plain "create".
+            'createCta' => $this->createCta($raw, (string) $ownCollections->first()),
+            'createCollections' => $ownCollections
+                ->map(fn (string $handle) => ['value' => $handle, 'label' => $this->collectionTitle($handle)])
+                ->values()
+                ->all(),
+        ];
     }
 
     /**
@@ -2273,9 +2494,9 @@ class WorkflowController extends CpController
             // Layout AND position of that bar, from `metadata.progress_orientation`
             // — one value decides both, see ProgressSteps::ORIENTATION.
             'progressOrientation' => ProgressSteps::orientation($raw),
-            'queueUrl' => ($slug = $raw['metadata']['nav']['slug'] ?? null)
-                ? cp_route('workflows.workflow', ['slug' => $slug])
-                : cp_route('workflows.queue'),
+            // Back to the dashboard, whose overview widget lists the posts of
+            // every workflow — the old `/cp/workflows` page only forwards there.
+            'queueUrl' => cp_route('dashboard'),
             'stateColors' => app(DefinitionLoader::class)->placeColors(),
             'stateLabels' => app(DefinitionLoader::class)->placeLabels(),
             // General-purpose reminder, not tied to the plain-language service —
@@ -5187,7 +5408,13 @@ class WorkflowController extends CpController
      */
     public function listing(Request $request)
     {
-        $workflow = $request->query('workflow');
+        // The dashboard widget's cross-workflow table: the pivot rows of every
+        // scoped workflow at once (see overviewRows()). Null on every other listing.
+        $scope = $request->boolean('all_workflows')
+            ? $this->overviewWorkflows($request->query('workflows'))
+            : null;
+
+        $workflow = $scope === null ? $request->query('workflow') : null;
         $isEntry = $this->isEntryWorkflow($workflow);
         $mine = $request->boolean('mine');
         $createdByMe = $request->boolean('created_by_me');
@@ -5195,20 +5422,32 @@ class WorkflowController extends CpController
         // "My Queue" and "Created by me" are both flat per-localization lists,
         // not the site-pivot.
         $flat = $isEntry && ($mine || $createdByMe);
+        $pivot = $scope !== null || ($isEntry && ! $flat);
 
         // Per-collection tabs on the manager page scope the pivot to one
         // collection. The flat personal lists ignore it and stay merged.
         $collection = $flat ? null : $request->query('collection');
 
-        $rows = collect($flat ? $this->entryRowsFlat($workflow) : $this->rowsFor($workflow, $collection));
+        $rows = collect(match (true) {
+            $scope !== null => $this->overviewRows($scope),
+            $flat => $this->entryRowsFlat($workflow),
+            default => $this->rowsFor($workflow, $collection),
+        });
 
-        // Search across the available text fields (pivot rows only carry a title).
+        // The overview's badges are read off these same rows below; building the
+        // row set of every workflow a second time would double the request.
+        $unfiltered = $rows->all();
+
+        $columns = $scope !== null ? $this->overviewColumns($scope) : $this->columns($workflow, $flat);
+
+        // Search across the available text fields (pivot rows only carry a title,
+        // plus the workflow's name in the overview).
         if ($search = trim((string) $request->query('search'))) {
             $needle = mb_strtolower($search);
             $rows = $rows->filter(function (array $row) use ($needle) {
                 $haystack = mb_strtolower(trim(implode(' ', array_filter([
                     $row['title'] ?? '', $row['site'] ?? '', $row['state_label'] ?? '',
-                    $row['assignees'] ?? '', $row['collection'] ?? '',
+                    $row['assignees'] ?? '', $row['collection'] ?? '', $row['workflow_label'] ?? '',
                 ]))));
 
                 return str_contains($haystack, $needle);
@@ -5218,7 +5457,10 @@ class WorkflowController extends CpController
         // Filters.
         $active = $this->decodeFilters($request->query('filters'));
 
-        if ($isEntry && ! $flat) {
+        if ($pivot) {
+            if ($scope !== null && ($name = $active['workflow']['workflow'] ?? null)) {
+                $rows = $rows->where('workflow', $name);
+            }
             // Pivot: keep posts that have the state in any site.
             if ($state = $active['state']['state'] ?? null) {
                 $rows = $rows->filter(fn (array $row) => in_array($state, $row['_states'] ?? [], true));
@@ -5258,7 +5500,7 @@ class WorkflowController extends CpController
             // A column may name a private key to sort on instead of its own value.
             // The date column needs it: its cell holds a localized date, and sorting
             // that string would order by whatever character the locale puts first.
-            $numeric = collect($this->columns($workflow, $flat))
+            $numeric = collect($columns)
                 ->firstWhere('field', $sort)['sort_field'] ?? null;
 
             $rows = $numeric !== null
@@ -5285,8 +5527,10 @@ class WorkflowController extends CpController
         return response()->json([
             'data' => $items,
             'meta' => [
-                'columns' => $this->applyColumnVisibility($this->columns($workflow, $flat), $request->query('columns')),
-                'activeFilterBadges' => $this->filterBadges($active, $this->rowsFor($workflow, $collection), $workflow) ?: (object) [],
+                'columns' => $this->applyColumnVisibility($columns, $request->query('columns')),
+                'activeFilterBadges' => ($scope !== null
+                    ? $this->filterBadges($active, $unfiltered, null, $scope)
+                    : $this->filterBadges($active, $this->rowsFor($workflow, $collection), $workflow)) ?: (object) [],
                 'sortColumn' => $sort,
                 'sortDirection' => $order,
                 'current_page' => $page,
@@ -5302,12 +5546,14 @@ class WorkflowController extends CpController
     /**
      * Build the active-filter badge strings keyed by filter handle.
      *
+     * @param  array<int, string>|null  $scope  See filterOptions().
      * @return array<string, string>
      */
-    private function filterBadges(array $active, array $rows, ?string $workflow = null): array
+    private function filterBadges(array $active, array $rows, ?string $workflow = null, ?array $scope = null): array
     {
-        $options = $this->filterOptions($rows, $workflow);
+        $options = $this->filterOptions($rows, $workflow, $scope);
         $filters = [
+            'workflow' => (new WorkflowNameFilter)->context(['options' => $options['workflow']]),
             'site' => (new SiteFilter)->context(['options' => $options['site']]),
             'state' => (new StateFilter)->context(['options' => $options['state']]),
             'assignee' => (new AssigneeFilter)->context(['options' => $options['assignee']]),

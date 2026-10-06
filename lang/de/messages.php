@@ -318,6 +318,8 @@ return [
 
     // Creating a post
     'new_post' => 'Neuer Beitrag',
+    // Eintrag im „Neuer Beitrag"-Menü des Dashboard-Widgets, eine Zeile pro Workflow.
+    'new_post_in' => ':label: neuer Beitrag',
     'assign_to' => 'Zuweisen',
     'select_site' => 'Sites wählen',
     // Label der Collection-Auswahl im „Neuer Beitrag"-Modal bei mehreren eigenen Collections.
@@ -341,6 +343,7 @@ return [
     'create_transition_skipped' => 'Beitrag angelegt, aber „:label" wurde nicht ausgeführt: :reason',
     'all_sites' => 'Alle Websites',
     'all_states' => 'Alle Status',
+    'all_workflows' => 'Alle Workflows',
     'all_assignees' => 'Alle Zugewiesenen',
     'embedded_podcast' => 'Eingebetteter Podcast',
 
@@ -405,6 +408,8 @@ return [
     'source_changed_hint' => 'Die Quelle ist vom :source_at, diese Fassung vom :version_at. Der Inhalt hier ist damit nicht mehr der aktuelle Stand.',
     'source_changed_hint_never' => 'Die Quelle ist vom :source_at. Diese Fassung wurde noch nie freigegeben, ihr Inhalt ist damit nicht der aktuelle Stand.',
     'column_content_updated_at' => 'Inhaltlich aktualisiert',
+    // Spalte und Filter der workflowübergreifenden Liste im Dashboard-Widget.
+    'column_workflow' => 'Workflow',
     'content_updated_at_instructions' => 'Ab hier zählt die Frist der Alterung. Wird automatisch gesetzt, sobald der Beitrag freigegeben wird — von Hand änderbar nur für Super-Admins.',
     'stale_marker' => 'veraltet',
     'stale_marker_hint' => 'Der Beitrag wurde seit dieser Fassung überarbeitet.',

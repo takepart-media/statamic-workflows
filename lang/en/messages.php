@@ -313,6 +313,8 @@ return [
 
     // Creating a post
     'new_post' => 'New post',
+    // Entry in the dashboard widget's "New post" menu, one line per workflow.
+    'new_post_in' => ':label: new post',
     'assign_to' => 'Assign to',
     'select_site' => 'Choose sites',
     // Label of the collection select in the "New post" modal when the workflow owns several collections.
@@ -336,6 +338,7 @@ return [
     'create_transition_skipped' => 'Post created, but ":label" did not run: :reason',
     'all_sites' => 'All sites',
     'all_states' => 'All states',
+    'all_workflows' => 'All workflows',
     'all_assignees' => 'All assignees',
     'embedded_podcast' => 'Embedded podcast',
 
@@ -400,6 +403,8 @@ return [
     'source_changed_hint' => 'The source is from :source_at, this version from :version_at. The content here is no longer the current state.',
     'source_changed_hint_never' => 'The source is from :source_at. This version has never been approved, so its content is not the current state.',
     'column_content_updated_at' => 'Content updated',
+    // Column and filter of the cross-workflow listing in the dashboard widget.
+    'column_workflow' => 'Workflow',
     'content_updated_at_instructions' => 'The ageing deadline counts from here. Set automatically whenever the entry is approved — editable by hand for super admins only.',
     'stale_marker' => 'out of date',
     'stale_marker_hint' => 'The entry has been revised since this version.',
