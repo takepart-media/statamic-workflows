@@ -1450,14 +1450,29 @@ import { Head } from '@statamic/cms/inertia';
 import { humanize, stateColor } from '../support/states.js';
 import EnvStatusLine from '../components/EnvStatusLine.vue';
 import MailerStatusLine from '../components/MailerStatusLine.vue';
+import {
+    ACTION_TYPES,
+    ASSIGNMENT_MATCHES,
+    ASSIGNMENT_MODES,
+    PLACE_ACTION_TYPES,
+    SHARED_ACTION_TYPES,
+} from '../editor/model/constants.js';
+import { emptyLabels, normalize } from '../editor/model/normalize.js';
+import {
+    commitPlaceHandle as commitPlaceHandleIn,
+    commitTransitionHandle as commitTransitionHandleIn,
+    customActionFor as customActionForIn,
+    danglingHandles,
+    finalizeNewHandles,
+    isCriteriaGroup,
+    serialize,
+} from '../editor/model/serialize.js';
+import * as rules from '../editor/model/actionRules.js';
+import * as labels from '../editor/model/labels.js';
+import { clearTransitionRefs, replaceReferences } from '../editor/model/refs.js';
 
-// Up here, away from the rest of the assignment code below, because normalize()
-// runs while `form` is being created — before any `const` further down has left
-// its temporal dead zone. Reading them from toAction() down there throws
-// "Cannot access before initialization" on every page load.
-// Mirrors Workflow\TransitionActions::MODES / MATCHES.
-const ASSIGNMENT_MODES = ['manual', 'automatic'];
-const ASSIGNMENT_MATCHES = ['all', 'any'];
+// Used by the template as is.
+const { defaultVariant } = labels;
 
 // Statamic CP exposes axios via Vue's global properties, not as a bare import.
 // Same pattern used in every other addon component (WorkflowQueue, etc).
@@ -1539,7 +1554,21 @@ const props = defineProps({
     mailTypes: { type: Array, default: () => [] },
 });
 
-const form = reactive(normalize(props.definition));
+// What the model modules (resources/js/editor/model) need from the page. Getters,
+// so a computed that reads through them still tracks the props.
+const modelCtx = {
+    get labelLocales() { return props.labelLocales; },
+    get labelLocale() { return props.labelLocale; },
+    get shippedPlaceLabels() { return props.shippedPlaceLabels; },
+    get customActions() { return props.customActions; },
+    get reservedPlaces() { return props.reservedPlaces; },
+    get reservedTransitions() { return props.reservedTransitions; },
+    get actionTypeOptions() { return actionTypeOptions.value; },
+    get placeActionTypeOptions() { return placeActionTypeOptions.value; },
+    humanize,
+};
+
+const form = reactive(normalize(props.definition, modelCtx));
 const saving = ref(false);
 
 // Track auto-generated handles for freshly-added, not-yet-persisted rows. Any
@@ -1547,6 +1576,7 @@ const saving = ref(false);
 // show cancel". Persisted rows never appear here.
 const newPlaceHandles = reactive({});
 const newTransitionHandles = reactive({});
+const pendingHandles = { places: newPlaceHandles, transitions: newTransitionHandles };
 
 const migrationModal = reactive({
     open: false,
@@ -1624,18 +1654,14 @@ const transitionOptions = computed(() =>
 // auto-detected as the "finished" target during backfill, so surfacing the
 // `seed_published_place` override is only useful when this returns false — a
 // workflow like `translation` that ends in a non-publish place.
-const hasPublishPlace = computed(() =>
-    Object.values(form.places).some((place) => !!place?.metadata?.allow_publish),
-);
+const hasPublishPlace = computed(() => rules.hasPublishPlace(form));
 
 // Localization workflows (metadata.detail === 'translation') distribute existing
 // entries to more sites instead of creating new ones, so the "who may create
 // posts" list is meaningless for them and gets hidden. `assign_creator` is NOT
 // hidden: transferring an entry into a site is how a subject enters such a
 // workflow, and the person who did it is its creator.
-const isLocalizationWorkflow = computed(
-    () => form.metadata.detail === 'translation',
-);
+const isLocalizationWorkflow = computed(() => rules.isLocalizationWorkflow(form));
 
 // Which KIND of localization manager this is. Mirrors
 // WorkflowResolver::isPlainLanguageWorkflow(): claiming a target site via
@@ -1643,39 +1669,12 @@ const isLocalizationWorkflow = computed(
 // separate mode flag that could disagree with it. Drives which settings this
 // editor offers, which service status it reads out, and whether a transition may
 // carry the "rewrite again" flag.
-const isPlainLanguageWorkflow = computed(
-    () => isLocalizationWorkflow.value && !!form.metadata.plain_language_site,
-);
+const isPlainLanguageWorkflow = computed(() => rules.isPlainLanguageWorkflow(form));
 
 // --- transition actions ---
-// Steps (dialogs) or preconditions (gates/markers) that run between the click
-// and the transition. Keep in step with Workflow\TransitionActions::TYPES — the
-// site dialog is deliberately absent: it is derived from `start_localization` (or
-// position, see startingTransition() below) plus plain_language_site, never one
-// of the types an editor can pick here.
-// `user_assignment` is the only type that CAN open a dialog, and only in its
-// manual mode — opensDialog() below is what the one-dialog rule actually asks,
-// mirroring TransitionActions::opensDialog() on the server.
-const DIALOG_ACTION_TYPES = ['user_assignment'];
-const GATE_ACTION_TYPES = ['target_missing', 'start_localization', 'plain_language_resubmit'];
-// Ein dritter Eimer, weil `mail` weder das eine noch das andere ist: kein Dialog
-// vor der Transition und keine Sperre, sondern eine WIRKUNG danach. In einen der
-// beiden Namen mit hineingeschrieben wäre es an der einen Stelle falsch, an der
-// die Aufteilung überhaupt etwas entscheidet — dem Dialog-Limit in
-// actionTypeOptionsFor().
-const EFFECT_ACTION_TYPES = ['mail'];
-const ACTION_TYPES = [...DIALOG_ACTION_TYPES, ...GATE_ACTION_TYPES, ...EFFECT_ACTION_TYPES];
-
-// Typen, die BEIDE Scopes tragen — Spiegel von Workflow\MailAction::TYPE, das in
-// TransitionActions::TYPES und PlaceActions::TYPES steht.
-//
-// Sie sind der Grund für builtInActionLabel(): ein Handle, das beide Karten
-// anbieten, ist EINE Action und muss deshalb in beiden gleich heißen. Ohne diese
-// Ausnahme läse die Place-Karte `place_action_type_mail`, die Transition-Karte
-// `action_type_mail` — zwei Keys, zwei Texte, und im Dropdown sähe es aus wie
-// zwei verschiedene Aktionen.
-const SHARED_ACTION_TYPES = ['mail'];
-
+// The type lists (dialog / gate / effect buckets, the scope-shared `mail`) live in
+// editor/model/constants.js. builtInActionLabel(): a handle both cards offer
+// (SHARED_ACTION_TYPES) is ONE action and must read the same in both.
 const builtInActionLabel = (scope, value) => __(`workflows::messages.${
     scope === 'place' && ! SHARED_ACTION_TYPES.includes(value) ? 'place_action_type' : 'action_type'
 }_${value}`);
@@ -1695,9 +1694,7 @@ const actionTypeOptions = computed(() => [
 // nach `value` ist das, was den generischen Renderer und die Speicher-Whitelist
 // trägt.
 function customActionFor(scope, type) {
-    const list = scope === 'place' ? customPlaceActions.value : customTransitionActions.value;
-
-    return list.find((a) => a.value === type) ?? null;
+    return customActionForIn(props.customActions, scope, type);
 }
 
 // Vier Feldtypen, drei Komponenten — `select` und `multiselect` sind dieselbe
@@ -1734,30 +1731,6 @@ function customFieldProps(field) {
 // kann; alles andere ist null, damit der Platzhalter sichtbar bleibt.
 function customFieldEmpty(field) {
     return field.type === 'multiselect' ? [] : null;
-}
-
-// Was von einer Action auf die Platte geht. Für einen eingebauten Typ ohne
-// Konfiguration bleibt es beim nackten `type` wie bisher; ein projekteigener
-// nimmt die Werte mit, aber nur die DEKLARIERTEN — ein Schlüssel, den die Config
-// nicht mehr nennt (umbenannt, entfernt), verschwindet beim nächsten Speichern
-// statt den Writer zu einer Ablehnung zu zwingen, die der Admin im Editor nicht
-// auflösen könnte: das Feld wird ihm ja gar nicht mehr angezeigt.
-function customActionEntry(scope, a) {
-    const declared = customActionFor(scope, a.type);
-
-    if (!declared) return { type: a.type };
-
-    const values = {};
-
-    for (const field of declared.fields) {
-        const value = a.values?.[field.handle];
-        const empty = value === null || value === undefined || value === ''
-            || (Array.isArray(value) && value.length === 0);
-
-        if (!empty) values[field.handle] = value;
-    }
-
-    return Object.keys(values).length ? { type: a.type, values } : { type: a.type };
 }
 
 // Leere Werte werden gelöscht statt als null gespeichert — dieselbe Regel wie
@@ -1857,48 +1830,12 @@ function addCriteriaGroup(action) {
     action.criteria.push({ match: 'any', criteria: [newCriterion()] });
 }
 
-function isCriteriaGroup(node) {
-    return !!node && Array.isArray(node.criteria);
-}
-
-// Spiegelt TransitionActions::criteriaList(): ein Kriterium ohne Wert geht nur
-// als `matches_entry` durch, eine leer geräumte Gruppe fällt ganz weg — sie
-// träfe auf niemanden zu, und der Writer lehnt sie ohnehin ab.
-function cleanCriteria(list, nested = false) {
-    return (list ?? [])
-        .map((node) => {
-            // `nested` spiegelt die Ebenen-Grenze des Servers: innerhalb einer
-            // Gruppe ist eine weitere Gruppe kein gültiger Eintrag, und sie hier
-            // wegzulassen ist besser, als sie zu schicken und den Writer ablehnen
-            // zu lassen.
-            if (! nested && isCriteriaGroup(node)) {
-                const inner = cleanCriteria(node.criteria, true);
-
-                return inner.length ? { match: node.match ?? 'any', criteria: inner } : null;
-            }
-
-            if (!node?.field) return null;
-            if (node.operator === 'matches_entry') return { field: node.field, operator: node.operator };
-            if ((node.value ?? '') === '') return null;
-
-            return { field: node.field, operator: node.operator ?? 'is', value: node.value };
-        })
-        .filter(Boolean);
-}
-
 // --- place actions ---
-// Behaviours that apply while a subject sits in a place, not between a click
-// and a transition — so a distinct, smaller type set (no dialogs, no
-// per-workflow count cap like start_localization). Keep in step with
-// Workflow\PlaceActions::TYPES.
-const PLACE_ACTION_TYPES = ['pending_rewrite_spinner', 'refresh_interval', 'mail', 'reminder', 'auto_transition'];
-
-// The steps an `auto_transition` on this place may take: non-system
-// transitions whose `from` includes it — the same rule the writer enforces.
+// Behaviours that apply while a subject sits in a place (PLACE_ACTION_TYPES in
+// editor/model/constants.js). The steps an `auto_transition` may take: see
+// actionRules.autoTransitionOptions().
 function autoTransitionOptions(placeHandle) {
-    return Object.entries(form.transitions)
-        .filter(([, t]) => !t?.metadata?.system && [].concat(t?.from ?? []).includes(placeHandle))
-        .map(([value, t]) => ({ value, label: `${t?.metadata?.label || value} (${value})` }));
+    return rules.autoTransitionOptions(form, placeHandle);
 }
 
 const placeActionTypeOptions = computed(() => [
@@ -1906,32 +1843,12 @@ const placeActionTypeOptions = computed(() => [
     ...customPlaceActions.value.map(({ value, label }) => ({ value, label })),
 ]);
 
-// The DEFAULT start of the flow: the first card. Mirrors
-// TransitionActions::startingTransition() — the editor only displays what the
-// server derives, it does not decide it. Overridden by explicitStartTransition()
-// below when a `start_localization` action exists — see startsLocalization().
-const startingTransition = computed(() => Object.keys(form.transitions)[0] ?? null);
-
-// The transition an explicit `start_localization` action pins as the one that
-// creates the target version, or null when none does (the common case — most
-// workflows still rely on position). Mirrors
-// TransitionActions::explicitStartTransition().
-const explicitStartTransition = computed(() => {
-    for (const [handle, transition] of Object.entries(form.transitions)) {
-        if ((transition.metadata.actions ?? []).some((a) => a.type === 'start_localization')) {
-            return handle;
-        }
-    }
-
-    return null;
-});
-
-// What TransitionActions::startsLocalization() resolves to: the marked
-// transition, and nothing else. No positional fallback any more — a workflow
-// being edited may briefly have no marker at all, and claiming the first card is
-// the creating step would put the language dialog somewhere nobody chose. The
-// writer refuses to save a localization workflow in that state.
-const effectiveStartTransition = computed(() => explicitStartTransition.value);
+// The DEFAULT start of the flow: the first card, and the transition an explicit
+// `start_localization` action pins instead. Mirrors TransitionActions on the
+// server — the editor only displays what the server derives. See
+// editor/model/actionRules.js.
+const startingTransition = computed(() => rules.startingTransition(form));
+const explicitStartTransition = computed(() => rules.explicitStartTransition(form));
 
 // `initial_place` is where the workflow begins, and the source version of a
 // localization workflow sits there for as long as it IS the source (see
@@ -1964,54 +1881,10 @@ watch(
     { immediate: true },
 );
 
-// "Rewrite again" is only meaningful in the plain-language manager, and not on the
-// transition that creates the version in the first place — wherever that is.
-function canResubmitPlainLanguage(handle) {
-    return isPlainLanguageWorkflow.value && effectiveStartTransition.value !== handle;
-}
-
-// Whether some OTHER transition already carries `start_localization` — there is
-// exactly one place in the diagram that can mean, so once it is used once, no
-// other row may offer it (WorkflowDefinitionWriter enforces the same cap on
-// save; this just keeps the UI from ever reaching that error).
-function startLocalizationUsedElsewhere(current) {
-    return Object.values(form.transitions).some((t) =>
-        (t.metadata.actions ?? []).some((a) => a !== current && a.type === 'start_localization'),
-    );
-}
-
-// The type Select's options for one row: every type, minus whatever is already
-// unavailable — `user_assignment` when some OTHER row on the SAME transition
-// already carries one (a second would be silently ignored, since the server
-// reads the first; the writer rejects it too), `start_localization` when it
-// can't be used here at all (outside a localization workflow) or ANY OTHER
-// transition in the whole workflow already has one, `plain_language_resubmit`
-// when this transition already carries one or can't use it at all (see
-// canResubmitPlainLanguage). Excluding rather than disabling the option — a
-// stray disabled entry sitting in a dropdown reads as a bug, not a rule.
+// The gating rules for which action types a row may offer live in
+// editor/model/actionRules.js; these wrappers bind them to this page's form.
 function actionTypeOptionsFor(handle, transition, current) {
-    const dialogTaken = (transition.metadata.actions ?? []).some(
-        (a) => a !== current && DIALOG_ACTION_TYPES.includes(a.type),
-    );
-    const startTaken = startLocalizationUsedElsewhere(current);
-    const resubmitTaken = (transition.metadata.actions ?? []).some(
-        (a) => a !== current && a.type === 'plain_language_resubmit',
-    );
-    // Wie `resubmitTaken`, nur ohne Workflow-Bedingung: mailen lässt sich in jedem
-    // Workflow, aber je Transition nur einmal — zwei wären dieselbe Mail zweimal,
-    // und der Writer lehnt sie ohnehin ab.
-    const mailTaken = (transition.metadata.actions ?? []).some(
-        (a) => a !== current && a.type === 'mail',
-    );
-
-    return actionTypeOptions.value.filter((o) => {
-        if (dialogTaken && DIALOG_ACTION_TYPES.includes(o.value)) return false;
-        if (o.value === 'start_localization' && (startTaken || !isLocalizationWorkflow.value)) return false;
-        if (o.value === 'plain_language_resubmit' && (resubmitTaken || !canResubmitPlainLanguage(handle))) return false;
-        if (o.value === 'mail' && mailTaken) return false;
-
-        return true;
-    });
+    return rules.actionTypeOptionsFor(form, handle, current, modelCtx);
 }
 
 // Picks the first still-available type rather than hard-coding one, so a type
@@ -2042,21 +1915,8 @@ function removeAction(transition, index) {
     transition.metadata.actions.splice(index, 1);
 }
 
-// Same shape as actionTypeOptionsFor(), for the smaller place type set: exclude
-// a type already used by another action on the SAME place (no reason for two
-// spinners or two timers), and hide `pending_rewrite_spinner` outside the
-// plain-language manager — the writer rejects it there.
 function placeActionTypeOptionsFor(place, current) {
-    const taken = new Set(
-        (place.metadata.actions ?? []).filter((a) => a !== current).map((a) => a.type),
-    );
-
-    return placeActionTypeOptions.value.filter((o) => {
-        if (taken.has(o.value)) return false;
-        if (o.value === 'pending_rewrite_spinner' && !isPlainLanguageWorkflow.value) return false;
-
-        return true;
-    });
+    return rules.placeActionTypeOptionsFor(form, place, current, modelCtx);
 }
 
 function addPlaceAction(place, wanted = null) {
@@ -2204,447 +2064,14 @@ const migrationTargetOptions = computed(() =>
         .map((h) => ({ value: h, label: h })),
 );
 
-function normalize(def) {
-    const copy = JSON.parse(JSON.stringify(def || {}));
-    copy.metadata ??= {};
-    copy.metadata.nav ??= {};
-    // Bind the checkbox to a real boolean — an absent YAML key would leave the
-    // Checkbox in an undefined (indeterminate) state.
-    copy.metadata.assign_creator ??= false;
-    // SLA block always present in the form; save() drops it before sending
-    // when both fields are empty so the YAML stays clean.
-    copy.metadata.sla ??= {};
-    copy.metadata.sla.needs_update_days = numOrNull(copy.metadata.sla.needs_update_days);
-    copy.metadata.sla.outdated_days = numOrNull(copy.metadata.sla.outdated_days);
-    // Bind the Selects to null rather than undefined, so clearing one is a real
-    // value the save whitelist can see instead of a missing key.
-    copy.metadata.sla.needs_update_place = copy.metadata.sla.needs_update_place || null;
-    copy.metadata.sla.outdated_place = copy.metadata.sla.outdated_place || null;
-    // Who takes over per stage: always an object, so the two pickers have a model.
-    for (const stage of ['needs_update', 'outdated']) {
-        const assign = copy.metadata.sla[`${stage}_assign`];
-        copy.metadata.sla[`${stage}_assign`] = {
-            by: assign?.by ?? null,
-            handles: [...(assign?.handles ?? [])],
-        };
-    }
-    copy.metadata.source_draft_place = copy.metadata.source_draft_place || null;
-    // Bind the Select to null rather than undefined, so clearing it is a real
-    // value the save step can recognise and drop. Same reason for the
-    // plain-language site.
-    copy.metadata.seed_published_place ??= null;
-    copy.metadata.create_transition ??= null;
-    copy.metadata.plain_language_site ??= null;
-    copy.metadata.plain_language_completed_place ??= null;
-    copy.metadata.plain_language_failed_place ??= null;
-    copy.metadata.translation_source_site ??= null;
-    // Real boolean for the Checkbox — an absent YAML key would leave it
-    // indeterminate.
-    copy.metadata.translation_source_pick ??= false;
-    // The rule list needs a real array to push into; each rule's handles too.
-    copy.metadata.translation_source_view = Array.isArray(copy.metadata.translation_source_view)
-        ? copy.metadata.translation_source_view.map((rule) => ({ ...rule, handles: [...(rule?.handles ?? [])] }))
-        : [];
-    // Der Select hat keinen leeren Zustand — ein fehlender Schlüssel bedeutet
-    // „waagerecht", also wird das hier auch hingeschrieben. save() nimmt es beim
-    // Standard wieder heraus, damit die YAML nicht mit dem Offensichtlichen
-    // volläuft.
-    copy.metadata.progress_orientation ??= 'horizontal';
-    // Multiselect needs a real array to push into.
-    copy.metadata.post_creator_groups ??= [];
-    // Bind the Select to null rather than an empty string or undefined; save()
-    // drops the key when cleared.
-    copy.metadata.default_assignee_group ||= null;
-    copy.metadata.assigner_groups ??= [];
-    // Bind the multiselect to a real array — an absent YAML key would leave the
-    // Select without a model to push into.
-    copy.collections ??= [];
-    copy.places ??= {};
-    copy.transitions ??= {};
-    for (const key of Object.keys(copy.places)) {
-        copy.places[key].metadata ??= {};
-        // Retired — see the place card. Dropped on load so nothing binds to it and
-        // save() cannot write it back.
-        delete copy.places[key].metadata.required_group;
-        // Echtes Boolean für die Checkbox — ein fehlender YAML-Schlüssel ließe sie
-        // im unbestimmten Zustand stehen. Dieselbe Behandlung wie die
-        // Workflow-Booleans oben.
-        copy.places[key].metadata.branch ??= false;
-        copy.places[key].metadata.actions = toPlaceActionArray(copy.places[key].metadata);
-        // `label` is a per-language map (what this editor writes) or a legacy
-        // string. The form edits the map; the legacy string rides along untouched
-        // and is only replaced once the author names the place — see
-        // serializePlaceLabels().
-        const label = copy.places[key].label;
-        copy.places[key].labels = emptyLabels();
-        if (label && typeof label === 'object') {
-            for (const locale of props.labelLocales) {
-                copy.places[key].labels[locale] = typeof label[locale] === 'string' ? label[locale] : '';
-            }
-        }
-        copy.places[key].legacyLabel = typeof label === 'string' ? label : '';
-        delete copy.places[key].label;
-    }
-    for (const key of Object.keys(copy.transitions)) {
-        copy.transitions[key].metadata ??= {};
-        // Die zwei gespeicherten Gate-Schlüssel in das eine Formular-Paar falten.
-        // Rolle gewinnt, wenn beide dastehen: das kann nur eine handgeschriebene
-        // YAML sein, und dort ist die Rolle die speziellere Aussage. Beim
-        // Speichern bleibt dann nur noch sie übrig — siehe save().
-        const rollen = toGroupArray(copy.transitions[key].metadata.required_role);
-        const gruppen = toGroupArray(copy.transitions[key].metadata.required_group);
-        copy.transitions[key].metadata.required_by = rollen.length ? 'role' : (gruppen.length ? 'group' : 'none');
-        copy.transitions[key].metadata.required_handles = rollen.length ? rollen : gruppen;
-        copy.transitions[key].metadata.actions = toActionArray(copy.transitions[key].metadata);
-    }
-    return copy;
-}
-
-// The editor always works on a list, whichever spelling the YAML uses. Two older
-// ones still turn up: `type: user_modal` with a `groups` list, and — older still
-// — the ad-hoc key `assign_from_group`. Reading them here (and dropping them in
-// save()) is what migrates a definition the first time somebody saves it.
-// Mirrors Workflow\TransitionActions on the server; the two have to agree on what
-// a definition means.
-//
-// The legacy `needs_site_pick` is deliberately NOT read into an action. The
-// language dialog follows whichever transition creates the target version
-// (`start_localization`, else the first in the list) and the writer rejects a
-// stored `site_modal` outright — turning the old flag into one would have made
-// those definitions unsaveable. save() still deletes the key.
-function toActionArray(metadata) {
-    let actions;
-
-    if (Array.isArray(metadata.actions)) {
-        actions = metadata.actions
-            .filter((a) => a && typeof a === 'object')
-            .map((a) => toAction(a));
-    } else {
-        actions = [];
-        if (metadata.assign_from_group) {
-            actions.push(toAction({ type: 'user_modal', groups: metadata.assign_from_group }));
-        }
-    }
-
-    // The solo boolean this used to be, still honoured until the next save
-    // rewrites it as a proper action — same tolerance TransitionActions
-    // documents for `assign_from_group` above.
-    if (metadata.plain_language_resubmit && ! actions.some((a) => a.type === 'plain_language_resubmit')) {
-        actions.push(toAction({ type: 'plain_language_resubmit' }));
-    }
-
-    return actions;
-}
-
-// Der gespeicherte Mail-Typ, beide Schlüssel tolerierend — Zwilling von
-// MailAction::storedType(). Der Standard steht hier und nicht erst beim Speichern,
-// damit das Auswahlfeld nie leer dasteht.
-function storedMailType(a) {
-    for (const key of ['mail_type', 'mail']) {
-        if (typeof a[key] === 'string' && a[key] !== '') return a[key];
-    }
-
-    return 'assigned';
-}
-
-// One stored action in the shape the form binds to. A `user_modal` becomes a
-// manual assignment whose criteria are its groups — one `group is <handle>`
-// each, joined by `any`, which is exactly what "the union of the members of
-// these groups" meant. Mirrors TransitionActions::normalise().
-function toAction(a) {
-    const raw = a.type ?? 'user_assignment';
-    // Zwei Alt-Schreibweisen, je eine Zeile: `user_modal` wird eine manuelle
-    // Zuweisung (unten), `notify_assignees` wird `mail`. Spiegelt
-    // MailAction::handle() auf dem Server.
-    const type = raw === 'user_modal' ? 'user_assignment' : (raw === 'notify_assignees' ? 'mail' : raw);
-
-    const action = {
-        type,
-        site: typeof a.site === 'string' && a.site !== '' ? a.site : null,
-        // Der ältere Schlüssel hieß `mail`. Fehlen beide, ist es eine Mail-Action
-        // von vor dem Auswahlfeld — und die meinte die Zuweisungs-Mail. Spiegelt
-        // MailAction::storedType() und MailTypes::FALLBACK auf dem Server.
-        mail_type: storedMailType(a),
-        mode: null,
-        match: null,
-        criteria: [],
-        // Der Beutel für projekteigene Typen — spiegelt
-        // TransitionActions::normalise() auf dem Server. Roh übernommen; welche
-        // Schlüssel bleiben, entscheidet beim Speichern die Deklaration.
-        values: a.values && typeof a.values === 'object' ? { ...a.values } : {},
-    };
-
-    if (type !== 'user_assignment') return action;
-
-    if (a.type === 'user_modal') {
-        return {
-            ...action,
-            mode: 'manual',
-            match: 'any',
-            criteria: toGroupArray(a.groups ?? a.group).map((value) => ({
-                field: 'group',
-                operator: 'is',
-                value,
-            })),
-        };
-    }
-
-    return {
-        ...action,
-        mode: ASSIGNMENT_MODES.includes(a.mode) ? a.mode : 'manual',
-        match: ASSIGNMENT_MATCHES.includes(a.match) ? a.match : 'all',
-        criteria: toCriteria(a.criteria),
-    };
-}
-
-// Der Ladepfad für die Kriterien-Liste, Gegenstück zu cleanCriteria() beim
-// Speichern und zu TransitionActions::criteriaList() auf dem Server.
-//
-// Die Gruppen-Zeile ist der Grund, warum das eine eigene Funktion ist: sie trägt
-// kein `field`, und der Filter davor prüfte genau darauf. Eine gespeicherte
-// Gruppe verschwand deshalb beim Einlesen der Definition wieder aus dem Formular
-// — und der nächste Speichervorgang schrieb sie endgültig weg.
-function toCriteria(list, nested = false) {
-    return (Array.isArray(list) ? list : [])
-        .filter((c) => c && typeof c === 'object')
-        .map((c) => {
-            if (! nested && Array.isArray(c.criteria)) {
-                const inner = toCriteria(c.criteria, true);
-
-                return inner.length
-                    ? { match: ASSIGNMENT_MATCHES.includes(c.match) ? c.match : 'any', criteria: inner }
-                    : null;
-            }
-
-            if (typeof c.field !== 'string' || c.field === '') return null;
-
-            return {
-                field: c.field,
-                operator: typeof c.operator === 'string' && c.operator !== '' ? c.operator : 'is',
-                value: c.value === null || c.value === undefined || c.value === '' ? null : String(c.value),
-            };
-        })
-        .filter(Boolean);
-}
-
-// Place-side counterpart: folds the solo boolean `pending_rewrite_spinner`
-// used to be into the list form — see PlaceActions::fromLegacyKeys() on the
-// server, which the settings editor has to agree with on what a definition
-// means.
-function toPlaceActionArray(metadata) {
-    if (Array.isArray(metadata.actions)) {
-        return metadata.actions
-            .filter((a) => a && typeof a === 'object' && typeof a.type === 'string')
-            .map((a) => ({
-                // Alt-Schreibweise gefaltet, wie auf der Transition-Seite.
-                type: a.type === 'notify_assignees' ? 'mail' : a.type,
-                minutes: Number.isFinite(Number(a.minutes)) && a.minutes !== null && a.minutes !== '' ? Number(a.minutes) : null,
-                every_days: Number.isFinite(Number(a.every_days)) && a.every_days !== null && a.every_days !== '' ? Number(a.every_days) : null,
-                after_days: Number.isFinite(Number(a.after_days)) && a.after_days !== null && a.after_days !== '' ? Number(a.after_days) : null,
-                transition: typeof a.transition === 'string' && a.transition !== '' ? a.transition : null,
-                mail_type: a.type === 'reminder' && !a.mail_type ? 'reminder' : storedMailType(a),
-                values: a.values && typeof a.values === 'object' ? { ...a.values } : {},
-            }));
-    }
-
-    if (metadata.pending_rewrite_spinner === true) {
-        return [{ type: 'pending_rewrite_spinner', minutes: null, mail_type: 'assigned', values: {} }];
-    }
-
-    return [];
-}
-
-// Legacy YAML kept `required_group` as either a scalar string or a list.
-// The Combobox in multi-select mode only understands arrays, so we coerce
-// on load (and on server-returned payloads via applyServerDefinition).
-function toGroupArray(value) {
-    if (value === null || value === undefined || value === '') return [];
-    if (Array.isArray(value)) return value.map(String).filter((v) => v !== '');
-    return [String(value)];
-}
-
-// Copy a keyed collection, dropping `metadata.<key>` where the value is empty.
-// Keeps cleared Select values out of the persisted YAML.
-// --- place names per language ---
-function emptyLabels() {
-    return Object.fromEntries(props.labelLocales.map((locale) => [locale, '']));
-}
-
-// The names the author typed, in LABEL_LOCALES order.
-function ownPlaceLabels(handle) {
-    const labels = form.places[handle]?.labels ?? {};
-    return props.labelLocales.map((locale) => (labels[locale] ?? '').trim()).filter(Boolean);
-}
-
-// What the place is called in `locale` while that field is empty — the same order
-// as DefinitionLoader::stateLabel() below the author's own name: the language
-// file, then another name the author gave (the other language, or the legacy
-// string while there is none), then the handle.
+// Place names — editor/model/labels.js, bound to this page's form and props.
 function placeLabelFallback(handle, locale) {
-    const own = ownPlaceLabels(handle);
-    return props.shippedPlaceLabels?.[handle]?.[locale]
-        || (own.length ? own[0] : form.places[handle]?.legacyLabel)
-        || humanize(handle);
+    return labels.placeLabelFallback(form, handle, locale, modelCtx);
 }
 
 // The name the CP shows right now, in its own language.
 function placeDisplayName(handle) {
-    return (form.places[handle]?.labels?.[props.labelLocale] ?? '').trim()
-        || placeLabelFallback(handle, props.labelLocale);
-}
-
-// Form → YAML: the filled languages as a map. With none filled, the legacy string
-// goes back as it came (or nothing, for a place never named) — saving an
-// untouched place must not change what it is called.
-function serializePlaceLabels(places) {
-    const out = {};
-    for (const [handle, place] of Object.entries(places)) {
-        const { labels = {}, legacyLabel = '', ...rest } = place;
-        const names = Object.fromEntries(
-            Object.entries(labels)
-                .map(([locale, value]) => [locale, (value ?? '').trim()])
-                .filter(([, value]) => value),
-        );
-        if (Object.keys(names).length) {
-            rest.label = names;
-        } else if (legacyLabel) {
-            rest.label = legacyLabel;
-        }
-        out[handle] = rest;
-    }
-    return out;
-}
-
-function stripEmptyMeta(target, key) {
-    const out = {};
-    for (const [handle, item] of Object.entries(target)) {
-        const meta = { ...(item.metadata ?? {}) };
-        if (meta[key] === null || meta[key] === '' || meta[key] === undefined) {
-            delete meta[key];
-        }
-        out[handle] = { ...item, metadata: meta };
-    }
-    return out;
-}
-
-// Write `actions` and nothing else: an empty list is dropped so the YAML stays
-// free of empty keys, and the two pre-`actions` spellings go with it —
-// normalize() already carried their meaning into the list, so leaving them would
-// persist the same dialog twice under two names.
-//
-// Per-type whitelists, deliberately: a key that no type claims here never
-// reaches the YAML, which is what keeps a stale `groups` from an old
-// `user_modal` out of a definition that is now a `user_assignment`.
-function cleanTransitionActions(transitions) {
-    const out = {};
-
-    for (const [handle, item] of Object.entries(transitions)) {
-        const meta = { ...(item.metadata ?? {}) };
-        delete meta.assign_from_group;
-        delete meta.needs_site_pick;
-
-        // Das Gate zurück in die zwei Schlüssel, die canApplyTransition() liest.
-        // Immer nur einer von beiden — der Editor kennt einen Typ je Transition.
-        // Eine handgeschriebene YAML darf beide tragen (die Prüfung ist eine
-        // Vereinigung); beim ersten Speichern hier bleibt dann der übrig, den
-        // normalize() gewählt hat.
-        const handles = (meta.required_handles ?? []).filter((h) => h !== '');
-        delete meta.required_by;
-        delete meta.required_handles;
-        delete meta.required_group;
-        delete meta.required_role;
-
-        if (handles.length && item.metadata?.required_by === 'group') {
-            meta.required_group = [...handles];
-        } else if (handles.length && item.metadata?.required_by === 'role') {
-            meta.required_role = [...handles];
-        }
-        // Superseded by the `plain_language_resubmit` action above — normalize()
-        // already folded a `true` boolean into the list, so keeping this raw key
-        // would persist the same flag twice under two names.
-        delete meta.plain_language_resubmit;
-
-        const actions = (meta.actions ?? [])
-            .filter((a) => a?.type)
-            .map((a) => {
-                if (a.type === 'user_assignment') {
-                    return {
-                        type: a.type,
-                        mode: a.mode ?? 'manual',
-                        match: a.match ?? 'all',
-                        // A criterion without a value is only valid for
-                        // `matches_entry`, which takes it from the entry — an
-                        // unfinished row of any other kind is dropped rather
-                        // than sent for the writer to reject.
-                        criteria: cleanCriteria(a.criteria),
-                    };
-                }
-                if (a.type === 'target_missing') return { type: a.type, site: a.site ?? null };
-                // Der einzige Schlüssel, den die Mail-Action trägt. Ohne diesen
-                // Zweig fiele `mail_type` in die Projekt-Whitelist unten und damit
-                // beim ersten Speichern aus der YAML.
-                if (a.type === 'mail') return { type: a.type, mail_type: a.mail_type ?? 'assigned' };
-
-                return customActionEntry('transition', a);
-            });
-
-        if (actions.length) {
-            meta.actions = actions;
-        } else {
-            delete meta.actions;
-        }
-
-        out[handle] = { ...item, metadata: meta };
-    }
-
-    return out;
-}
-
-// Place-side counterpart. `pending_rewrite_spinner` gets no dedicated case
-// below (unlike `refresh_interval`): it carries no configuration, same as
-// `start_localization` on the transition side.
-function cleanPlaceActions(places) {
-    const out = {};
-
-    for (const [handle, item] of Object.entries(places)) {
-        const meta = { ...(item.metadata ?? {}) };
-        delete meta.pending_rewrite_spinner;
-
-        // Nur das gesetzte Kennzeichen wandert in die YAML. Ein `branch: false` an
-        // jedem Place wäre Rauschen, das genau nichts aussagt — und der Leser
-        // (ProgressSteps) prüft ohnehin auf `=== true`.
-        if (!meta.branch) {
-            delete meta.branch;
-        }
-
-        const actions = (meta.actions ?? [])
-            .filter((a) => a?.type)
-            .map((a) => {
-                if (a.type === 'refresh_interval') return { type: a.type, minutes: a.minutes ?? null };
-                if (a.type === 'mail') return { type: a.type, mail_type: a.mail_type ?? 'assigned' };
-                if (a.type === 'reminder') return { type: a.type, every_days: a.every_days ?? null, mail_type: a.mail_type ?? 'reminder' };
-                if (a.type === 'auto_transition') return { type: a.type, after_days: a.after_days ?? null, transition: a.transition ?? null };
-
-                return customActionEntry('place', a);
-            });
-
-        if (actions.length) {
-            meta.actions = actions;
-        } else {
-            delete meta.actions;
-        }
-
-        out[handle] = { ...item, metadata: meta };
-    }
-
-    return out;
-}
-
-// Mirrors WorkflowController::transitionVariant() — the variant an action button
-// gets when the transition declares none. Rejecting is destructive to the
-// editorial flow, so it looks like it; everything else stays primary.
-function defaultVariant(handle) {
-    return handle === 'reject' ? 'danger' : 'primary';
+    return labels.placeDisplayName(form, handle, modelCtx);
 }
 
 // Tint classes for the transition-variant Select so the dropdown visually
@@ -2662,12 +2089,6 @@ function variantTintClasses(variant) {
     }
 }
 
-
-function numOrNull(value) {
-    if (value === '' || value === null || value === undefined) return null;
-    const n = Number(value);
-    return Number.isFinite(n) && n >= 0 ? n : null;
-}
 
 // Reorder a reactive keyed collection (form.places / form.transitions) by
 // swapping the given handle with its neighbor. YAML dump respects PHP
@@ -2732,7 +2153,7 @@ function addPlace() {
     // Ein neuer Place läuft nicht durch normalize(), also werden die Booleans hier
     // gesetzt — sonst steht die Abzweigungs-Checkbox einer frischen Karte
     // unbestimmt da.
-    form.places[tmp] = { labels: emptyLabels(), legacyLabel: '', metadata: { branch: false } };
+    form.places[tmp] = { labels: emptyLabels(props.labelLocales), legacyLabel: '', metadata: { branch: false } };
     newPlaceHandles[tmp] = '';
     scrollToCard(placeCards, tmp);
 }
@@ -2759,14 +2180,9 @@ function cancelNewPlace(handle) {
     // to the first remaining place so the Select doesn't dangle on an id that
     // vanished. Persisted transitions are the user's problem to clean up.
     const firstRemaining = Object.keys(form.places)[0] ?? null;
-    for (const tHandle of Object.keys(form.transitions)) {
-        const t = form.transitions[tHandle];
-        if (t.from === handle) t.from = firstRemaining;
-        if (t.to === handle) t.to = firstRemaining;
-    }
-    if (form.initial_place === handle) {
-        form.initial_place = firstRemaining;
-    }
+    replaceReferences(form, 'place', handle, firstRemaining, {
+        roles: ['transition_from', 'transition_to', 'initial_place'],
+    });
 }
 
 function cancelNewTransition(handle) {
@@ -2774,89 +2190,13 @@ function cancelNewTransition(handle) {
     delete newTransitionHandles[handle];
 }
 
+// Renaming a new row takes every reference along — see editor/model/refs.js.
 function commitPlaceHandle(oldHandle) {
-    const desired = (newPlaceHandles[oldHandle] || '').trim();
-    if (!desired || desired === oldHandle) return;
-    if (Object.prototype.hasOwnProperty.call(form.places, desired) || props.reservedPlaces.includes(desired)) {
-        newPlaceHandles[oldHandle] = oldHandle;
-        return;
-    }
-    form.places[desired] = form.places[oldHandle];
-    delete form.places[oldHandle];
-    delete newPlaceHandles[oldHandle];
-    newPlaceHandles[desired] = desired;
-    // Rewire transitions that reference the placeholder handle.
-    for (const t of Object.values(form.transitions)) {
-        if (t.from === oldHandle) t.from = desired;
-        if (t.to === oldHandle) t.to = desired;
-    }
-    if (form.initial_place === oldHandle) {
-        form.initial_place = desired;
-    }
+    commitPlaceHandleIn(form, pendingHandles, oldHandle, modelCtx);
 }
 
 function commitTransitionHandle(oldHandle) {
-    const desired = (newTransitionHandles[oldHandle] || '').trim();
-    if (!desired || desired === oldHandle) return;
-    if (Object.prototype.hasOwnProperty.call(form.transitions, desired) || props.reservedTransitions.includes(desired)) {
-        newTransitionHandles[oldHandle] = oldHandle;
-        return;
-    }
-    form.transitions[desired] = form.transitions[oldHandle];
-    delete form.transitions[oldHandle];
-    delete newTransitionHandles[oldHandle];
-    newTransitionHandles[desired] = desired;
-    // The one metadata key that points at a transition follows the rename —
-    // the same care commitPlaceHandle() takes for `from`/`to`/`initial_place`.
-    if (form.metadata.create_transition === oldHandle) {
-        form.metadata.create_transition = desired;
-    }
-    forEachAutoTransition((action) => {
-        if (action.transition === oldHandle) action.transition = desired;
-    });
-}
-
-// Every place's `auto_transition` action — the other thing that names a
-// transition and has to follow its rename or deletion.
-function forEachAutoTransition(fn) {
-    for (const place of Object.values(form.places)) {
-        for (const action of place?.metadata?.actions ?? []) {
-            if (action?.type === 'auto_transition') fn(action);
-        }
-    }
-}
-
-// Slugify: lowercase, non-alphanumeric → underscore, collapse & trim.
-// Same shape as the YAML handles the editor already accepts.
-function slugify(value) {
-    return String(value ?? '')
-        .toLowerCase()
-        .normalize('NFKD').replace(/[̀-ͯ]/g, '')  // strip diacritics
-        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
-}
-
-// Called from save() to make sure new-but-uncommitted rows (added this
-// session, `Date.now()`-tmp handle in place, user never blurred out of the
-// handle input) still land under a sensible key. Auto-slugs from the label
-// when the handle field was left empty — otherwise the timestamp-tmp would
-// silently make it into the YAML.
-function finalizeNewHandles() {
-    for (const tmp of [...Object.keys(newPlaceHandles)]) {
-        if (!(newPlaceHandles[tmp] || '').trim()) {
-            const slug = slugify(ownPlaceLabels(tmp)[0] ?? '');
-            if (slug) newPlaceHandles[tmp] = slug;
-        }
-        commitPlaceHandle(tmp);
-    }
-    for (const tmp of [...Object.keys(newTransitionHandles)]) {
-        if (!(newTransitionHandles[tmp] || '').trim()) {
-            const slug = slugify(form.transitions[tmp]?.metadata?.label ?? '');
-            if (slug) newTransitionHandles[tmp] = slug;
-        }
-        commitTransitionHandle(tmp);
-    }
+    commitTransitionHandleIn(form, pendingHandles, oldHandle, modelCtx);
 }
 
 function deleteTransition(handle) {
@@ -2865,12 +2205,7 @@ function deleteTransition(handle) {
     delete newTransitionHandles[handle];
     // A dangling reference would make the definition unsaveable (the writer
     // rejects an unknown transition), so the coupling goes with the step.
-    if (form.metadata.create_transition === handle) {
-        form.metadata.create_transition = null;
-    }
-    forEachAutoTransition((action) => {
-        if (action.transition === handle) action.transition = null;
-    });
+    clearTransitionRefs(form, handle);
 }
 
 async function deletePlace(handle) {
@@ -2925,139 +2260,21 @@ async function save({ confirmCollectionRemoval = false } = {}) {
     // keys must be replaced by either the user-typed handle or an
     // auto-slug from the label BEFORE we serialize the payload — otherwise
     // the YAML gets a `transition_1754321432` handle no one wanted.
-    finalizeNewHandles();
+    finalizeNewHandles(form, pendingHandles, modelCtx);
 
     // Guard: any remaining tmp-handle means the user left both handle and
     // label empty. Abort with a toast rather than persisting a timestamp.
-    const dangling = [
-        ...Object.keys(newPlaceHandles).filter((h) => /^place_\d+$/.test(h)),
-        ...Object.keys(newTransitionHandles).filter((h) => /^transition_\d+$/.test(h)),
-    ];
-    if (dangling.length) {
+    if (danglingHandles(pendingHandles).length) {
         Statamic.$toast.error(__('workflows::messages.settings_dangling_handles'));
         return;
     }
 
     saving.value = true;
     try {
-        // Serialize metadata with SLA collapsed: a stage goes along only as a
-        // COMPLETE pair. Days without a step could never fire and a step without
-        // days would never be reached — the writer refuses either half, so sending
-        // one would turn a half-filled form into a save error instead of the
-        // "stage is off" the author meant. Nothing left → drop the block, so the
-        // on-disk YAML doesn't grow a null-only key.
-        const metadata = { ...form.metadata };
-        const sla = form.metadata.sla ?? {};
-        const stages = {};
-        for (const stage of ['needs_update', 'outdated']) {
-            const days = numOrNull(sla[`${stage}_days`]);
-            const place = sla[`${stage}_place`] || null;
-            if (days !== null && place) {
-                stages[`${stage}_days`] = days;
-                stages[`${stage}_place`] = place;
-                // Only a complete pick goes along: a type without anyone chosen
-                // would assign nobody, and the writer refuses it.
-                const assign = sla[`${stage}_assign`];
-                if (assign?.by && assign.handles?.length) {
-                    stages[`${stage}_assign`] = { by: assign.by, handles: [...assign.handles] };
-                }
-            }
-        }
-        if (Object.keys(stages).length === 0) {
-            delete metadata.sla;
-        } else {
-            metadata.sla = stages;
-        }
-        // Cleared Select → the version stays where it is when its source drops to
-        // draft, which is an absent key rather than a null.
-        if (!metadata.source_draft_place) {
-            delete metadata.source_draft_place;
-        }
-        // Cleared Select → drop the key instead of persisting a null.
-        if (!metadata.seed_published_place) {
-            delete metadata.seed_published_place;
-        }
-        // Cleared → the New-post button only creates, which is an absent key.
-        if (!metadata.create_transition) {
-            delete metadata.create_transition;
-        }
-        // Same for the two site settings: an empty selection means "no
-        // plain-language manager" / "translate from the origin", which is an absent
-        // key rather than a null.
-        if (!metadata.plain_language_site) {
-            delete metadata.plain_language_site;
-        }
-        if (!metadata.translation_source_site) {
-            delete metadata.translation_source_site;
-        }
-        // Cleared → today's default behaviour (stays put until a human clicks
-        // submit_plain_language). The writer rejects it outside the
-        // plain-language manager, same coupling as plain_language_site.
-        if (!metadata.plain_language_completed_place) {
-            delete metadata.plain_language_completed_place;
-        }
-
-        // Cleared → the untranslated copy is deleted on a terminal failure instead of
-        // being parked. Same coupling to plain_language_site as the place above.
-        if (!metadata.plain_language_failed_place) {
-            delete metadata.plain_language_failed_place;
-        }
-        // Only persist the free source pick where it is on — the writer rejects it in
-        // a plain-language workflow, so writing `false` everywhere would make that
-        // manager unsaveable.
-        if (!metadata.translation_source_pick) {
-            delete metadata.translation_source_pick;
-        }
-        // A rule without handles names nobody: dropped, not written. No rules at
-        // all → no key, since "everyone sees both" is what an absent key means.
-        metadata.translation_source_view = (metadata.translation_source_view ?? [])
-            .filter((rule) => Array.isArray(rule?.handles) && rule.handles.length > 0)
-            .map((rule) => ({ mode: rule.mode, by: rule.by, handles: [...rule.handles] }));
-        if (!metadata.translation_source_view.length) {
-            delete metadata.translation_source_view;
-        }
-        // Nur die Abweichung wandert in die YAML. `horizontal` ist der Standard des
-        // Lesers (ProgressSteps::orientation()), ein Schlüssel dafür wäre eine
-        // Wiederholung — und beim Umstellen auf senkrecht steht dann genau eine
-        // Zeile in der Datei, die etwas aussagt.
-        // Auch ein leerer Wert fällt hier heraus, nicht nur der Standard: der Select
-        // ist nicht clearable, aber ein null oder '' würde der Writer mit
-        // „unbekannter Wert [NULL]" ablehnen — eine Fehlermeldung über etwas, das
-        // niemand eingegeben hat. Fehlt der Schlüssel, liest ProgressSteps
-        // ohnehin `horizontal`.
-        if (!metadata.progress_orientation || metadata.progress_orientation === 'horizontal') {
-            delete metadata.progress_orientation;
-        }
-        // Credentials never belong in this YAML — they come from
-        // config/workflows.php → .env. An older build of the editor did offer
-        // fields for them, so drop anything it may have written before it can be
-        // saved back.
-        for (const key of ['cortex_url', 'cortex_token', 'plain_language_url', 'plain_language_token', 'deepl_key']) {
-            delete metadata[key];
-        }
-        // An empty creator/assigner list is MEANINGFUL — it says "super admins only"
-        // and must override the project config, so it is written as [] rather than
-        // dropped. Dropping it would silently re-enable the config fallback.
-        metadata.post_creator_groups = [...(metadata.post_creator_groups ?? [])];
-        // Cleared picker → no default group, which is an absent key.
-        if (!metadata.default_assignee_group) {
-            delete metadata.default_assignee_group;
-        }
-        metadata.assigner_groups = [...(metadata.assigner_groups ?? [])];
-        // Clearing the colour/variant Selects leaves a null behind — drop those
-        // keys so the YAML stays free of null-only entries and the place or
-        // transition falls back to its built-in default.
-        const places = cleanPlaceActions(stripEmptyMeta(serializePlaceLabels(form.places), 'color'));
-        const transitions = cleanTransitionActions(stripEmptyMeta(form.transitions, 'variant'));
-
+        // The cleanup (SLA pairs, cleared Selects, labels, action whitelists) is
+        // editor/model/serialize.js — the same function the round-trip tests run.
         const payload = {
-            places,
-            transitions,
-            metadata,
-            collections: form.collections ?? [],
-            initial_place: form.initial_place,
-            marking_store: form.marking_store,
-            type: form.type,
+            ...serialize(form, modelCtx),
             confirm_collection_removal: confirmCollectionRemoval,
         };
         const { data } = await axios.post(props.saveUrl, payload);
@@ -3120,7 +2337,7 @@ function applyStateUsage(usage) {
 }
 
 function applyServerDefinition(def) {
-    const fresh = normalize(def);
+    const fresh = normalize(def, modelCtx);
     // Server response has canonical handles now — everything is "persisted",
     // so no row should remain flagged as new.
     for (const key of Object.keys(newPlaceHandles)) delete newPlaceHandles[key];

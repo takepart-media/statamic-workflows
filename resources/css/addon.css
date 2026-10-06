@@ -24,6 +24,10 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @source '../js/**/*.vue';
+/* Plain modules too: support/placeColors.js holds literal class strings (the
+ * place colour map). The model tests carry none worth generating. */
+@source '../js/**/*.js';
+@source not '../js/**/__tests__/**';
 
 /* Listing-table header tint on the workflow index/queue pages: gray-150 in
  * light, gray-950 (opaque) in dark. Kept unlayered with the extra
