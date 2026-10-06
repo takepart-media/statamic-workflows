@@ -136,13 +136,16 @@ class WorkflowDefinitionWriter
 
     /**
      * Write a prepared (and checked) definition: back the current file up,
-     * replace it atomically, drop the loader's memos.
+     * replace it atomically, drop the loader's memos. Returns the backup that
+     * holds the previous content (see backup()) — what a caller restores with
+     * restoreBackup() when its own follow-up work fails — or null when none was
+     * made.
      *
      * @param  array<string, mixed>  $definition
      */
-    public function persist(string $name, array $definition): void
+    public function persist(string $name, array $definition): ?string
     {
-        $this->backup($name);
+        $backup = $this->backup($name);
 
         File::ensureDirectoryExists($this->loader->directory());
         File::replace($this->loader->path($name), Yaml::dump($definition, 6, 2));
@@ -152,6 +155,8 @@ class WorkflowDefinitionWriter
         // settings editor does, to answer with the stored version — would be
         // handed the content from before the write.
         DefinitionLoader::flush();
+
+        return $backup;
     }
 
     /**

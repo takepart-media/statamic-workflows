@@ -642,6 +642,13 @@ return [
     'place_delete_needs_migration' => 'Es gibt noch Beiträge in diesem Place. Bitte migrate_to setzen.',
     'event_note_definition_saved' => 'Workflow-Definition über die Einstellungen bearbeitet.',
     'event_note_place_deleted' => 'Place [:place] über die Einstellungen entfernt.',
+    'event_note_place_migrated' => 'Place [:place] über die Einstellungen entfernt — :count Beiträge nach [:target] verschoben.',
+    'removed_place_unknown' => 'Place [:place] existiert nicht und kann nicht entfernt werden.',
+    'removed_place_still_present' => 'Place [:place] ist zum Entfernen markiert, steht aber noch in der Definition.',
+    'removed_place_initial' => 'Place [:place] ist das initial_place und kann nicht entfernt werden. Wähle zuerst ein anderes initial_place.',
+    'removed_place_needs_target' => 'In Place [:place] liegen noch :count Beiträge. Wähle einen Place, in den sie verschoben werden.',
+    'removed_place_target_invalid' => 'Die Beiträge aus [:place] können nicht nach [:target] verschoben werden: Das ist keiner der verbleibenden Places.',
+    'settings_save_rolled_back' => 'Speichern beim Verschieben der Beiträge fehlgeschlagen. Es wurde nichts geändert — die vorherige Definition ist wiederhergestellt.',
 
     // Collections-Auswahl im Einstellungen-Editor
     'collections_intro' => 'Collections, deren Einträge dieser Workflow verwaltet. Einträge dieser Collections erhalten das Workflow-Feld, ihre Veröffentlichung wird über den Workflow-Status gesteuert und sie erscheinen auf der Manager-Seite.',

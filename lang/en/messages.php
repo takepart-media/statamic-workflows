@@ -634,6 +634,13 @@ return [
     'place_delete_needs_migration' => 'Entries still exist in this place. Provide migrate_to to move them.',
     'event_note_definition_saved' => 'Workflow definition edited via settings.',
     'event_note_place_deleted' => 'Place [:place] removed via settings.',
+    'event_note_place_migrated' => 'Place [:place] removed via settings — :count entries moved to [:target].',
+    'removed_place_unknown' => 'Place [:place] does not exist and cannot be removed.',
+    'removed_place_still_present' => 'Place [:place] is marked for removal but is still part of the definition.',
+    'removed_place_initial' => 'Place [:place] is the initial place and cannot be removed. Choose another initial place first.',
+    'removed_place_needs_target' => 'Place [:place] still holds :count entries. Choose a place to move them to.',
+    'removed_place_target_invalid' => 'Entries of [:place] cannot be moved to [:target]: it is not one of the remaining places.',
+    'settings_save_rolled_back' => 'Saving failed while moving the entries. Nothing was changed — the previous definition is back in place.',
 
     // Collection picker in the settings editor
     'collections_intro' => 'The collections whose entries this workflow governs. Their entries get the workflow field, publishing is gated on the workflow state, and they show up on the manager page.',

@@ -1922,8 +1922,8 @@ angehängt.
 | `POST workflows/api/settings/install` | `installWorkflow` | Mitgelieferten Workflow-Typ ins Projekt kopieren. Nur noch **nicht** installierte Typen. |
 | `POST workflows/api/settings/{workflow}/active` | `setWorkflowActive` | Workflow an-/abschalten (`active` in der YAML). |
 | `POST workflows/api/settings/{workflow}/seed` | `seedWorkflowStates` | Status für bestehende Einträge nachtragen (nur aktive Workflows). |
-| `POST workflows/api/settings/{workflow}/definition` | `saveDefinition`* | Speichern des Graph-Editors (Name `workflows.settings.save`). Payload `{version, definition: {places, transitions, metadata, collections, initial_place, marking_store, type}, confirm_collection_removal?, force?}`, Antwort `{data: {definition, version, purged, seeded, state_usage}}`. Siehe Versionierung und Backups unten. |
-| `POST workflows/api/settings/{workflow}/validate` | `validateDefinition`* | Dry-Run desselben Payloads (Name `workflows.settings.validate`), schreibt nie. Antwort immer 200: `{valid, version, errors, warnings, removals}` — siehe Validierung unten. |
+| `POST workflows/api/settings/{workflow}/definition` | `saveDefinition`* | Speichern des Graph-Editors (Name `workflows.settings.save`). Payload `{version, definition: {places, transitions, metadata, collections, initial_place, marking_store, type}, removed_places?, confirm_collection_removal?, force?}`, Antwort `{data: {definition, version, purged, seeded, migrated, state_usage}}`. Siehe „Graph-Editor: Speichern“ unten. |
+| `POST workflows/api/settings/{workflow}/validate` | `validateDefinition`* | Dry-Run desselben Payloads (Name `workflows.settings.validate`), schreibt nie. Antwort immer 200: `{valid, version, errors, warnings, removals}` — siehe Validierung und „Graph-Editor: Speichern“ unten. |
 | `GET  workflows/api/settings/{workflow}/usage` | `usage`* | Einträge je Place + aktuelle Version (Name `workflows.settings.usage`): `{state_usage: {place: count}, version}`. |
 | `DELETE workflows/api/settings/{workflow}` | `destroyWorkflow` | Definition löschen; DB-Daten bleiben. |
 | `POST workflows/api/{workflow}/settings` | `saveSettings`* | Editor-Payload speichern. `{workflow}` = Handle (Slug als Fallback). |
@@ -1942,8 +1942,8 @@ jemand anderes hat gespeichert, ein Deploy oder eine Hand-Änderung kam
 dazwischen —, antwortet der Endpoint **409** mit `{message, conflict: true,
 version, definition}` (aktueller Stand) statt zu überschreiben; `force: true`
 überschreibt bewusst. Weitere Antworten: **422** `places_mismatch` (mit
-`missing_places`), wenn `definition.places` einen bestehenden Place weglässt —
-Places werden nie durch Weglassen gelöscht; **422** wie bei `saveSettings` für
+`missing_places`), wenn ein bestehender Place weder in `definition.places` noch
+in `removed_places` steht — Places werden nie durch Weglassen gelöscht; **422** wie bei `saveSettings` für
 unbekannte Collections, die Collection-Entfernungs-Bestätigung und
 Writer-Validierungsfehler — die beiden Fehlerfälle als `{message, errors}`
 (siehe unten).
@@ -1984,6 +1984,55 @@ neuesten `config('workflows.editor_backups')` (Default 20, 0 = aus). Ist der
 Inhalt identisch mit dem neuesten Backup, entsteht kein neues. Dort überleben
 auch die Kommentare, die der YAML-Dump des Editors verliert.
 `restoreBackup($name, $file)` spielt eines zurück.
+
+### Graph-Editor: Speichern
+
+`saveDefinition` ist der einzige Weg, auf dem der Graph-Editor schreibt
+(`saveSettings`/`deletePlace` bleiben bis zum Cutover für den alten Editor).
+
+**Payload.** `{version, definition: {…}, removed_places: [{place, migrate_to?}],
+confirm_collection_removal?, force?}`. `definition.places` enthält alle Places,
+die bleiben (inkl. neuer); jeder bestehende Place steht entweder dort oder in
+`removed_places`. Transitions, die einen entfernten Place berühren, schickt der
+Client schon nicht mehr mit — der Server wirft sie **nicht** still weg:
+hängende `from`/`to` sind normale Validierungsfehler (`transitions.<handle>`).
+Positionen in `metadata.editor` werden beim Mergen beschnitten.
+
+**Removal-Prüfung** (je entferntem Place, `removalChecks()`): muss existieren,
+darf nicht mehr in `definition.places` stehen und nicht das (neue)
+`initial_place` sein (`error`); hält er Einträge (`affected` > 0,
+`needs_migration`), braucht er ein `migrate_to` aus den verbleibenden Places —
+auch einen in diesem Save neu angelegten —, das nicht selbst entfernt wird
+(`target_error`). Leere Places brauchen kein Ziel. Fehler → **422**
+`{message, needs_migration: true, removals: [{place, migrate_to, affected,
+needs_migration, error, target_error}]}`. Der Validate-Endpoint liefert dieselben
+Einträge in `removals` (200, `valid: false` bei einem Problem).
+
+**Ablauf.** 403/404 → Version (409) → Place-Set (`places_mismatch`) →
+Removals → Collection-Gate → Dry-Run (422 `{message, errors}`) → Backup +
+YAML schreiben → **eine Transaktion auf der `workflow`-Connection**:
+`WorkflowStateStore::migrateState()` je Removal + Purge entfernter Collections.
+Die YAML kommt zuerst, weil das Migrationsziel ein im selben Save angelegter
+Place sein kann. Scheitert die Transaktion, wird das Backup aus `persist()`
+zurückgespielt (bei abgeschalteten Backups der vorher gelesene Inhalt) und der
+Endpoint antwortet **500** `{message}` — Datei und Daten bleiben beim alten
+Stand. Danach: Seeding hinzugekommener Collections, Events —
+`place_deleted` je Removal (`from_state` = entfernter Place, `to_state` = Ziel
+oder leer, Note mit Anzahl: `event_note_place_migrated`), `collections_removed`,
+`definition_saved` (nicht bei reinen Layout-Änderungen). Antwort zusätzlich
+`migrated: {place: n}`.
+
+**`entered_at` startet neu.** `migrateState()` setzt `entered_at` der
+verschobenen Einträge auf jetzt — SLA-Alterung, `reminder` und
+Auto-Transition-Uhren beginnen im Zielplace von vorn. Der Lösch-Dialog sollte
+das erwähnen.
+
+**Handles sind unveränderlich.** Place- und Transition-Handles werden nicht
+umbenannt, nur angelegt oder entfernt: `workflow_states.state`, Events,
+Zuweisungen, Metadaten-Verweise (`sla`, `source_draft_place`, Actions …) und
+Projekt-Code hängen am Handle. Ein „Umbenennen“ ist neuer Place + Removal mit
+`migrate_to` — damit läuft es durch dieselbe Prüfung, Migration und Historie.
+Angezeigt wird ohnehin `metadata.label`.
 
 ---
 

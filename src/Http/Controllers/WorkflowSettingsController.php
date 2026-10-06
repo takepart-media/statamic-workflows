@@ -3,6 +3,7 @@
 namespace TakepartMedia\Workflows\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\File;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Statamic\Facades\Collection;
@@ -25,6 +26,7 @@ use TakepartMedia\Workflows\Workflow\WorkflowDataPurger;
 use TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter;
 use TakepartMedia\Workflows\Workflow\WorkflowEventStore;
 use TakepartMedia\Workflows\Workflow\WorkflowInstaller;
+use TakepartMedia\Workflows\Workflow\WorkflowState;
 use TakepartMedia\Workflows\Workflow\WorkflowStateSeeder;
 use TakepartMedia\Workflows\Workflow\WorkflowStateStore;
 
@@ -642,19 +644,29 @@ class WorkflowSettingsController extends CpController
 
     /**
      * The graph editor's save. Same writer, same collection gate as
-     * saveSettings(), with three differences:
+     * saveSettings(), plus:
      *
      * - optimistic locking: `version` must be the fingerprint the editor was
      *   loaded with (WorkflowDefinitionWriter::fingerprint()). Anything else
      *   means the file changed underneath it — 409 with the current definition
      *   and version, unless `force` says to overwrite;
      * - the payload is nested under `definition` and must name every existing
-     *   place. Places are still never deleted by omission; until removals are
-     *   part of this payload, a missing place is a 422 (`places_mismatch`)
-     *   rather than something the additive merge silently puts back;
+     *   place — either in `definition.places` or in `removed_places`
+     *   (`[{place, migrate_to?}]`). Places are never deleted by omission: a
+     *   place in neither is a 422 (`places_mismatch`) rather than something the
+     *   additive merge silently puts back;
+     * - removed places that still hold entries need a `migrate_to` among the
+     *   remaining places (see removalChecks()) — else 422 `needs_migration`;
      * - `definition_saved` is only logged when something besides
      *   `metadata.editor` changed — dragging nodes around is not a workflow
      *   change worth a history line.
+     *
+     * Order: version → place set → removals → collection gate → validation →
+     * backup + YAML write → one transaction on the workflow connection that
+     * migrates the entries of removed places and purges removed collections →
+     * seeding → events. The YAML goes first because a migration target may be
+     * a place created by this very save; if the transaction fails, the backup
+     * is put back so file and data never disagree.
      */
     public function saveDefinition(Request $request, string $workflow)
     {
@@ -678,15 +690,30 @@ class WorkflowSettingsController extends CpController
         }
 
         $payload = $this->definitionPayload($request);
+        $removedPlaces = $this->removedPlaces($request);
 
         $sent = is_array($payload['places'] ?? null) ? array_map('strval', array_keys($payload['places'])) : [];
-        $missing = array_values(array_diff(array_map('strval', array_keys($before['places'] ?? [])), $sent));
+        $missing = array_values(array_diff(
+            array_map('strval', array_keys($before['places'] ?? [])),
+            $sent,
+            array_keys($removedPlaces),
+        ));
 
         if ($missing !== []) {
             return response()->json([
                 'message' => $this->t('writer_places_mismatch', ['places' => implode(', ', $missing)]),
                 'places_mismatch' => true,
                 'missing_places' => $missing,
+            ], 422);
+        }
+
+        $removals = $this->removalChecks($name, $before, $payload, $removedPlaces);
+
+        if (($problem = $this->firstRemovalProblem($removals)) !== null) {
+            return response()->json([
+                'message' => $problem,
+                'needs_migration' => true,
+                'removals' => $removals,
             ], 422);
         }
 
@@ -702,17 +729,63 @@ class WorkflowSettingsController extends CpController
             return $response;
         }
 
-        try {
-            $writer->save($name, $payload);
-        } catch (DefinitionValidationException $e) {
+        $result = $writer->dryRun($name, $payload, array_keys($removedPlaces));
+
+        if ($result['errors'] !== []) {
             // `message` is the first problem (what the toast shows), `errors`
             // all of them with their paths, for the graph.
-            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors], 422);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            return response()->json(['message' => $result['errors'][0]['message'], 'errors' => $result['errors']], 422);
         }
 
-        $seeded = $this->applyCollectionChange($name, $change);
+        $path = $loader->path($name);
+        $original = is_file($path) ? (string) file_get_contents($path) : null;
+        $backup = $writer->persist($name, $result['definition']);
+        $store = app(WorkflowStateStore::class);
+
+        try {
+            $migrated = WorkflowState::query()->getConnection()->transaction(function () use ($name, $removals, $change, $store) {
+                $migrated = [];
+
+                foreach ($removals as $removal) {
+                    $migrated[$removal['place']] = $removal['needs_migration']
+                        ? $store->migrateState($name, $removal['place'], $removal['migrate_to'])
+                        : 0;
+                }
+
+                if ($change['orphaned'] !== []) {
+                    $this->purgeWorkflowData($name, $change['orphaned']);
+                }
+
+                return $migrated;
+            });
+        } catch (\Throwable $e) {
+            report($e);
+
+            // Back to the file as it was before this save: the data side rolled
+            // back, so the new definition would describe places the entries no
+            // longer match.
+            if ($backup !== null) {
+                $writer->restoreBackup($name, $backup);
+            } elseif ($original !== null) {
+                File::put($path, $original);
+            }
+
+            DefinitionLoader::flush();
+            $store->forget($name);
+
+            return response()->json(['message' => $this->t('settings_save_rolled_back')], 500);
+        }
+
+        foreach ($removals as $removal) {
+            app(WorkflowEventStore::class)->log('workflow:'.$name, $name, 'place_deleted', $this->placeDeletedEvent(
+                $removal['place'],
+                $removal['needs_migration'] ? $removal['migrate_to'] : null,
+                $migrated[$removal['place']] ?? 0,
+            ));
+        }
+
+        $this->logCollectionsRemoved($name, $change);
+        $seeded = $this->seedAddedCollections($name, $change);
         $after = $this->stripAutoInjected($loader->raw($name));
 
         if ($this->withoutEditorMeta($before) !== $this->withoutEditorMeta($after)) {
@@ -730,6 +803,7 @@ class WorkflowSettingsController extends CpController
                 'version' => $writer->fingerprint($name),
                 'purged' => count($change['orphaned']),
                 'seeded' => $seeded,
+                'migrated' => (object) $migrated,
                 'state_usage' => $this->stateUsage($name),
             ],
         ]);
@@ -737,12 +811,12 @@ class WorkflowSettingsController extends CpController
 
     /**
      * Dry run of a saveDefinition() payload: the writer's errors (all of them,
-     * with paths) plus DefinitionLinter's warnings. Never writes, ignores
+     * with paths), DefinitionLinter's warnings and the per-place checks of
+     * `removed_places` (see removalChecks()). Never writes, ignores
      * `version`/`force` and answers 200 either way — `valid` says whether the
-     * save would pass validation. The version returned is the current one, so
-     * the editor can notice a change underneath it early.
-     *
-     * `removals` stays empty until removed places are part of the payload.
+     * save would pass validation and its removal checks. The version returned
+     * is the current one, so the editor can notice a change underneath it
+     * early.
      */
     public function validateDefinition(Request $request, string $workflow)
     {
@@ -752,15 +826,140 @@ class WorkflowSettingsController extends CpController
         abort_unless(in_array($workflow, $loader->allIncludingInactive(), true), 404);
 
         $writer = app(WorkflowDefinitionWriter::class);
-        $result = $writer->dryRun($workflow, $this->definitionPayload($request));
+        $payload = $this->definitionPayload($request);
+        $removedPlaces = $this->removedPlaces($request);
+        $result = $writer->dryRun($workflow, $payload, array_keys($removedPlaces));
+        $removals = $this->removalChecks($workflow, $this->stripAutoInjected($loader->raw($workflow)), $payload, $removedPlaces);
 
         return response()->json([
-            'valid' => $result['errors'] === [],
+            'valid' => $result['errors'] === [] && $this->firstRemovalProblem($removals) === null,
             'version' => $writer->fingerprint($workflow),
             'errors' => $result['errors'],
             'warnings' => app(DefinitionLinter::class)->lint($workflow, $result['definition']),
-            'removals' => [],
+            'removals' => $removals,
         ]);
+    }
+
+    /**
+     * `removed_places` of a graph-editor request as `place => migrate_to`
+     * (null when none was given). Malformed rows are skipped; a place named
+     * twice keeps its first row.
+     *
+     * @return array<string, string|null>
+     */
+    private function removedPlaces(Request $request): array
+    {
+        $removed = [];
+
+        foreach ((array) $request->input('removed_places', []) as $row) {
+            $place = is_array($row) ? ($row['place'] ?? null) : $row;
+
+            if (! is_string($place) || $place === '' || array_key_exists($place, $removed)) {
+                continue;
+            }
+
+            $target = is_array($row) ? ($row['migrate_to'] ?? null) : null;
+            $removed[$place] = is_string($target) && $target !== '' ? $target : null;
+        }
+
+        return $removed;
+    }
+
+    /**
+     * One check per removed place, against the definition as it is now
+     * (`$current`, auto-injected parts stripped) and as the payload would leave
+     * it. `error` is a problem with the place itself (unknown, still part of
+     * `definition.places`, the new `initial_place`); `target_error` one with its
+     * migration: a place holding entries (`affected` > 0 → `needs_migration`)
+     * needs a `migrate_to` that is among the remaining places — possibly one
+     * this save creates — and not itself being removed. Empty places are
+     * removed without one; a `migrate_to` sent for them is ignored.
+     *
+     * @param  array<string, mixed>  $current
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, string|null>  $removedPlaces
+     * @return array<int, array{place: string, migrate_to: string|null, affected: int, needs_migration: bool, error: string|null, target_error: string|null}>
+     */
+    private function removalChecks(string $name, array $current, array $payload, array $removedPlaces): array
+    {
+        if ($removedPlaces === []) {
+            return [];
+        }
+
+        $store = app(WorkflowStateStore::class);
+        $existing = array_map('strval', array_keys($current['places'] ?? []));
+        $remaining = array_diff(
+            is_array($payload['places'] ?? null) ? array_map('strval', array_keys($payload['places'])) : $existing,
+            WorkflowDefinitionWriter::RESERVED_PLACE_HANDLES,
+            array_keys($removedPlaces),
+        );
+        $initial = (string) ($payload['initial_place'] ?? $current['initial_place'] ?? '');
+        $checks = [];
+
+        foreach ($removedPlaces as $place => $target) {
+            $place = (string) $place;
+            $affected = in_array($place, $existing, true) ? count($store->subjectsInState($name, $place)) : 0;
+
+            $error = match (true) {
+                ! in_array($place, $existing, true) => $this->t('removed_place_unknown', ['place' => $place]),
+                is_array($payload['places'] ?? null) && array_key_exists($place, $payload['places']) => $this->t('removed_place_still_present', ['place' => $place]),
+                $place === $initial => $this->t('removed_place_initial', ['place' => $place]),
+                default => null,
+            };
+
+            $targetError = match (true) {
+                $error !== null || $affected === 0 => null,
+                $target === null => $this->t('removed_place_needs_target', ['place' => $place, 'count' => $affected]),
+                ! in_array($target, $remaining, true) => $this->t('removed_place_target_invalid', ['place' => $place, 'target' => $target]),
+                default => null,
+            };
+
+            $checks[] = [
+                'place' => $place,
+                'migrate_to' => $affected > 0 ? $target : null,
+                'affected' => $affected,
+                'needs_migration' => $affected > 0,
+                'error' => $error,
+                'target_error' => $targetError,
+            ];
+        }
+
+        return $checks;
+    }
+
+    /**
+     * The first problem among removalChecks(), or null when every removal can
+     * go ahead.
+     *
+     * @param  array<int, array{error: string|null, target_error: string|null}>  $removals
+     */
+    private function firstRemovalProblem(array $removals): ?string
+    {
+        foreach ($removals as $removal) {
+            if (($removal['error'] ?? null) !== null || ($removal['target_error'] ?? null) !== null) {
+                return $removal['error'] ?? $removal['target_error'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The `place_deleted` event data, in the fields WorkflowEventStore::log()
+     * actually stores: the removed place as `from`, the migration target (if
+     * entries were moved) as `to`, the count in the note.
+     *
+     * @return array{from: string, to: string|null, note: string}
+     */
+    private function placeDeletedEvent(string $place, ?string $migratedTo, int $moved): array
+    {
+        return [
+            'from' => $place,
+            'to' => $migratedTo,
+            'note' => $migratedTo !== null && $moved > 0
+                ? $this->t('event_note_place_migrated', ['place' => $place, 'target' => $migratedTo, 'count' => $moved])
+                : $this->t('event_note_place_deleted', ['place' => $place]),
+        ];
     }
 
     /**
@@ -888,15 +1087,40 @@ class WorkflowSettingsController extends CpController
     {
         if ($change['orphaned'] !== []) {
             $this->purgeWorkflowData($name, $change['orphaned']);
-
-            app(WorkflowEventStore::class)->log('workflow:'.$name, $name, 'collections_removed', [
-                'note' => __('workflows::messages.event_note_collections_removed', [
-                    'collections' => implode(', ', $change['removed']),
-                    'count' => count($change['orphaned']),
-                ]),
-            ]);
         }
 
+        $this->logCollectionsRemoved($name, $change);
+
+        return $this->seedAddedCollections($name, $change);
+    }
+
+    /**
+     * The `collections_removed` history line, once the purge went through.
+     *
+     * @param  array{removed: array<int, string>, added: array<int, string>, orphaned: array<int, string>}  $change
+     */
+    private function logCollectionsRemoved(string $name, array $change): void
+    {
+        if ($change['orphaned'] === []) {
+            return;
+        }
+
+        app(WorkflowEventStore::class)->log('workflow:'.$name, $name, 'collections_removed', [
+            'note' => __('workflows::messages.event_note_collections_removed', [
+                'collections' => implode(', ', $change['removed']),
+                'count' => count($change['orphaned']),
+            ]),
+        ]);
+    }
+
+    /**
+     * Seed state rows for the entries of freshly added collections. Returns
+     * the number of rows seeded.
+     *
+     * @param  array{removed: array<int, string>, added: array<int, string>, orphaned: array<int, string>}  $change
+     */
+    private function seedAddedCollections(string $name, array $change): int
+    {
         return $change['added'] === [] ? 0 : app(WorkflowStateSeeder::class)->seed($name, $change['added']);
     }
 
@@ -1013,12 +1237,7 @@ class WorkflowSettingsController extends CpController
             'workflow:'.$name,
             $name,
             'place_deleted',
-            [
-                'place' => $place,
-                'migrated_to' => $migrateTo ?: null,
-                'affected' => count($affected),
-                'note' => __('workflows::messages.event_note_place_deleted', ['place' => $place]),
-            ]
+            $this->placeDeletedEvent($place, count($affected) > 0 ? $migrateTo : null, count($affected))
         );
 
         $freshRaw = $loader->raw($name);
