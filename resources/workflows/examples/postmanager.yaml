@@ -1,0 +1,146 @@
+name: postmanager
+type: state_machine
+marking_store: { type: method, property: current_state }
+collections: [posts]
+initial_place: idea
+metadata:
+  label: 'Post Update with Expert Sign-off'
+  # Ageing: after how many days a published post moves on, and into WHICH of the
+  # places below. Both places and both transitions are ordinary parts of this
+  # workflow — the scheduler applies `mark_needs_update` / `mark_outdated` exactly
+  # as an editor would, with their assignment, their mail and their permission. The
+  # deadline counts from the last approval (`content_updated_at` on the entry), not
+  # from the last save. `outdated` has no `allow_publish`, so a post landing there
+  # goes offline — and every localization with a `source_draft_place` follows it.
+  sla:
+    needs_update_days: 365
+    needs_update_place: needs_update
+    outdated_days: 540
+    outdated_place: outdated
+  nav: { slug: post-manager, icon: media-news-paper, order: 1 }
+  # Every new post created via the workflow index is auto-assigned to all
+  # current members of this Statamic user group (handle in groups.yaml). Also
+  # gates who may transfer (localize) an entry. Remove the key to skip
+  # group auto-assignment.
+  default_assignee_group: editor
+  # Additionally assign whoever created the post — matters when the creator is
+  # not in default_assignee_group (e.g. a super admin), since only assignees may
+  # run a transition. Released again at the first transition; saving a draft of
+  # the current step never reassigns.
+  assign_creator: true
+  # Field handles the summary History-diff should show. Anything not listed
+  # here is ignored — keeps the diff focused on the editorial-relevant
+  # fields instead of surfacing meta/computed noise.
+  history_fields: [title, content]
+places:
+  idea:
+    label: 'Idea'
+    metadata: { required_group: editor }
+  draft:
+    label: 'Draft'
+    metadata: { required_group: expert }
+  in_review:
+    label: 'Editorial Review'
+    metadata: { required_group: editor }
+  expert_review:
+    label: 'Expert Sign-off'
+    metadata: { required_group: expert }
+  final_approve:
+    label: 'Final Approve'
+    metadata: { required_group: approver }
+  proofreading:
+    label: 'Proofreading'
+    metadata: { required_group: editor }
+  published:
+    label: 'Published'
+    metadata: { required_group: editor, allow_publish: true }
+  # The two ageing steps. Declared after `published` because that is where they
+  # belong in the picture; `metadata.sla` names them, which is what keeps them out
+  # of the progress bar and out of `finalPlace()`.
+  needs_update:
+    label: 'Needs update'
+    # Stays online: the post is still correct enough to serve, it just wants
+    # attention. `branch: true` draws it hanging off the end of the line.
+    metadata: { required_group: editor, allow_publish: true, color: amber, branch: true }
+  outdated:
+    label: 'Outdated'
+    # No allow_publish → the post drops to draft and disappears from the front end.
+    metadata: { required_group: editor, color: red, branch: true }
+transitions:
+  start_draft:
+    from: idea
+    to: draft
+    metadata: { label: 'Start drafting', required_group: editor }
+  submit:
+    from: draft
+    to: in_review
+    metadata: { label: 'Submit for review', required_group: expert }
+  request_expert:
+    from: in_review
+    to: expert_review
+    metadata: { label: 'Send to expert', required_group: editor }
+  approve_expert:
+    from: expert_review
+    to: final_approve
+    # `actions` are the steps that run between the click and the transition.
+    # `user_assignment` decides who takes the entry over next. In `manual` mode
+    # it opens a picker; the candidates are the users matching `criteria`, and
+    # the picked ones become the assignees. Switch `mode` to `automatic` to skip
+    # the dialog and assign every match instead.
+    metadata:
+      label: 'Expert approve'
+      required_group: expert
+      actions:
+        - type: user_assignment
+          mode: manual
+          match: all
+          criteria:
+            - { field: group, operator: is, value: approver }
+  final_approve:
+    from: final_approve
+    to: proofreading
+    metadata: { label: 'Final approve', required_group: approver }
+  publish:
+    from: proofreading
+    to: published
+    metadata: { label: 'Publish', required_group: editor }
+  reject:
+    from: [in_review, expert_review, final_approve, proofreading]
+    to: draft
+    metadata: { label: 'Reject', required_group: [editor, expert, approver] }
+  # The way in is OPTIONAL: without a transition the scheduler moves the post
+  # straight into the place (and the place's own actions still fire). It is
+  # declared here because these two hand the post to somebody — that is what a
+  # transition adds over a plain move. The way BACK is the one an editor needs.
+  mark_needs_update:
+    from: published
+    to: needs_update
+    metadata:
+      label: 'Mark as needs update'
+      actions:
+        - type: user_assignment
+          mode: automatic
+          match: any
+          criteria:
+            - { field: group, operator: is, value: approver }
+        - type: mail
+          mail_type: assigned
+  mark_outdated:
+    from: [published, needs_update]
+    to: outdated
+    metadata:
+      label: 'Mark as outdated'
+      variant: danger
+      actions:
+        - type: user_assignment
+          mode: automatic
+          match: any
+          criteria:
+            - { field: group, operator: is, value: approver }
+  # Reaching `published` stamps `content_updated_at`, so this is what restarts the
+  # deadline. From BOTH ageing places — without the second `from` an outdated post
+  # would be stuck.
+  mark_up_to_date:
+    from: [needs_update, outdated]
+    to: published
+    metadata: { label: 'Mark up to date', required_group: editor }

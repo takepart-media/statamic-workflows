@@ -1,0 +1,1214 @@
+<template>
+    <!-- A full CP page, not an overlay. Same page shell as the translation detail
+         view (TranslationInstanceDetail) so the two summaries read as one product.
+         The Stacks further down are real drawers — comments and assignees — and stay. -->
+    <div class="max-w-[1600px] p-6">
+        <Head :title="instance.subject.title" />
+
+        <!-- Sticky action bar: where you are in the workflow, and every move out of
+             it. Deliberately NOT a second header — the title block below scrolls
+             away, because it is orientation rather than action. See .wf-page-head. -->
+        <div class="wf-page-head">
+            <Button :href="queueUrl" icon="arrow-left" variant="ghost" size="sm" :text="__('workflows::messages.back')" />
+
+            <!-- Only the workflow moves live here now. `gap-6` rather than
+                 `space-x-6`: the bar wraps on narrow windows, and space-x puts its
+                 margin on every child but the first — a wrapped row then starts
+                 indented and gets no vertical spacing at all. -->
+            <div class="ml-auto flex flex-wrap items-center justify-end gap-6">
+                <Button
+                    v-for="action in actions"
+                    :key="action.transition.name"
+                    :variant="action.variant || 'primary'"
+                    size="sm"
+                    :disabled="!action.can_apply || pending === action.transition.name"
+                    :title="action.reason || ''"
+                    :text="action.transition.label"
+                    @click="apply(action)"
+                />
+            </div>
+        </div>
+
+        <header class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+                <!-- Title, then which version this is — and below it the whole
+                     path, not just the current stop.
+
+                     The state used to be a Badge here, with the site riding along
+                     as its `append`. A badge names a position; on a page called
+                     "summary" the question is the route: how many steps there are,
+                     how many are behind you, whether you are still on the line at
+                     all. So the state moved into WorkflowProgress and the site
+                     kept only what it ever was — a qualifier on the title.
+
+                     `.wf-site-code` rather than a second Badge on purpose: a Badge
+                     carries state semantics and its own colour scale, and the site
+                     is neither (see addon.css). -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <h1 class="text-2xl font-semibold dark:text-white">{{ instance.subject.title }}</h1>
+                    <span
+                        v-if="instance.subject.code"
+                        class="wf-site-code"
+                        :title="instance.subject.site_name"
+                    >{{ instance.subject.code }}</span>
+                </div>
+                <!-- Seit wann die Fassung im aktuellen Status steht — die Uhr, nach
+                     der Erinnerung und Auto-Transition rechnen (entered_at). -->
+                <p v-if="instance.entered_at" class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {{ __('workflows::messages.state_since', { state: humanize(instance.current_state), date: formatSince(instance.entered_at) }) }}
+                </p>
+                <!-- The two things you do with the entry itself, as opposed to the
+                     workflow moves in the bar above: open it, or read its log.
+
+                     "Edit" is plain navigation. It used to embed Statamic's
+                     InlineEditForm in a nested Stack, which meant mirroring Statamic's
+                     private publish-form prop map by hand — a coupling that broke on CP
+                     internals (the nested form rendered with no active localization and
+                     threw on `activeLocalization.status` / `.livePreviewUrl`). A link
+                     cannot drift out of sync with a Statamic release. `cp_url` is null
+                     unless the user may actually edit — Statamic's own entry permission
+                     plus site access, see WorkflowController::canOpenEntryEditor(). -->
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                        v-if="instance.subject.cp_url"
+                        :href="instance.subject.cp_url"
+                        icon="pencil"
+                        variant="filled"
+                        size="sm"
+                        :text="__('workflows::messages.edit')"
+                    />
+                    <!-- The page itself, in its own window: the public page for a
+                         published post, otherwise a tokenised preview of the working
+                         copy or draft (see EntryPreviewController::modeFor). `preview_url`
+                         is null on the same terms as `cp_url`, plus "no frontend route". -->
+                    <Button
+                        v-if="instance.subject.preview_url"
+                        :icon="preview.icon"
+                        variant="ghost"
+                        size="sm"
+                        :text="preview.text"
+                        :title="preview.title"
+                        @click="openPreviewWindow(instance.subject.preview_url, instance.subject.id)"
+                    />
+                    <!-- Bookmark for the "Watched" dashboard card — personal, no mail,
+                         no responsibility. Filled while watching, so the state reads at a
+                         glance; `bookmark`, not `eye`, because the eye is the preview. -->
+                    <Button
+                        v-if="watchUrl"
+                        icon="bookmark"
+                        :variant="isWatching ? 'default' : 'ghost'"
+                        size="sm"
+                        :text="isWatching ? __('workflows::messages.watching') : __('workflows::messages.watch')"
+                        :title="isWatching ? __('workflows::messages.unwatch') : null"
+                        :disabled="watchBusy"
+                        @click="toggleWatch"
+                    />
+                    <Button
+                        v-if="canViewHistory"
+                        icon="time-clock"
+                        variant="ghost"
+                        size="sm"
+                        :text="__('workflows::messages.history_open')"
+                        @click="openHistory"
+                    />
+                </div>
+            </div>
+            <div class="flex shrink-0 items-center gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">{{ __('workflows::messages.assigned_to') }}</span>
+                    <div
+                        v-if="assigneeNames.length"
+                        class="flex items-center -space-x-2"
+                        :title="assigneeNames.join(', ')"
+                    >
+                        <Avatar
+                            v-for="(name, i) in visibleAssignees"
+                            :key="i"
+                            :user="{ name }"
+                            class="ring-2 ring-white dark:ring-gray-900!"
+                        />
+                        <div
+                            v-if="overflowAssignees"
+                            class="flex size-7 items-center justify-center rounded-xl bg-gray-200 text-2xs font-medium text-gray-600 ring-2 ring-white dark:bg-gray-700! dark:text-gray-200! dark:ring-gray-900!"
+                        >+{{ overflowAssignees }}</div>
+                    </div>
+                    <span v-else class="text-sm italic text-gray-400 dark:text-gray-500">{{ __('workflows::messages.no_assignees') }}</span>
+                    <!-- Only for groups the workflow lets assign — `metadata.assigner_groups`.
+                         The endpoint enforces the same rule; this just stops offering a
+                         button that would come back 403. -->
+                    <Button
+                        v-if="canAssign"
+                        icon="pencil"
+                        variant="ghost"
+                        size="sm"
+                        :aria-label="__('workflows::messages.edit_assignees')"
+                        :title="__('workflows::messages.edit_assignees')"
+                        @click="openAssignees"
+                    />
+                </div>
+            </div>
+        </header>
+
+        <!-- The progress bar and the passages it describes, laid out together:
+             above the content when the bar runs horizontally, in a side column to
+             its left when it runs vertically. The bar is about the whole entry, so
+             it belongs to the body rather than the title block — and a side column
+             only makes sense next to something tall, which the content is. -->
+        <div :class="progressLayout.wrapper">
+            <WorkflowProgress :steps="steps" :orientation="progressOrientation" :class="progressLayout.bar" />
+
+            <section v-if="content.length" :class="progressLayout.content">
+                <h2 class="mb-2.5 text-base font-semibold text-gray-700 dark:text-gray-200">{{ __('workflows::messages.content') }}</h2>
+                <div class="space-y-4">
+                    <div
+                        v-for="(block, i) in content"
+                        :key="block.uuid || i"
+                        :id="`passage-${block.uuid}`"
+                        :data-ref="block.uuid"
+                        class="rounded-lg border border-gray-100 p-3 dark:border-gray-800"
+                    >
+                        <!-- Passage header: fieldset handle + reference uuid. Developer
+                             metadata — it only helps when mapping a passage back to the
+                             blueprint or a comment ref, so it is super-admin-only, and the
+                             whole row goes with it rather than leaving an empty strip above
+                             the text. -->
+                        <div v-if="isSuper" class="mb-2 flex items-center gap-2">
+                            <code class="rounded bg-gray-100 px-1.5 py-0.5 text-2xs text-gray-500 dark:bg-gray-800! dark:text-gray-400!">{{ block.handle }}</code>
+                            <span class="select-all font-mono text-2xs text-gray-300 dark:text-gray-600">{{ block.uuid }}</span>
+                        </div>
+
+                        <div
+                            v-if="block.kind === 'html'"
+                            class="fw-prose text-sm text-gray-700 dark:text-gray-300"
+                            :class="block.note ? 'rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700 dark:bg-amber-950/30' : ''"
+                            v-html="block.html"
+                        />
+                        <h3 v-else-if="block.kind === 'heading'" class="text-base font-semibold text-gray-900 dark:text-gray-100">
+                            {{ block.text }}
+                        </h3>
+                        <div v-else-if="block.kind === 'video'">
+                            <div v-if="block.embedUrl" class="relative aspect-video overflow-hidden rounded-lg bg-black">
+                                <iframe
+                                    :src="block.embedUrl"
+                                    class="absolute inset-0 h-full w-full"
+                                    frameborder="0"
+                                    allow="autoplay; fullscreen; picture-in-picture"
+                                    allowfullscreen
+                                />
+                            </div>
+                            <a v-else :href="block.url" :class="link" target="_blank" rel="noopener">{{ block.url }}</a>
+                        </div>
+                        <p v-else-if="block.kind === 'text'" class="text-sm text-gray-600 dark:text-gray-400">
+                            <span v-if="block.label" class="font-medium text-gray-700 dark:text-gray-300">{{ block.label }}: </span>{{ block.text }}
+                        </p>
+
+                        <!-- Comment button below the passage, not above it: you read first
+                             and comment second, and an action bar above the text pushed the
+                             content itself down the page. Still right-aligned, so it stays
+                             out of the reading column. Count and "new" pill travel with the
+                             button. -->
+                        <div class="mt-2 flex items-center justify-end gap-1.5">
+                            <Button
+                                variant="default"
+                                size="xs"
+                                icon="mail-chat-bubble-text"
+                                :text="__('workflows::messages.comments')"
+                                :title="__('workflows::messages.comments')"
+                                @click="openDrawer(block)"
+                            />
+                            <span
+                                v-if="commentCount(block.uuid)"
+                                class="rounded-full bg-gray-200 px-1.5 text-2xs font-semibold text-gray-700 dark:bg-gray-700! dark:text-gray-200!"
+                            >{{ commentCount(block.uuid) }}</span>
+                            <span
+                                v-if="hasNew(block.uuid)"
+                                class="rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white"
+                            >{{ __('workflows::messages.new') }}</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Summary, translations, admin override — three blocks in that order, each
+             fenced off by a rule. A listing rather than pills here: in the post manager
+             the translations are a work list, which site is how far along, so title,
+             site and state each get their own column. The entry being viewed is
+             filtered out inside; the translation view keeps the compact pills, where
+             the versions are a place to jump between rather than the subject. -->
+        <section v-if="totalVersions > 1" class="border-t border-gray-100 pt-6 dark:border-gray-800">
+            <h2 class="mb-2.5 text-base font-semibold text-gray-700 dark:text-gray-200">{{ __('workflows::messages.versions') }}</h2>
+            <VersionListing :versions="localVersions" />
+        </section>
+
+        <!-- History drawer, opened from the sticky bar. It is a log — you consult it
+             when something looks off, and it used to push the page a long way down for
+             everyone else. -->
+        <Stack
+            v-if="canViewHistory"
+            :open="historyDrawer.open"
+            @update:open="(v) => v || closeHistory()"
+            :title="__('workflows::messages.history')"
+            icon="time-clock"
+            size="half"
+        >
+            <WorkflowHistory
+                :history="history"
+                :history-diff-url-template="historyDiffUrlTemplate"
+                :row-class="row"
+                @open-comment="openCommentFromHistory"
+            />
+        </Stack>
+
+        <!-- Comment side drawer for the active fieldset. -->
+        <Stack
+            :open="drawer.open"
+            @update:open="(v) => v || closeDrawer()"
+            @opened="focusComposer"
+            :title="drawerTitle"
+            icon="mail-chat-bubble-text"
+            size="narrow"
+        >
+            <div class="space-y-3">
+                <div
+                    v-for="c in drawerComments"
+                    :key="c.id"
+                    :class="[
+                        'rounded-lg border p-3 text-sm transition-opacity duration-150',
+                        (c.content_stale || c.container_changed)
+                            ? 'border-dashed border-gray-300 bg-gray-100/60 opacity-60 hover:opacity-100 dark:border-gray-600! dark:bg-gray-800/60!'
+                            : 'border-blue-200 bg-blue-50/60 dark:border-blue-800! dark:bg-blue-950/30!',
+                    ]"
+                >
+                    <div class="mb-1 flex items-center gap-2 text-xs text-gray-400">
+                        <span>{{ formatDate(c.at) }} · {{ c.author.name }}</span>
+                        <span v-if="isNew(c)" class="rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white">{{ __('workflows::messages.new') }}</span>
+                        <Button
+                            v-if="c.can_delete"
+                            variant="ghost"
+                            size="xs"
+                            icon="trash"
+                            icon-only
+                            :title="__('workflows::messages.delete')"
+                            :aria-label="__('workflows::messages.delete')"
+                            class="ml-auto"
+                            @click="removeComment(c)"
+                        />
+                    </div>
+                    <div class="whitespace-pre-line text-gray-700 dark:text-gray-200!">{{ c.body }}</div>
+                    <!-- Freshness signals as a compact footer below the body:
+                         • content_stale — the passage itself has been edited.
+                         • container_changed — sibling content in the same
+                           Bard-field container was added / removed / reordered
+                           / edited.
+                         Rendered inline, muted, without background box — they
+                         are metadata about relevance, not alarms about the
+                         content. -->
+                    <div
+                        v-if="c.content_stale || c.container_changed"
+                        class="mt-1.5 flex flex-wrap items-center gap-3 text-xs"
+                    >
+                        <span
+                            v-if="c.content_stale"
+                            class="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300!"
+                        >
+                            <Icon name="warning-diamond" class="size-3" />
+                            {{ __('workflows::messages.comment_content_stale') }}
+                        </span>
+                        <span
+                            v-if="c.container_changed"
+                            class="inline-flex items-center gap-1 text-blue-700 dark:text-blue-300!"
+                        >
+                            <Icon name="pencil" class="size-3" />
+                            {{ __('workflows::messages.comment_container_changed') }}
+                        </span>
+                    </div>
+                </div>
+                <p v-if="!drawerComments.length" class="text-sm text-gray-400">{{ __('workflows::messages.no_comments') }}</p>
+
+                <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700!">
+                    <textarea
+                        data-comment-composer
+                        v-model="draft.body"
+                        rows="3"
+                        class="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm dark:border-gray-600! dark:bg-gray-900! dark:text-gray-200!"
+                        :placeholder="__('workflows::messages.write_comment')"
+                    />
+                    <Button
+                        class="mt-2"
+                        variant="primary"
+                        size="sm"
+                        :disabled="draft.saving || !draft.body.trim()"
+                        :text="__('workflows::messages.save')"
+                        @click="submitComment"
+                    />
+                </div>
+            </div>
+        </Stack>
+
+        <!-- Assignee editor drawer: assignment is owned by the workflow. -->
+        <Stack
+            :open="assigneeDrawer.open"
+            @update:open="(v) => v || closeAssignees()"
+            :title="__('workflows::messages.edit_assignees')"
+            icon="users"
+            size="narrow"
+            inset
+        >
+            <div class="sticky top-0 z-10 mb-1 flex flex-col gap-2 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-700! dark:bg-gray-900!">
+                <Input
+                    v-model="assigneeSearch"
+                    icon="magnifying-glass"
+                    clearable
+                    :placeholder="__('workflows::messages.search_users')"
+                />
+                <Select
+                    v-if="groupOptions.length"
+                    v-model="assigneeGroup"
+                    :options="groupOptions"
+                    clearable
+                    :placeholder="__('workflows::messages.all_groups')"
+                />
+            </div>
+
+            <ul v-if="filteredAssignableUsers.length" class="divide-y divide-gray-100 px-6 pb-4 dark:divide-gray-800">
+                <li v-for="user in filteredAssignableUsers" :key="user.id">
+                    <label class="flex cursor-pointer items-center gap-3 py-2.5 text-sm text-gray-700 dark:text-gray-200">
+                        <input
+                            type="checkbox"
+                            :value="user.id"
+                            v-model="assigneeDrawer.selected"
+                            class="size-4 rounded border-gray-300 text-blue-600"
+                        />
+                        <Avatar :user="{ name: user.name }" class="size-6" />
+                        <Badge
+                            v-if="user.site_allocation"
+                            :text="user.site_allocation"
+                            color="blue"
+                            size="sm"
+                        />
+                        <span class="min-w-0 flex-1 truncate">{{ user.name }}</span>
+                        <span v-if="user.groups && user.groups.length" class="flex flex-wrap justify-end gap-1">
+                            <Badge
+                                v-for="group in user.groups.slice(0, MAX_GROUP_BADGES)"
+                                :key="group"
+                                :text="group"
+                                color="default"
+                                size="sm"
+                            />
+                            <Badge
+                                v-if="user.groups.length > MAX_GROUP_BADGES"
+                                :text="__('workflows::messages.more_groups', { count: user.groups.length - MAX_GROUP_BADGES })"
+                                :title="user.groups.slice(MAX_GROUP_BADGES).join(', ')"
+                                color="default"
+                                size="sm"
+                            />
+                        </span>
+                    </label>
+                </li>
+            </ul>
+            <p v-else class="px-6 py-6 text-center text-sm text-gray-400 dark:text-gray-500">
+                {{ __('workflows::messages.no_users_found') }}
+            </p>
+
+            <template #footer-end>
+                <Button
+                    variant="primary"
+                    size="sm"
+                    :disabled="assigneeDrawer.saving"
+                    :text="__('workflows::messages.save')"
+                    @click="saveAssignees"
+                />
+            </template>
+        </Stack>
+
+        <!-- Assignee picker: opens for a MANUAL `user_assignment` action. Multi-select —
+             handing a step to two people is a normal case, and the server
+             accepts a list. Same UX as the fieldtype picker in the entry editor.
+
+             Nothing in here scrolls on its own: Statamic's modal content is
+             already a capped scroller, and a second one inside it makes the
+             outer content taller than its cap. The modal then opens scrolled
+             (autofocus jumps to the first checkbox) and the prompt disappears
+             under the pinned heading. -->
+        <Modal
+            v-if="picker.action"
+            :open="!!picker.action"
+            @update:open="(v) => v || cancelPicker()"
+        >
+            <!-- Plain ModalTitle — see the picker in TranslationInstanceDetail
+                 for why `.wf-modal-head` is deliberately absent here. -->
+            <ModalTitle>
+                <span class="text-lg font-medium text-gray-900 dark:text-white">{{ __('workflows::messages.pick_assignee_title') }}</span>
+            </ModalTitle>
+
+            <p class="text-sm text-gray-600 dark:text-gray-300">
+                {{ __('workflows::messages.pick_assignee_prompt') }}
+            </p>
+
+            <ul v-if="picker.action.pickable_assignees?.length" class="divide-y divide-gray-100 rounded-md border border-gray-200 dark:divide-gray-800 dark:border-gray-700!">
+                <li v-for="user in picker.action.pickable_assignees" :key="user.id">
+                    <label class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
+                        <input
+                            type="checkbox"
+                            :value="user.id"
+                            v-model="picker.selected"
+                            class="size-4 rounded border-gray-300 text-blue-600"
+                        />
+                        <Badge
+                            v-if="user.site_allocation"
+                            :text="user.site_allocation"
+                            color="blue"
+                            size="sm"
+                        />
+                        <span class="min-w-0 flex-1 truncate">{{ user.name }}</span>
+                    </label>
+                </li>
+            </ul>
+            <p v-else class="py-6 text-center text-sm text-gray-400 dark:text-gray-500">
+                {{ __('workflows::messages.no_users_found') }}
+            </p>
+
+            <template #footer>
+                <div class="flex items-center justify-end gap-2 px-2 pt-3">
+                    <span v-if="picker.selected.length" class="mr-auto text-xs text-gray-500 dark:text-gray-400">
+                        {{ __('workflows::messages.pick_assignee_count', { count: picker.selected.length }) }}
+                    </span>
+                    <Button variant="ghost" :text="__('workflows::messages.cancel')" @click="cancelPicker" />
+                    <Button
+                        variant="primary"
+                        :text="__('workflows::messages.confirm')"
+                        :disabled="!picker.selected.length || picker.saving"
+                        @click="confirmPicker"
+                    />
+                </div>
+            </template>
+        </Modal>
+
+        <!-- Target-site picker for `needs_site_pick` transitions
+             (e.g. start_translation). Splitter layout: left panel shows the
+             source site as context, right panel is a single-select radio
+             list of the still-missing locales. On confirm the backend
+             creates the localization and applies the transition to that new
+             copy; performApply then follows `response.data.url` to the new
+             entry. -->
+        <Modal
+            v-if="sitePicker.action"
+            :open="!!sitePicker.action"
+            @update:open="(v) => v || cancelSitePicker()"
+        >
+            <ModalTitle class="wf-modal-head">
+                <Icon name="dictionary-language-book" class="size-4" />
+                <span class="text-lg font-medium text-gray-900 dark:text-white">{{ __('workflows::messages.transition_site_pick_title') }}</span>
+            </ModalTitle>
+
+            <SplitterGroup direction="horizontal" class="min-h-[16rem]">
+                <SplitterPanel :default-size="40" :min-size="25">
+                    <div class="flex h-full flex-col gap-2 p-3">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            {{ __('workflows::messages.transition_site_pick_source_label') }}
+                        </p>
+                        <!-- Read-only unless the workflow allows a per-run source
+                             pick (`translation_source_pick`) — see the same block in
+                             TranslationInstanceDetail. -->
+                        <ul
+                            v-if="sitePicker.action.needs_source_pick"
+                            class="max-h-72 divide-y divide-gray-100 overflow-auto rounded-md border border-gray-200 dark:divide-gray-800 dark:border-gray-700!"
+                        >
+                            <li v-for="site in sitePicker.action.source_sites" :key="site.value">
+                                <label class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
+                                    <input
+                                        type="radio"
+                                        name="workflow-source-site"
+                                        :value="site.value"
+                                        v-model="sitePicker.source"
+                                        class="size-4 border-gray-300 text-blue-600"
+                                    />
+                                    <span class="min-w-0 flex-1 truncate">{{ site.label }}</span>
+                                    <span class="font-mono text-xs text-gray-400">{{ site.value }}</span>
+                                </label>
+                            </li>
+                        </ul>
+                        <div v-else class="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-700! dark:bg-gray-800!">
+                            <span class="font-medium text-gray-800 dark:text-gray-100">
+                                {{ sitePicker.action.source_site?.label || sitePicker.action.source_site?.value }}
+                            </span>
+                            <span class="font-mono text-xs text-gray-400">{{ sitePicker.action.source_site?.value }}</span>
+                        </div>
+                    </div>
+                </SplitterPanel>
+                <SplitterResizeHandle />
+                <SplitterPanel :default-size="60" :min-size="40">
+                    <div class="flex h-full flex-col gap-2 p-3">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            {{ __('workflows::messages.transition_site_pick_target_label') }}
+                        </p>
+                        <ul
+                            v-if="sitePicker.action.pickable_sites?.length"
+                            class="max-h-72 divide-y divide-gray-100 overflow-auto rounded-md border border-gray-200 dark:divide-gray-800 dark:border-gray-700!"
+                        >
+                            <li v-for="site in sitePicker.action.pickable_sites" :key="site.value">
+                                <label class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
+                                    <input
+                                        type="radio"
+                                        name="workflow-target-site"
+                                        :value="site.value"
+                                        v-model="sitePicker.selected"
+                                        class="size-4 border-gray-300 text-blue-600"
+                                    />
+                                    <span class="min-w-0 flex-1 truncate">{{ site.label }}</span>
+                                    <span class="font-mono text-xs text-gray-400">{{ site.value }}</span>
+                                </label>
+                            </li>
+                        </ul>
+                        <p v-else class="rounded-md border border-dashed border-gray-200 py-6 text-center text-sm text-gray-400 dark:border-gray-700! dark:text-gray-500">
+                            {{ __('workflows::messages.transition_site_pick_no_targets') }}
+                        </p>
+                    </div>
+                </SplitterPanel>
+            </SplitterGroup>
+
+            <template #footer>
+                <div class="flex justify-end gap-2 px-2 pt-3">
+                    <!-- The confirm request translates the whole entry before it
+                         creates anything, so it takes seconds rather than being
+                         instant. Saying so beats a button that just sits there. -->
+                    <p v-if="sitePicker.saving" class="mr-auto text-xs text-gray-500 dark:text-gray-400">
+                        {{ __('workflows::messages.translation_running') }}
+                    </p>
+                    <Button variant="ghost" :text="__('workflows::messages.cancel')" @click="cancelSitePicker" />
+                    <Button
+                        variant="primary"
+                        :text="__('workflows::messages.transition_site_pick_confirm')"
+                        :loading="sitePicker.saving"
+                        :disabled="!sitePicker.selected || sitePicker.saving"
+                        @click="confirmSitePicker"
+                    />
+                </div>
+            </template>
+        </Modal>
+
+        <!-- PlaceActions::REFRESH_INTERVAL. Only ever shown once the server
+             confirmed something actually changed since page-load — see
+             checkForUpdates(); a no-op check just reschedules silently. -->
+        <Modal
+            v-if="showRefreshModal"
+            :open="showRefreshModal"
+            @update:open="(v) => v || dismissRefresh()"
+        >
+            <ModalTitle>
+                <span class="text-lg font-medium text-gray-900 dark:text-white">{{ __('workflows::messages.refresh_modal_title') }}</span>
+            </ModalTitle>
+            <p class="text-sm text-gray-600 dark:text-gray-300">
+                {{ __('workflows::messages.refresh_modal_body') }}
+            </p>
+            <template #footer>
+                <div class="flex items-center justify-end gap-2 px-2 pt-3">
+                    <Button variant="ghost" :text="__('workflows::messages.refresh_modal_later')" @click="dismissRefresh" />
+                    <Button variant="primary" :text="__('workflows::messages.refresh_modal_confirm')" @click="confirmRefresh" />
+                </div>
+            </template>
+        </Modal>
+
+        <!-- The manual state override stays at the end of the page, apart from the
+             transitions in the sticky bar. It is an admin correction tool, not an
+             everyday step, and next to the transitions it would be easy to mistake
+             for one. -->
+        <div v-if="canSetState" class="mt-8 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-6 dark:border-gray-800">
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.set_state') }}</span>
+            <Select v-model="manualState" :options="places" size="sm" class="w-56" />
+            <Button
+                size="sm"
+                :text="__('workflows::messages.set')"
+                :disabled="settingState || manualState === instance.current_state"
+                @click="setState"
+            />
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref, computed, getCurrentInstance, onUnmounted } from 'vue';
+import { Avatar, Badge, Button, Icon, Input, Modal, ModalTitle, Select, SplitterGroup, SplitterPanel, SplitterResizeHandle, Stack } from '@statamic/cms/ui';
+import { Head } from '@statamic/cms/inertia';
+import WorkflowProgress from '../components/WorkflowProgress.vue';
+import VersionListing from '../components/VersionListing.vue';
+import WorkflowHistory from '../components/WorkflowHistory.vue';
+// Only the registration is still needed here: it seeds the module-level colour
+// cache that WorkflowProgress reads through stateColor(). The page itself no
+// longer resolves a colour or a label — the bar does.
+import { humanize, registerStateColors, registerStateLabels } from '../support/states.js';
+import { openPreviewWindow, previewPresentation } from '../support/preview.js';
+import { useWatch } from '../support/watch.js';
+
+const props = defineProps({
+    instance: { type: Object, required: true },
+    content: { type: Array, default: () => [] },
+    versions: { type: Array, default: () => [] },
+    // Super admins + `config/workflows.php → history_groups`; false hides button and drawer.
+    canViewHistory: { type: Boolean, default: false },
+    history: { type: Array, default: () => [] },
+    historyDiffUrlTemplate: { type: String, default: '' },
+    comments: { type: Array, default: () => [] },
+    commentUrl: { type: String, default: '' },
+    // Separate named routes rather than `commentUrl` + a suffix: commentUrl ends in
+    // `?workflow=<name>`, so appending would land the path inside the query string.
+    commentReadUrl: { type: String, default: '' },
+    // Whether the current user watches this version, and where to toggle it.
+    watching: { type: Boolean, default: false },
+    watchUrl: { type: String, default: '' },
+    commentDeleteUrlTemplate: { type: String, default: '' },
+    actions: { type: Array, default: () => [] },
+    applyUrls: { type: Object, default: () => ({}) },
+    assigneeUrl: { type: String, default: '' },
+    assignableUsers: { type: Array, default: () => [] },
+    canSetState: { type: Boolean, default: false },
+    // Strict super admin. Gates the developer metadata in the passage headers
+    // (fieldset handle, passage uuid) — defaults to false so a caller that
+    // forgets the prop hides it rather than leaking it.
+    isSuper: { type: Boolean, default: false },
+    // Whether the assignee picker is offered — `metadata.assigner_groups`.
+    canAssign: { type: Boolean, default: false },
+    stateUrl: { type: String, default: '' },
+    places: { type: Array, default: () => [] },
+    // The same places as a path — ordered steps plus the branch the subject
+    // took, if any. Filtered and anchored server-side; see Workflow\ProgressSteps.
+    steps: { type: Object, default: () => ({ main: [], branch: null, current: null }) },
+    // `horizontal` | `vertical` — the workflow's own choice, and the reason the bar
+    // sits where it sits. See ProgressSteps::ORIENTATION.
+    progressOrientation: { type: String, default: 'horizontal' },
+    queueUrl: { type: String, default: '' },
+    // Place handle => Badge color, from each place's `metadata.color`.
+    stateColors: { type: Object, default: () => ({}) },
+    stateLabels: { type: Object, default: () => ({}) },
+    // Minutes to wait before asking the server whether anything changed — see
+    // PlaceActions::REFRESH_INTERVAL. Null when the current place carries none,
+    // which is the common case.
+    refreshAfterMinutes: { type: Number, default: null },
+    statusUrl: { type: String, default: '' },
+});
+
+const preview = computed(() => previewPresentation(props.instance.subject.preview_mode));
+
+registerStateColors(props.stateColors);
+registerStateLabels(props.stateLabels);
+
+// Short date + time in the CP's language, for the "in this state since" line.
+function formatSince(iso) {
+    try {
+        return new Date(iso).toLocaleString(document.documentElement.lang || undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    } catch (e) {
+        return iso;
+    }
+}
+// --- progress bar placement ---
+// Where the bar goes follows its ORIENTATION, and only that: horizontal means
+// above the content, vertical means a side column to its left. One value drives
+// both, rather than two settings that could disagree.
+//
+// The value comes from the workflow (`metadata.progress_orientation`, set in the
+// settings editor) because it depends on the SHAPE of the definition — a
+// seven-step flow reads as a wide band above the content, a four-step one beside
+// it. It used to be a constant in this file, which meant every workflow got the
+// same answer and only a developer could change it.
+//
+// `lg:` and not `sm:` for the side column: below that width there is no room for
+// two columns, so the vertical bar stacks above the content anyway — which is the
+// horizontal case's layout, with the bar's own steps still running downwards.
+//
+// `lg:self-start` keeps the Card at its own height. A flex row stretches its items
+// to the tallest one by default, so the bar grew to the full height of the content
+// beside it and stood in a mostly empty panel. No `!` needed here, unlike below:
+// nothing else on this element sets `align-self`, and the stretch came from the
+// container's default rather than from a class that could lose a cascade fight.
+//
+// `lg:flex-row!` — the `!` is load-bearing, not defensive. Statamic's own
+// stylesheet loads AFTER the addon's and defines `.flex-col` at the same
+// specificity, so without the important flag the column direction wins and the bar
+// renders ABOVE the content instead of beside it, at the right width, which looks
+// like a layout bug and is really a cascade one. (`lg:w-64` needs no flag: nothing
+// in the CP stylesheet competes for the width of this element.) Same workaround the
+// dark variants in this addon carry, for the same reason.
+const progressLayout = computed(() =>
+    props.progressOrientation === 'vertical'
+        ? { wrapper: 'mb-8 flex flex-col gap-6 lg:flex-row!', bar: 'lg:w-64 lg:shrink-0 lg:self-start', content: 'min-w-0 flex-1' }
+        : { wrapper: 'mb-8 space-y-6', bar: '', content: '' },
+);
+
+// Shared utility-class strings reused across the template.
+const link = 'text-blue-600 no-underline hover:underline';
+const row = 'border-b border-slate-100 py-2.5 text-sm';
+
+const pending = ref(null);
+// Assignee-picker state used when a transition declares a manual `user_assignment`.
+// `selected` is a list — the assignee picker is multi-select.
+const picker = ref({ action: null, selected: [], saving: false });
+// Target-site picker for transitions declaring `needs_site_pick` (typical:
+// start_translation). Single-select, distinct state from the assignee picker
+// so the two flows never step on each other.
+const sitePicker = ref({ action: null, selected: null, source: null, saving: false });
+const axios = getCurrentInstance()?.appContext?.config?.globalProperties?.$axios;
+
+const { watching: isWatching, busy: watchBusy, toggle: toggleWatch } = useWatch(props.watching, props.watchUrl, axios);
+
+async function fetchJson(url) {
+    if (axios) return (await axios.get(url)).data;
+    const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) throw new Error('request failed');
+    return res.json();
+}
+
+// --- refresh reminder (PlaceActions::REFRESH_INTERVAL) ---
+// The baseline is whatever the page loaded with — comparing against it, not
+// against the previous poll, is what lets an unrelated no-op poll leave the
+// timer running silently instead of drifting the comparison forward.
+const refreshBaseline = { state: props.instance.current_state, updatedAt: props.instance.updated_at };
+const showRefreshModal = ref(false);
+let refreshTimer = null;
+
+function scheduleRefreshCheck() {
+    if (!props.refreshAfterMinutes || !props.statusUrl) return;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(checkForUpdates, props.refreshAfterMinutes * 60_000);
+}
+
+async function checkForUpdates() {
+    try {
+        const data = await fetchJson(props.statusUrl);
+        if (data.current_state !== refreshBaseline.state || data.updated_at !== refreshBaseline.updatedAt) {
+            showRefreshModal.value = true;
+
+            return;
+        }
+    } catch (e) {
+        // A failed check is not worth bothering the user over — just try again
+        // on the next tick.
+    }
+    scheduleRefreshCheck();
+}
+
+function confirmRefresh() {
+    window.location.reload();
+}
+
+// "Later" does not mean "never" — the reminder is only useful if it keeps
+// coming back, same as the SLA ageing it borrows the idea from.
+function dismissRefresh() {
+    showRefreshModal.value = false;
+    scheduleRefreshCheck();
+}
+
+scheduleRefreshCheck();
+onUnmounted(() => clearTimeout(refreshTimer));
+
+// Super-only manual state override.
+const manualState = ref(props.instance.current_state);
+const settingState = ref(false);
+
+async function setState() {
+    if (settingState.value || manualState.value === props.instance.current_state) return;
+    settingState.value = true;
+
+    try {
+        if (axios) {
+            await axios.post(props.stateUrl, { state: manualState.value });
+        } else {
+            const res = await fetch(props.stateUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ state: manualState.value }),
+            });
+            if (!res.ok) throw new Error('request failed');
+        }
+
+        window.Statamic?.$toast?.success(__('workflows::messages.state_set'));
+        window.location.reload();
+    } catch (e) {
+        settingState.value = false;
+        window.Statamic?.$toast?.error(__('workflows::messages.state_set_error'));
+    }
+}
+
+// Assignees: local copies so the header updates without a full reload.
+const assigneeNames = ref([...(props.instance.assignees ?? [])]);
+const assigneeIds = ref([...(props.instance.assignee_ids ?? [])]);
+const assigneeDrawer = ref({ open: false, selected: [], saving: false });
+
+// Header shows a bounded, overlapping avatar stack (+N overflow) so the layout
+// stays put no matter how many people are assigned; full list is on hover.
+const MAX_AVATARS = 4;
+const visibleAssignees = computed(() => assigneeNames.value.slice(0, MAX_AVATARS));
+const overflowAssignees = computed(() => Math.max(0, assigneeNames.value.length - MAX_AVATARS));
+
+// One entry per site-version — the section shows when there's more than one
+// version to compare.
+const totalVersions = computed(() => props.versions.length);
+
+// Local, mutable copy of the versions payload so we can clear the "NEW"
+// amber badge on the current version as soon as its comments are marked read
+// (either automatically on mount or when the redakteur opens a passage drawer).
+// JSON round-trip unwraps any Vue reactive proxies safely — plain payload only.
+const localVersions = ref(JSON.parse(JSON.stringify(props.versions ?? [])));
+
+function clearCurrentVersionNewFlag() {
+    for (const version of localVersions.value) {
+        if (version.current) version.has_new_comments = false;
+    }
+}
+
+// Drawer search + group filter (client-side over the loaded user list).
+const MAX_GROUP_BADGES = 2;
+const assigneeSearch = ref('');
+const assigneeGroup = ref(null);
+
+const groupOptions = computed(() => {
+    const groups = new Set();
+    props.assignableUsers.forEach((u) => (u.groups ?? []).forEach((g) => groups.add(g)));
+    return [...groups].sort((a, b) => a.localeCompare(b)).map((g) => ({ value: g, label: g }));
+});
+
+const filteredAssignableUsers = computed(() => {
+    const term = assigneeSearch.value.trim().toLowerCase();
+    return props.assignableUsers.filter((u) => {
+        const matchesName = !term || (u.name ?? '').toLowerCase().includes(term);
+        const matchesGroup = !assigneeGroup.value || (u.groups ?? []).includes(assigneeGroup.value);
+        return matchesName && matchesGroup;
+    });
+});
+
+function openAssignees() {
+    assigneeSearch.value = '';
+    assigneeGroup.value = null;
+    assigneeDrawer.value = { open: true, selected: [...assigneeIds.value], saving: false };
+}
+function closeAssignees() {
+    assigneeDrawer.value.open = false;
+}
+
+async function saveAssignees() {
+    if (assigneeDrawer.value.saving) return;
+    assigneeDrawer.value.saving = true;
+
+    const payload = { assignees: [...assigneeDrawer.value.selected] };
+
+    try {
+        const response = axios
+            ? (await axios.post(props.assigneeUrl, payload)).data
+            : await (
+                  await fetch(props.assigneeUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                      body: JSON.stringify(payload),
+                  })
+              ).json();
+
+        assigneeIds.value = response.data?.assignee_ids ?? payload.assignees;
+        assigneeNames.value = response.data?.assignees ?? assigneeNames.value;
+        assigneeDrawer.value.open = false;
+        window.Statamic?.$toast?.success(__('workflows::messages.assignees_saved'));
+    } catch (e) {
+        window.Statamic?.$toast?.error(__('workflows::messages.assignees_save_error'));
+    } finally {
+        assigneeDrawer.value.saving = false;
+    }
+}
+
+// Comments: local copy so we can append without a full reload.
+const items = ref([...props.comments]);
+const draft = ref({ ref: null, body: '', saving: false });
+
+// History drawer state. Opened from the sticky bar; the log lives out of the way
+// until someone asks for it.
+const historyDrawer = ref({ open: false });
+
+function openHistory() {
+    historyDrawer.value.open = true;
+}
+
+function closeHistory() {
+    historyDrawer.value.open = false;
+}
+
+// Comment side drawer state.
+const drawer = ref({ open: false, block: null });
+const drawerComments = computed(() => (drawer.value.block ? commentsFor(drawer.value.block.uuid) : []));
+const drawerTitle = computed(() =>
+    drawer.value.block ? `${__('workflows::messages.comments')} — ${drawer.value.block.handle}` : __('workflows::messages.comments')
+);
+
+// "New" = unread by the current user; the server computes `is_new` from the
+// per-user last-seen timestamp. Opening a passage's drawer marks it as read.
+function isNew(comment) {
+    return !!comment.is_new;
+}
+
+function commentsFor(uuid) {
+    return items.value.filter((c) => c.ref?.uuid === uuid);
+}
+function commentCount(uuid) {
+    return commentsFor(uuid).length;
+}
+function hasNew(uuid) {
+    return commentsFor(uuid).some(isNew);
+}
+
+async function openDrawer(block) {
+    drawer.value = { open: true, block };
+    draft.value = { ref: { uuid: block.uuid, handle: block.handle }, body: '', saving: false };
+    await markRead(block.uuid);
+}
+
+// Timeline handoff: a click on a comment_created event in the History list
+// opens the drawer scoped to that comment's passage. If the passage still
+// exists in the current content, we reuse the live block (so the drawer
+// title matches the passage handle exactly); otherwise we fall back to a
+// synthetic block using whatever the event carried, so the drawer still
+// opens and shows the archived comment thread.
+function openCommentFromHistory({ passageRef }) {
+    if (!passageRef) return;
+    const live = (props.content || []).find((b) => b?.uuid === passageRef);
+    const historyEvent = (props.history || []).find(
+        (e) => e.type === 'comment_created' && e.comment?.passage_ref === passageRef,
+    );
+    const block = live ?? {
+        uuid: passageRef,
+        handle: historyEvent?.comment?.passage_handle ?? passageRef,
+    };
+    // Hand over rather than stack: the history drawer is what the user clicked out
+    // of, and leaving it open behind the comment thread would put two overlays on
+    // screen for one intent.
+    closeHistory();
+    openDrawer(block);
+}
+
+// Mark this passage's comments as seen → they're no longer "new" for the user.
+async function markRead(uuid) {
+    const url = props.commentReadUrl;
+
+    if (!url) return;
+
+    try {
+        if (axios) {
+            await axios.post(url, { passage_ref: uuid });
+        } else {
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ passage_ref: uuid }),
+            });
+        }
+    } catch (e) {
+        // Non-critical: the badge will simply reappear on next load.
+    }
+
+    // Optimistic local update so the per-block "new" dot and the top-level
+    // amber "NEW" badge on this version disappear immediately.
+    items.value.forEach((c) => {
+        if (c.ref?.uuid === uuid) c.is_new = false;
+    });
+    if (!items.value.some((c) => c.is_new)) {
+        clearCurrentVersionNewFlag();
+    }
+
+    items.value.forEach((c) => {
+        if (c.ref?.uuid === uuid) c.is_new = false;
+    });
+}
+
+function closeDrawer() {
+    drawer.value.open = false;
+}
+
+function focusComposer() {
+    document.querySelector('[data-comment-composer]')?.focus();
+}
+
+// Called when a transition button is clicked. Transitions marked with
+// `needs_site_pick` (e.g. start_translation) open a target-language modal;
+// those with a manual `user_assignment` open the assignee picker; everything else
+// applies immediately.
+function apply(action) {
+    if (!action.can_apply) return;
+    if (action.needs_site_pick) {
+        // `source` starts on the server's preselection; it only becomes a choice
+        // where the workflow allows one.
+        sitePicker.value = { action, selected: null, source: action.source_site?.value ?? null, saving: false };
+        return;
+    }
+    if (action.needs_pick) {
+        picker.value = { action, selected: [], saving: false };
+        return;
+    }
+    performApply(action, {});
+}
+
+function cancelPicker() {
+    if (picker.value.saving) return;
+    picker.value = { action: null, selected: [], saving: false };
+}
+
+async function confirmPicker() {
+    if (!picker.value.selected.length) return;
+    picker.value.saving = true;
+    await performApply(picker.value.action, { assignees: picker.value.selected });
+    // performApply reloads on success — no need to reset picker here.
+}
+
+function cancelSitePicker() {
+    if (sitePicker.value.saving) return;
+    sitePicker.value = { action: null, selected: null, source: null, saving: false };
+}
+
+// The request behind this does the whole machine translation before it creates
+// anything, so a failure means there is no entry to clean up — see
+// WorkflowController::applyTransition().
+async function confirmSitePicker() {
+    if (!sitePicker.value.selected) return;
+    sitePicker.value.saving = true;
+    // `source_site` only where the workflow allows a per-run pick — the server
+    // ignores it otherwise.
+    await performApply(sitePicker.value.action, {
+        target_site: sitePicker.value.selected,
+        ...(sitePicker.value.action.needs_source_pick ? { source_site: sitePicker.value.source } : {}),
+    });
+}
+
+async function performApply(action, payload) {
+    const url = props.applyUrls[action.transition.name];
+    pending.value = action.transition.name;
+
+    try {
+        const response = axios
+            ? (await axios.post(url, payload)).data
+            : await (await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify(payload),
+            })).json();
+
+        const note = response?.demo ? ` ${__('workflows::messages.demo_note')}` : '';
+        // A submitted plain-language rewrite finishes minutes later, so the version
+        // still carries the source text when the page reloads. Carried in the same
+        // toast — the CP's toast API only has success/error.
+        const pendingNote = response?.data?.pending_jobs
+            ? ` ${__('workflows::messages.translation_plain_submitted')}`
+            : '';
+        window.Statamic?.$toast?.success(`${__('workflows::messages.applied', { action: action.transition.label })}${note}${pendingNote}`);
+
+        // Transitions that create a new subject (e.g. start_translation
+        // localizing into a target site) return an entry-specific `url` in
+        // the response — jump the user straight to the new copy so they can
+        // start working on it. Real (non-demo) transitions otherwise reload
+        // so the page reflects the new state from the store.
+        const nextUrl = response?.data?.url;
+        if (nextUrl) {
+            window.location.href = nextUrl;
+        } else if (!response?.demo) {
+            window.location.reload();
+        }
+    } catch (e) {
+        const message = e?.response?.data?.message || __('workflows::messages.transition_error');
+        window.Statamic?.$toast?.error(message);
+    } finally {
+        pending.value = null;
+        picker.value.saving = false;
+        sitePicker.value.saving = false;
+    }
+}
+
+function formatDate(iso) {
+    try {
+        return new Date(iso).toLocaleString();
+    } catch (e) {
+        return iso;
+    }
+}
+
+async function removeComment(comment) {
+    if (!comment.can_delete) return;
+    if (!window.confirm(__('workflows::messages.delete_comment_confirm'))) return;
+
+    const url = props.commentDeleteUrlTemplate.replace('__COMMENT__', encodeURIComponent(comment.id));
+
+    try {
+        if (axios) {
+            await axios.delete(url);
+        } else {
+            await fetch(url, {
+                method: 'DELETE',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+        }
+
+        items.value = items.value.filter((c) => c.id !== comment.id);
+        window.Statamic?.$toast?.success(__('workflows::messages.comment_deleted'));
+    } catch (e) {
+        window.Statamic?.$toast?.error(__('workflows::messages.comment_delete_error'));
+    }
+}
+
+async function submitComment() {
+    const body = draft.value.body.trim();
+    if (!body || draft.value.saving) return;
+
+    draft.value.saving = true;
+
+    const payload = {
+        body,
+        passage_ref: draft.value.ref?.uuid ?? null,
+        passage_handle: draft.value.ref?.handle ?? null,
+    };
+
+    try {
+        const response = axios
+            ? (await axios.post(props.commentUrl, payload)).data
+            : await (
+                  await fetch(props.commentUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                      body: JSON.stringify(payload),
+                  })
+              ).json();
+
+        items.value.push(response.data);
+        draft.value.body = '';
+        draft.value.saving = false;
+        window.Statamic?.$toast?.success(__('workflows::messages.comment_saved'));
+    } catch (e) {
+        draft.value.saving = false;
+        window.Statamic?.$toast?.error(__('workflows::messages.comment_save_error'));
+    }
+}
+
+// Opening the page deliberately does NOT mark anything read. It used to: every
+// passage carrying a new-for-us comment was marked on mount, which meant the whole
+// point of the markers was lost — they vanished in the same instant the page
+// appeared, so you could never see WHICH set somebody had commented on. Reading is
+// opening that set's drawer (openDrawer → markRead), and only that clears it.
+</script>
+
+<style scoped>
+/* Minimal prose styling for the augmented Bard HTML rendered via v-html. */
+.fw-prose :deep(p) { margin: 0 0 0.75rem; line-height: 1.6; }
+.fw-prose :deep(p:last-child) { margin-bottom: 0; }
+.fw-prose :deep(h2),
+.fw-prose :deep(h3),
+.fw-prose :deep(h4) { margin: 1rem 0 0.5rem; font-weight: 600; line-height: 1.3; }
+.fw-prose :deep(ul),
+.fw-prose :deep(ol) { margin: 0 0 0.75rem; padding-inline-start: 1.25rem; }
+.fw-prose :deep(ul) { list-style: disc; }
+.fw-prose :deep(ol) { list-style: decimal; }
+.fw-prose :deep(li) { margin: 0.15rem 0; }
+.fw-prose :deep(a) { color: #2563eb; text-decoration: underline; }
+.fw-prose :deep(img) { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.5rem 0; }
+.fw-prose :deep(table) { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+.fw-prose :deep(th),
+.fw-prose :deep(td) { border: 1px solid #e5e7eb; padding: 0.4rem 0.6rem; text-align: start; }
+
+/* Brief highlight when jumping to a referenced passage. */
+.fw-flash { animation: fw-flash 1.2s ease-out; }
+@keyframes fw-flash {
+    0% { background-color: rgb(254 240 138 / 0.7); }
+    100% { background-color: transparent; }
+}
+</style>

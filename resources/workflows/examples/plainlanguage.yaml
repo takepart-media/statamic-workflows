@@ -1,0 +1,145 @@
+name: plainlanguage
+type: state_machine
+marking_store: { type: method, property: current_state }
+collections: [posts, pages]
+initial_place: plain_ready
+metadata:
+  label: 'Plain Language (plain language) with Subject Review'
+  nav: { slug: plain-language-manager, icon: content-book-open, order: 3 }
+  # Same source-vs-target detail view as the translation manager: the two managers
+  # deliberately look alike, only the workflow differs.
+  detail: translation
+  # THE key that makes this the plain-language manager rather than a second
+  # translation manager. It does two things at once, on purpose:
+  #
+  #   1. it names the one site this manager writes into — so its start transition
+  #      asks no language question, there is nothing to choose;
+  #   2. it routes the texts to the plain-language service (asynchronous, answers
+  #      with a rewritten document) instead of DeepL.
+  #
+  # It also takes the site off every other manager's target list, which is what
+  # makes "the translation manager can no longer produce plain language" true
+  # without a second setting anywhere.
+  #
+  # Adjust to the project's own site handle — `plain` is only a placeholder.
+  # The settings editor validates it against the real site list.
+  plain_language_site: plain
+  # Where a finished rewrite lands. The poll command moves the version here the
+  # moment the service answers with usable text — directly, without a transition,
+  # because nobody clicked (see Console\PollPlainLanguageCommand). That is what
+  # makes `plain_generated` below the right place to hang the "it's ready" mail
+  # on: it is the one moment both ways in pass through.
+  #
+  # Without this setting the version simply stays in `in_plain_language` until
+  # somebody submits it by hand — and then nothing announces that the rewrite
+  # arrived, because no state changed.
+  plain_language_completed_place: plain_generated
+  # Which version the rewrite reads. Empty (the default) means the post's origin,
+  # which is the normal case here: German original in, plain language out.
+  # translation_source_site: de
+  #
+  # Whoever starts the rewrite gets the task, so it appears in their personal
+  # queue — only assignees may run a transition.
+  assign_creator: true
+  default_assignee_group: editor
+  # `plain_approved` is finished but not a publish place, so backfilling needs it
+  # spelled out. "Already done" here means: a version in `plain_language_site`
+  # exists — NOT "the post exists in several sites", which would count an English
+  # translation as plain language.
+  seed_published_place: plain_approved
+  # site_fields: [entities]
+  # Keep the History readable: without a list, every changed field is surfaced.
+  history_fields: [title, intro, content]
+places:
+  plain_ready:
+    label: 'Source Ready'
+    metadata: { required_group: editor, color: blue }
+  in_plain_language:
+    label: 'In Plain Language'
+    metadata:
+      required_group: editor
+      color: purple
+      actions:
+        # With `plain_language_completed_place` set above, a version leaves this
+        # place BY ITSELF the moment the text lands — so the spinner covers
+        # precisely the span where showing the blocks would show stale data, and
+        # nothing else. (A version sent back by `needs_changes_plain` sits here
+        # too, but with no job open, so the spinner correctly stays away — see
+        # Workflow\PlaceActions::PENDING_REWRITE_SPINNER.)
+        - type: pending_rewrite_spinner
+        # A reviewer who leaves this tab open for a while gets asked, after 10
+        # minutes, whether to reload — but only once the rewrite has actually
+        # landed; an unrelated no-op check just runs the timer again silently.
+        - type: refresh_interval
+          minutes: 10
+  plain_generated:
+    label: 'Plain Language Ready'
+    metadata:
+      required_group: editor
+      color: orange
+      actions:
+        # Die Mail, um die es hier geht. Dieselbe `mail`-Action, die auch an einer
+        # Transition hängen kann — hier am PLACE, weil es keine Transition gibt:
+        # der Poll-Befehl setzt den Status selbst. Ausgelöst wird sie also von der
+        # ANKUNFT; wer sie bekommt sind die Zugewiesenen, durch
+        # `assign_creator: true` also der- oder diejenige, die die Umschreibung
+        # gestartet hat.
+        - type: mail
+          mail_type: plain_language_ready
+  plain_review:
+    label: 'Subject Review'
+    metadata: { required_group: expert_reviewer, color: teal }
+  plain_approved:
+    label: 'Approved'
+    metadata: { required_group: publisher, color: green }
+transitions:
+  start_plain_language:
+    from: plain_ready
+    to: in_plain_language
+    # One click, no dialog: the target site is settled by
+    # `metadata.plain_language_site` above. The backend creates the version in that
+    # site, applies this transition to it, and hands the texts to the service; the
+    # rewrite lands minutes later via `php artisan workflows:plain-language-poll`.
+    # The source stays in `plain_ready`.
+    #
+    # The button disables itself once a version exists (and while a rewrite is
+    # running) — with no dialog in front of it, that guard is what stops a second
+    # click from creating a second version.
+    metadata:
+      label: 'Create plain language'
+      required_group: editor
+      # Marks this as the step that creates the target version. Mandatory in a
+      # localization workflow — without it nothing would ever be created. No
+      # language dialog here: `plain_language_site` already names the one target.
+      actions:
+        - type: start_localization
+  regenerate_plain_language:
+    # `plain_ready` is in the list because the SOURCE version always sits there —
+    # it is what plain language is made from and never counts as finished, so it
+    # keeps offering both steps: create (blocked once a version exists) and create
+    # again. The other places are the produced version's own review stops.
+    from: [plain_ready, in_plain_language, plain_generated, plain_review, plain_approved]
+    to: in_plain_language
+    # Creates nothing: sends the source's text to the service again and overwrites
+    # THIS version with the result. The escape hatch for a rewrite that came back
+    # unusable — without it the only cure would be deleting the entry.
+    metadata:
+      label: 'Rewrite plain language'
+      required_group: editor
+      actions:
+        - type: plain_language_resubmit
+  submit_plain_language:
+    # Both, because the version only reaches `plain_generated` when the workflow
+    # names a completed place. Leaving `in_plain_language` in the list keeps the
+    # step reachable for a definition that drops that setting again.
+    from: [in_plain_language, plain_generated]
+    to: plain_review
+    metadata: { label: 'Submit for subject review', required_group: editor }
+  approve_plain_language:
+    from: plain_review
+    to: plain_approved
+    metadata: { label: 'Approve', required_group: expert_reviewer }
+  needs_changes_plain:
+    from: [plain_review, plain_approved]
+    to: in_plain_language
+    metadata: { label: 'Needs changes', required_group: expert_reviewer, variant: danger }

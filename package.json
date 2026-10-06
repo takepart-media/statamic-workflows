@@ -1,0 +1,23 @@
+{
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "dev3001": "vite --port 3001",
+        "build": "vite build",
+        "publish": "vite build && cd ../../../ && rm -rf public/vendor/workflows/build && php artisan vendor:publish --tag=workflows --force && cd addons/takepart-media/workflows/",
+        "workflows:build": "node scripts/build-diagrams.mjs"
+    },
+    "devDependencies": {
+        "@mermaid-js/mermaid-cli": "^11.0.0",
+        "@tailwindcss/vite": "^4.3.0",
+        "@vitejs/plugin-vue": "^6.0.0",
+        "laravel-vite-plugin": "^2.0.0",
+        "tailwindcss": "^4.3.0",
+        "vite": "^7.0.0",
+        "vue": "^3.5.0"
+    },
+    "dependencies": {
+        "chart.js": "^4.5.1"
+    }
+}

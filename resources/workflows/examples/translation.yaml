@@ -1,0 +1,91 @@
+name: translation
+type: state_machine
+marking_store: { type: method, property: current_state }
+collections: [posts, pages]
+initial_place: source_ready
+metadata:
+  label: 'Translation with Linguistic & Expert Review'
+  nav: { slug: translation-manager, icon: dictionary-language-book, order: 2 }
+  detail: translation
+  # Which version this manager translates FROM. Empty (the default) means the
+  # post's origin. Set it to translate out of a specific site instead — e.g.
+  # `plain` to build every translation on top of the plain-language version
+  # rather than on the original. A post missing that version cannot be started:
+  # the button says why instead of quietly using the origin.
+  # translation_source_site: plain
+  #
+  # NOTE: `plain_language_site` does NOT belong here any more. Declaring it is what
+  # makes a workflow the plain-language manager, which is now a manager of its own
+  # (see plainlanguage.yaml). A site claimed there is not a target this manager
+  # offers — the site picker, the transfer dialog and both of their server-side
+  # checks all drop it.
+  #
+  # Assign whoever brought the entry into this workflow — the person who started
+  # the translation or moved the entry into another site. Only assignees may run
+  # a transition, so without this (and without `default_assignee_group`) a fresh
+  # translation task arrives with nobody on it and shows up in no personal queue.
+  # Released again at the first transition, which hands the task to the
+  # destination place's `required_group`.
+  assign_creator: true
+  # This flow ends in `approved`, which is finished but not a publish place, so
+  # backfilling needs it spelled out. A post that already exists in more than one
+  # site counts as distributed — every version of it, the source included — while
+  # a single-site post stays in `source_ready`.
+  seed_published_place: approved
+  # Blueprint fields that let an editor pick sites by hand. This workflow owns
+  # that decision (via "transfer to another site"). Declared and validated, but
+  # NOT yet enforced — a blueprint-level read_only lock cannot depend on the
+  # current user (blueprints are cached). See DOCS.md § 2 → Lokalisierungs-Workflows.
+  # site_fields: [entities]
+places:
+  source_ready:
+    label: 'Source Ready'
+    metadata: { required_group: translator }
+  in_translation:
+    label: 'In Translation'
+    metadata: { required_group: translator }
+  linguistic_review:
+    label: 'Linguistic Review'
+    metadata: { required_group: linguistic_reviewer }
+  expert_review:
+    label: 'Expert Review'
+    metadata: { required_group: expert_reviewer }
+  approved:
+    label: 'Approved'
+    metadata: { required_group: publisher }
+transitions:
+  start_translation:
+    from: source_ready
+    to: in_translation
+    # `start_localization` marks THIS as the step that creates the target version.
+    # A localization workflow needs exactly one such transition — the writer
+    # refuses to save one without it, because otherwise every button would move
+    # the source's state and nothing would ever be created.
+    #
+    # The target-site dialog follows the marker: clicking the button asks the
+    # translator which language to translate into, then the backend creates the
+    # localization in the chosen site and applies this transition to the new copy
+    # (the source stays in `source_ready`). Move the marker to another transition
+    # and the dialog moves with it — useful when something has to be settled
+    # before anything is created.
+    metadata:
+      label: 'Start translation'
+      required_group: translator
+      actions:
+        - type: start_localization
+  submit_translation:
+    from: in_translation
+    to: linguistic_review
+    metadata: { label: 'Submit for linguistic review', required_group: translator }
+  pass_linguistic:
+    from: linguistic_review
+    to: expert_review
+    metadata: { label: 'Linguistic OK -> expert', required_group: linguistic_reviewer }
+  approve:
+    from: expert_review
+    to: approved
+    metadata: { label: 'Expert approve', required_group: expert_reviewer }
+  needs_changes:
+    from: [linguistic_review, expert_review]
+    to: source_ready
+    metadata: { label: 'Needs changes', required_group: linguistic_reviewer }

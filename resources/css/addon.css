@@ -1,0 +1,408 @@
+/* Workflow dashboard styles — Tailwind 4.
+ *
+ * The addon is injected into the Statamic CP, which already ships its own
+ * Tailwind build (theme tokens, preflight, UI component styles). We mirror the
+ * `@statamic/cms/tailwind.css` convention:
+ *
+ *   - Theme/utilities go into the CP's low-priority `addon-theme` /
+ *     `addon-utilities` layers. Tailwind still has the full theme available to
+ *     generate our utilities, but the CP's own (tuned) `--color-*` tokens win
+ *     at runtime — so colors, and especially dark-mode grays used by UI
+ *     components like Badge, match the CP exactly instead of being clobbered by
+ *     raw Tailwind defaults.
+ *   - `source(none)` disables auto content detection; we scan only our own
+ *     components via the explicit `@source` below.
+ *   - No preflight import, so the surrounding CP chrome isn't reset. */
+
+@layer addon-theme, addon-utilities;
+
+@import 'tailwindcss/theme.css' layer(addon-theme) source(none);
+@import 'tailwindcss/utilities.css' layer(addon-utilities) source(none);
+
+/* Match the CP's class-based dark mode (.dark on an ancestor) so our `dark:`
+ * utilities respond to the CP theme toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@source '../js/**/*.vue';
+
+/* Listing-table header tint on the workflow index/queue pages: gray-150 in
+ * light, gray-950 (opaque) in dark. Kept unlayered with the extra
+ * `.data-table thead.wf-listing-head` specificity so it beats the CP's own
+ * `.bg-gray-150` utility, which loads after the addon stylesheet and would
+ * otherwise win the cascade and keep the header light in dark mode. */
+.data-table thead.wf-listing-head {
+    background-color: var(--theme-color-gray-150);
+}
+.data-table thead.wf-listing-head:where(.dark, .dark *) {
+    background-color: var(--theme-color-gray-950);
+}
+
+/* Modal headings. Statamic's `Modal` renders its body as
+ * `overflow-auto max-h-[60vh] bg-white dark:bg-gray-800 p-4` and puts the
+ * default slot — and therefore any `ModalTitle` — INSIDE that scroll box, so a
+ * tall modal scrolls its own heading out of view. (Its `#footer` slot is a
+ * sibling of the body and already stays put, which is why every footer belongs
+ * in that slot rather than at the end of the body.)
+ *
+ * Pinning the heading takes three things: `sticky`, a background so content
+ * cannot show through it, and a bleed into the body's own 1rem padding so
+ * scrolled content disappears *under* the heading instead of beside it. The
+ * negative margins land the box exactly on the padding edge, so they add no
+ * horizontal overflow.
+ *
+ * The background is named explicitly rather than inherited. `inherit` copies the
+ * parent's COMPUTED background-color, and a parent that paints nothing computes
+ * to `transparent` — the heading then let scrolled content show straight
+ * through it, which read as the header covering the content.
+ *
+ * One class instead of a repeated utility string: the same heading markup exists
+ * in eight modals across five components. */
+.wf-modal-head {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: -1rem -1rem 0.25rem;
+    padding: 1rem 1rem 0.75rem;
+    background-color: var(--theme-color-white, #fff);
+    border-bottom: 1px solid var(--theme-color-gray-200);
+}
+.wf-modal-head:where(.dark, .dark *) {
+    background-color: var(--theme-color-gray-800);
+    border-bottom-color: var(--theme-color-gray-700);
+}
+
+/* The action bar of the two instance-detail pages: back, plus the workflow
+ * transitions. Pinned to the top so the transitions stay reachable while reading —
+ * those pages run long (title block, content blocks, translations), and the buttons
+ * used to sit at the very end of all of it. Everything that is not a workflow move
+ * (state, site, edit, history) belongs to the title block below instead.
+ *
+ * Same three ingredients as .wf-modal-head above, and for the same reasons: the
+ * background is named explicitly rather than inherited (a parent that paints
+ * nothing computes to `transparent`, and scrolled content then shows straight
+ * through the bar), and the negative margins bleed into the page's own `p-6`
+ * padding so content disappears *under* the bar instead of beside it. They land
+ * exactly on the padding edge, so they add no horizontal overflow.
+ *
+ * `z-index: 10` matches .wf-modal-head deliberately: above the page content,
+ * below the Stacks and Modals that open over it.
+ *
+ * One class rather than a repeated utility string — the same bar exists in
+ * WorkflowInstanceDetail and TranslationInstanceDetail, and the two are supposed
+ * to stay identical. */
+.wf-page-head {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: -1.5rem -1.5rem 1.5rem;
+    padding: 0.75rem 1.5rem;
+    background-color: var(--theme-color-white, #fff);
+    border-bottom: 1px solid var(--theme-color-gray-200);
+}
+.wf-page-head:where(.dark, .dark *) {
+    background-color: var(--theme-color-gray-900);
+    border-bottom-color: var(--theme-color-gray-700);
+}
+
+/* The short site code — `DE`, `EN`, `SIMPLE`. Deliberately not a `Badge`: a Badge
+ * carries state semantics and its own colour scale, while this is a neutral
+ * identifier that must never compete with the workflow-state badge beside it.
+ *
+ * One class rather than a repeated utility string — the same chip sits in the version
+ * pills, in the translations table and in the rows of the two personal dashboard
+ * cards, and all three have to look identical. Monospace so codes of different
+ * lengths still line up in the table column.
+ *
+ * The page title does NOT use this: there the site is a qualifier on the state, so it
+ * rides along as the state badge's `append`. */
+.wf-site-code {
+    display: inline-block;
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.25rem;
+    background-color: var(--theme-color-gray-100);
+    color: var(--theme-color-gray-600);
+    font-family: var(--theme-font-mono, ui-monospace, monospace);
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.025em;
+}
+.wf-site-code:where(.dark, .dark *) {
+    background-color: var(--theme-color-gray-800);
+    color: var(--theme-color-gray-300);
+}
+
+/* Long labels in the addon's own CP nav items.
+ *
+ * `wf-nav-item` is set in ServiceProvider::bootNav() via NavItem::attributes(),
+ * which the sidebar spreads onto the `<a>` through Vue's mergeProps — class
+ * values are concatenated there, so core's `active` class is untouched. Scoping
+ * to our class matters: this must not change the appearance of Statamic's own
+ * nav entries.
+ *
+ * The sidebar is 12rem wide with 0.75rem of inline padding, and the link is a
+ * flex row of icon + 0.75rem gap + label, which leaves the label roughly 124px —
+ * about 17 characters at the nav's `text-sm`. Core sets no truncation, no
+ * wrapping and no `min-width` anywhere in `.nav-main`, so a label that does not
+ * fit simply overflows the sidebar. The shipped labels are short enough (see the
+ * `nav` map in lang/{de,en}/messages.php), but a project defines its own
+ * workflows and picks its own `metadata.nav.label`, and that must degrade
+ * instead of breaking the chrome.
+ *
+ * `min-width: 0` is the load-bearing half: a flex item defaults to
+ * `min-width: auto`, which refuses to shrink below its min-content width, and
+ * for a German compound like "Übersetzungsmanager" min-content IS the whole
+ * word. `overflow-wrap: anywhere` then supplies the break opportunity the word
+ * itself does not have. Wrapping rather than an ellipsis on purpose — a nav
+ * label cut to "Übersetzungsman…" is worse to live with than one on two lines,
+ * and nothing is hidden. */
+.wf-nav-item > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* There is deliberately NO scroll container of our own inside a modal. Statamic's
+ * modal content is already one, capped around 60vh. Adding a second made the
+ * outer content taller than that cap, so the modal opened scrolled — autofocus
+ * lands on the first control — and everything above it, prompt included, sat
+ * hidden under the pinned heading. One scroller, and the heading has something
+ * to pin against. */
+
+/* The personal header card (`workflows_user_header`) takes a full dashboard ROW
+ * but is only drawn across half of it.
+ *
+ * Those are two different things, and both are wanted. The row is a layout
+ * decision: the header introduces the person, the two list cards below answer
+ * "what is on me" and "what did I start", and the header sharing a row with one
+ * of them broke that reading order and left the pair unbalanced. Configured as
+ * `'width' => 100` in the host's `config/statamic/cp.php → widgets`, which is
+ * what makes the two 50-width list cards pair up on the next row.
+ *
+ * But a full-width header is a mostly-empty band: it holds a name, an avatar and
+ * two or three short label/values rows, and stretching that across the whole
+ * dashboard turns it into a horizon line with content in the top-left corner.
+ * So the SLOT stays full-row and the CARD is capped at half.
+ *
+ * A container query rather than a media query, because that is what the widget
+ * grid itself uses: Statamic's Dashboard wraps the widgets in
+ * `.widgets.@container/widgets`, and every widget width is expressed in `@2xl:`
+ * / `@4xl:` / `@7xl:` variants against it. 42rem is Tailwind's `@2xl` — the same
+ * breakpoint at which a 50-width widget stops being full-width and becomes
+ * `w-1/2`, so the header narrows exactly when the cards below it start sitting
+ * side by side. Below it, everything is full-width and the cap lifts, which is
+ * what the unconditional `max-width: 100%` says.
+ *
+ * The cap sits on the card, not on its grid cell: the cell is core's and carries
+ * the row's own padding. */
+.wf-user-header-card {
+    max-width: 100%;
+}
+@container widgets (min-width: 42rem) {
+    .wf-user-header-card {
+        max-width: 50%;
+    }
+}
+
+/* MyQueue widget tabs (`workflows_my_queue`). Restyles Statamic's own Tabs via
+ * its published data-ui hooks to match the dashboard design (blue 2px
+ * indicator, roomier triggers); components and behaviour stay the CP's.
+ *
+ * `[data-ui-tabs-indicator]` is the sliding underline Tabs renders itself
+ * (positioned via --reka-tabs-indicator-position/-size, which we don't touch).
+ * Its stock look is a 1px black/white line; the dashboard's earlier look used
+ * a 2px link-blue line instead, so only colour and thickness are overridden. */
+.wf-widget-tabs [data-ui-tabs-indicator] {
+    height: 2px;
+    background-color: #1c60d8;
+    border-radius: 0;
+}
+.wf-widget-tabs [data-ui-tabs-indicator]:where(.dark, .dark *) {
+    background-color: #60a5fa;
+}
+
+/* `[data-ui-tabs-list]` is TabList's own row. It defaults to a 2-margin
+ * (`mx-2 lg:mx-0`); zeroing it and adding 10px of inline padding instead lines
+ * the tab labels up with the card's 18px text column, same as every other row
+ * in the widget. */
+.wf-widget-tabs [data-ui-tabs-list] {
+    margin-inline: 0 !important;
+    padding-inline: 10px;
+}
+
+/* TabTrigger renders a plain `button` (reka-ui's TabsTrigger); its stock
+ * padding (`px-2 py-1`) reads as cramped next to the rest of the widget, so
+ * triggers get a touch more room on all sides. */
+.wf-widget-tabs [data-ui-tabs-list] > button {
+    padding: 7px 10px 9px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Colour classes for the rows and footers of the two personal dashboard cards
+ * (MyQueue, CreatedByMe).
+ *
+ * Two families, both the DESIGN SPEC's own look, and that is why they are here
+ * rather than expressed with the CP's `Badge`: the urgency rail at the left edge
+ * of a queue row, and the small dot in front of a workflow label (and in front of
+ * every footer entry). A pass that replaced them with Badges produced a different
+ * card — flatter, wider rows, no urgency signal — so the spec look is back.
+ *
+ * The STATE is NOT here. It is the kit's `Badge`, coloured through its own `color`
+ * prop, exactly as the workflow manager listings bind it — a state has to look the
+ * same wherever it is shown, and the managers are where it is read most. There was
+ * briefly a `.wf-pill--<name>` trio in this file for it; it is gone, and it should
+ * not come back.
+ *
+ * Both families key off a colour NAME. The names are Statamic Badge colour names,
+ * because that is what the settings already speak — `metadata.color` on a place
+ * (state, and therefore the rail) and on a workflow (dot), resolved server-side by
+ * DefinitionLoader::stateColor() and PersonalWorkItems::workflowColor(). A
+ * component therefore only ever binds `wf-rail--<name>` / `wf-dot--<name>`; it
+ * never knows a hex.
+ *
+ * Why CSS classes and not inline styles on the elements: the rail needs a
+ * dark-mode counterpart, and an inline `style` cannot carry one. Why literal hexes
+ * and not the CP's `--theme-color-*` tokens: this palette is the design's own —
+ * its "green" is Tailwind's EMERALD (a published post reads teal-green, not
+ * grass) and its "purple" is VIOLET. Pulling `--theme-color-green-700` would
+ * quietly return a different hue than the design was drawn in.
+ *
+ * The two families are kept apart on purpose, because the same name means a
+ * different value in each: `red` is a saturated 500 in a rail (it has to register
+ * at 3px wide) and a plain 500 as a dot, and the rail collapses hues the dot keeps
+ * distinct.
+ *
+ * Unlayered, like the rest of this file, so these beat the addon-utilities
+ * layer. Colour names not listed here simply do not paint — every caller runs
+ * the name through the whitelist in resources/js/support/widgetColors.js first,
+ * which falls back to `default`, so a typo'd `metadata.color` degrades to grey
+ * instead of to nothing.
+ *
+ * Covered names: the full set the addon can produce — DefinitionLoader's
+ * built-in state colours, the workflow palette in PersonalWorkItems, and every
+ * Badge colour a project might configure by hand.
+ * ------------------------------------------------------------------------- */
+
+/* Urgency rail: the 3px bar at the left edge of a queue row, in the row's STATE
+ * colour. Saturated 400/500s throughout — at 3px a 200 is invisible and a 700
+ * reads as a border. Only `default` shifts in dark mode; the hues carry
+ * themselves against both card backgrounds. */
+.wf-rail--default {
+    background-color: #d1d5db;
+}
+.wf-rail--default:where(.dark, .dark *) {
+    background-color: #4b5563;
+}
+.wf-rail--red {
+    background-color: #ef4444;
+}
+.wf-rail--rose {
+    background-color: #fb7185;
+}
+/* The waiting-on-a-human band collapses to one amber: three warm hues a shade
+ * apart is a gradient nobody can read off a 3px bar. */
+.wf-rail--amber,
+.wf-rail--yellow,
+.wf-rail--orange {
+    background-color: #f59e0b;
+}
+.wf-rail--blue {
+    background-color: #60a5fa;
+}
+.wf-rail--sky {
+    background-color: #38bdf8;
+}
+.wf-rail--indigo {
+    background-color: #818cf8;
+}
+.wf-rail--purple,
+.wf-rail--violet {
+    background-color: #a78bfa;
+}
+.wf-rail--fuchsia,
+.wf-rail--pink {
+    background-color: #f472b6;
+}
+.wf-rail--cyan {
+    background-color: #22d3ee;
+}
+.wf-rail--green,
+.wf-rail--emerald,
+.wf-rail--teal,
+.wf-rail--lime {
+    background-color: #34d399;
+}
+
+/* Workflow dot: 6px in front of the workflow label in a row, and the same 6px in
+ * front of each footer entry, in the WORKFLOW's colour (`metadata.color` in the
+ * workflow YAML, else the palette by position). Plain Tailwind 500s — a dot has
+ * no text to contrast with, and the same value works on both card backgrounds,
+ * so no dark variants. */
+.wf-dot--default {
+    background-color: #9ca3af;
+}
+.wf-dot--red {
+    background-color: #ef4444;
+}
+.wf-dot--rose {
+    background-color: #f43f5e;
+}
+.wf-dot--orange {
+    background-color: #f97316;
+}
+.wf-dot--amber {
+    background-color: #f59e0b;
+}
+.wf-dot--yellow {
+    background-color: #eab308;
+}
+.wf-dot--lime {
+    background-color: #84cc16;
+}
+.wf-dot--green {
+    background-color: #22c55e;
+}
+.wf-dot--emerald {
+    background-color: #10b981;
+}
+.wf-dot--teal {
+    background-color: #14b8a6;
+}
+.wf-dot--cyan {
+    background-color: #06b6d4;
+}
+.wf-dot--sky {
+    background-color: #0ea5e9;
+}
+.wf-dot--blue {
+    background-color: #3b82f6;
+}
+.wf-dot--indigo {
+    background-color: #6366f1;
+}
+.wf-dot--violet {
+    background-color: #8b5cf6;
+}
+.wf-dot--purple {
+    background-color: #a855f7;
+}
+.wf-dot--fuchsia {
+    background-color: #d946ef;
+}
+.wf-dot--pink {
+    background-color: #ec4899;
+}
+
+/* WorkflowStatus stack pager (`workflows_status`'s posts-by-state slide-over).
+ * The kit Pagination spaces its prev/next buttons with an internal `gap-1` and
+ * offers no prop for it; scoped bump for readability, same approach as
+ * `.wf-widget-tabs`. */
+.wf-status-pager .gap-1 {
+    gap: 0.625rem;
+}

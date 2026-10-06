@@ -1,0 +1,41 @@
+{
+    "name": "takepart-media/workflows",
+    "description": "Editorial workflow engine and CP dashboard for multi-site Statamic projects.",
+    "type": "statamic-addon",
+    "require": {
+        "statamic/cms": "^6.0",
+        "symfony/workflow": "^7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "TakepartMedia\\Workflows\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "TakepartMedia\\Workflows\\Tests\\": "tests"
+        }
+    },
+    "authors": [
+        {
+            "name": "takepart media",
+            "email": "it@takepart-media.de",
+            "homepage": "https://www.takepart-media.de",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "email": "it@takepart-media.de"
+    },
+    "extra": {
+        "statamic": {
+            "name": "Workflows",
+            "description": "Editorial workflow engine and CP dashboard for multi-site Statamic projects."
+        },
+        "laravel": {
+            "providers": [
+                "TakepartMedia\\Workflows\\ServiceProvider"
+            ]
+        }
+    }
+}
