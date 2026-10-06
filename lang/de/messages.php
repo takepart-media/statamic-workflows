@@ -834,6 +834,13 @@ return [
     'mail_auto_transition_or' => 'oder',
     'mail_auto_transition_body_single' => 'Ohne Rückmeldung wird :transition am :date automatisch ausgeführt.',
 
+    // Warnungen aus dem Definitions-Editor (Workflow\DefinitionLinter). Sie
+    // blockieren nie das Speichern; Handles bleiben wörtlich, wie unten beim Writer.
+    'lint_place_unreachable' => 'Place [:place] ist vom Start-Place aus über keine Transition erreichbar.',
+    'lint_place_dead_end' => 'Place [:place] hat keine ausgehende Transition – was hier landet, kommt nicht weiter.',
+    'lint_duplicate_edge' => 'Transition [:handle] führt wie Transition [:other] von [:from] nach [:to].',
+    'lint_collection_owned_elsewhere' => 'Collection [:collection] gehört dem Workflow [:owner] – dieser Workflow legt dort keine Einträge an.',
+
     // Validierungsfehler aus dem Definitions-Editor (Workflow\WorkflowDefinitionWriter).
     // Landen als Toast im CP, sind also übersetzt — die genannten YAML-Schlüssel,
     // Handles und Action-Typen bleiben aber wortgleich stehen: genau die muss der

@@ -17,7 +17,9 @@ use TakepartMedia\Workflows\Translation\DeeplConfig;
 use TakepartMedia\Workflows\Translation\PlainLanguageConfig;
 use TakepartMedia\Workflows\Workflow\AssignmentCriteria;
 use TakepartMedia\Workflows\Workflow\CustomActions;
+use TakepartMedia\Workflows\Workflow\DefinitionLinter;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
+use TakepartMedia\Workflows\Workflow\DefinitionValidationException;
 use TakepartMedia\Workflows\Workflow\ProgressSteps;
 use TakepartMedia\Workflows\Workflow\WorkflowDataPurger;
 use TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter;
@@ -312,6 +314,10 @@ class WorkflowSettingsController extends CpController
             'active' => $loader->isActive($name),
             'activeUrl' => cp_route('workflows.settings.active', ['workflow' => $name]),
             'saveDefinitionUrl' => cp_route('workflows.settings.save', ['workflow' => $name]),
+            // Dry run of the same payload (errors + warnings, never writes), and
+            // a fresh per-place count for the usage badges.
+            'validateUrl' => cp_route('workflows.settings.validate', ['workflow' => $name]),
+            'usageUrl' => cp_route('workflows.settings.usage', ['workflow' => $name]),
             // What DefinitionLoader adds at read time (pending_revision and its
             // two system transitions) — not part of `definition`, never saved,
             // but shown read-only so the graph matches what runs.
@@ -671,9 +677,7 @@ class WorkflowSettingsController extends CpController
             ], 409);
         }
 
-        $input = $request->input('definition');
-        $input = is_array($input) ? $input : [];
-        $payload = array_intersect_key($input, array_flip(self::DEFINITION_KEYS));
+        $payload = $this->definitionPayload($request);
 
         $sent = is_array($payload['places'] ?? null) ? array_map('strval', array_keys($payload['places'])) : [];
         $missing = array_values(array_diff(array_map('strval', array_keys($before['places'] ?? [])), $sent));
@@ -700,6 +704,10 @@ class WorkflowSettingsController extends CpController
 
         try {
             $writer->save($name, $payload);
+        } catch (DefinitionValidationException $e) {
+            // `message` is the first problem (what the toast shows), `errors`
+            // all of them with their paths, for the graph.
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors], 422);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -728,6 +736,66 @@ class WorkflowSettingsController extends CpController
     }
 
     /**
+     * Dry run of a saveDefinition() payload: the writer's errors (all of them,
+     * with paths) plus DefinitionLinter's warnings. Never writes, ignores
+     * `version`/`force` and answers 200 either way — `valid` says whether the
+     * save would pass validation. The version returned is the current one, so
+     * the editor can notice a change underneath it early.
+     *
+     * `removals` stays empty until removed places are part of the payload.
+     */
+    public function validateDefinition(Request $request, string $workflow)
+    {
+        abort_unless($this->isSuperAdmin(), 403);
+
+        $loader = app(DefinitionLoader::class);
+        abort_unless(in_array($workflow, $loader->allIncludingInactive(), true), 404);
+
+        $writer = app(WorkflowDefinitionWriter::class);
+        $result = $writer->dryRun($workflow, $this->definitionPayload($request));
+
+        return response()->json([
+            'valid' => $result['errors'] === [],
+            'version' => $writer->fingerprint($workflow),
+            'errors' => $result['errors'],
+            'warnings' => app(DefinitionLinter::class)->lint($workflow, $result['definition']),
+            'removals' => [],
+        ]);
+    }
+
+    /**
+     * Entries per place right now, plus the current version — the editor's
+     * usage badges and delete prompts refresh from here without reloading the
+     * page.
+     */
+    public function usage(string $workflow)
+    {
+        abort_unless($this->isSuperAdmin(), 403);
+
+        $loader = app(DefinitionLoader::class);
+        abort_unless(in_array($workflow, $loader->allIncludingInactive(), true), 404);
+
+        return response()->json([
+            'state_usage' => (object) $this->stateUsage($workflow),
+            'version' => app(WorkflowDefinitionWriter::class)->fingerprint($workflow),
+        ]);
+    }
+
+    /**
+     * The `definition` of a graph-editor request, reduced to the keys a save
+     * may carry.
+     *
+     * @return array<string, mixed>
+     */
+    private function definitionPayload(Request $request): array
+    {
+        $input = $request->input('definition');
+        $input = is_array($input) ? $input : [];
+
+        return array_intersect_key($input, array_flip(self::DEFINITION_KEYS));
+    }
+
+    /**
      * Reject unknown collection handles up front. The writer validates them too
      * (it is the authority), but the removal gate would otherwise fire first and
      * make the user confirm a destructive purge before ever learning that the
@@ -737,12 +805,22 @@ class WorkflowSettingsController extends CpController
      */
     private function unknownCollectionResponse(array $collections): ?JsonResponse
     {
-        foreach ($collections as $handle) {
+        foreach (array_values($collections) as $index => $handle) {
             if (! is_string($handle) || Collection::find($handle) === null) {
+                $message = (string) __('workflows::messages.collection_unknown', [
+                    'collection' => is_string($handle) ? $handle : gettype($handle),
+                ]);
+
+                // Same `errors` entry the writer would produce, so the graph
+                // editor can mark the field.
                 return response()->json([
-                    'message' => __('workflows::messages.collection_unknown', [
-                        'collection' => is_string($handle) ? $handle : gettype($handle),
-                    ]),
+                    'message' => $message,
+                    'errors' => [[
+                        'path' => "collections.{$index}",
+                        'code' => 'collection_unknown',
+                        'message' => $message,
+                        'node' => DefinitionValidationException::nodeFor("collections.{$index}"),
+                    ]],
                 ], 422);
             }
         }

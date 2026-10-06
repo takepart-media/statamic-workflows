@@ -1923,6 +1923,8 @@ angehängt.
 | `POST workflows/api/settings/{workflow}/active` | `setWorkflowActive` | Workflow an-/abschalten (`active` in der YAML). |
 | `POST workflows/api/settings/{workflow}/seed` | `seedWorkflowStates` | Status für bestehende Einträge nachtragen (nur aktive Workflows). |
 | `POST workflows/api/settings/{workflow}/definition` | `saveDefinition`* | Speichern des Graph-Editors (Name `workflows.settings.save`). Payload `{version, definition: {places, transitions, metadata, collections, initial_place, marking_store, type}, confirm_collection_removal?, force?}`, Antwort `{data: {definition, version, purged, seeded, state_usage}}`. Siehe Versionierung und Backups unten. |
+| `POST workflows/api/settings/{workflow}/validate` | `validateDefinition`* | Dry-Run desselben Payloads (Name `workflows.settings.validate`), schreibt nie. Antwort immer 200: `{valid, version, errors, warnings, removals}` — siehe Validierung unten. |
+| `GET  workflows/api/settings/{workflow}/usage` | `usage`* | Einträge je Place + aktuelle Version (Name `workflows.settings.usage`): `{state_usage: {place: count}, version}`. |
 | `DELETE workflows/api/settings/{workflow}` | `destroyWorkflow` | Definition löschen; DB-Daten bleiben. |
 | `POST workflows/api/{workflow}/settings` | `saveSettings`* | Editor-Payload speichern. `{workflow}` = Handle (Slug als Fallback). |
 | `POST workflows/api/{workflow}/places/{place}/delete` | `deletePlace`* | Place löschen, ggf. mit `migrate_to`. `{workflow}` = Handle (Slug als Fallback). |
@@ -1943,7 +1945,36 @@ version, definition}` (aktueller Stand) statt zu überschreiben; `force: true`
 `missing_places`), wenn `definition.places` einen bestehenden Place weglässt —
 Places werden nie durch Weglassen gelöscht; **422** wie bei `saveSettings` für
 unbekannte Collections, die Collection-Entfernungs-Bestätigung und
-Writer-Validierungsfehler.
+Writer-Validierungsfehler — die beiden Fehlerfälle als `{message, errors}`
+(siehe unten).
+
+**Validierung: Fehler mit Pfaden.** `WorkflowDefinitionWriter::collectErrors()`
+läuft alle Prüfungen in ihrer gewohnten Reihenfolge durch, sammelt aber statt
+beim ersten Fehler abzubrechen; jede Prüf-Einheit (ein Place, eine Transition,
+eine Action, ein Metadaten-Schlüssel, eine Collection) bricht nur bei ihrem
+eigenen ersten Fehler ab. Jeder Eintrag:
+`{path, code, message, node: {kind: place|transition|workflow, handle}}`, z. B.
+`places.draft`, `places.review.metadata.actions.1`,
+`transitions.submit.metadata.actions`, `metadata.sla`, `collections.0`
+(`code` = Lang-Key ohne `writer_`-Präfix, `node` aus den ersten beiden
+Pfadsegmenten). `validate()`/`save()` werfen weiterhin beim ersten Fehler —
+`DefinitionValidationException` (erbt `InvalidArgumentException`, gleiche
+Meldung wie bisher) mit allen Fehlern in `errors`; `check()` und `dryRun()`
+(`{definition, errors}`) werfen nicht. `saveDefinition` antwortet bei
+Validierungsfehlern **422** `{message: <erster Fehler>, errors: [...]}`;
+`saveSettings`/`deletePlace` bleiben bei `{message}`.
+
+**Warnungen (`DefinitionLinter`).** Blockieren nie, kommen nur vom
+Validate-Endpoint, gleiche Form wie die Fehler: `place_unreachable` (vom
+`initial_place` über keine Transition erreichbar; Places, in die das Addon
+selbst verschiebt — SLA, Einfache-Sprache-Ergebnis, `source_draft_place`,
+`seed_published_place` — zählen als erreichbar), `place_dead_end` (keine
+ausgehende Transition; ausgenommen Publish-Places, der Final-Place, Seed- und
+Einfache-Sprache-Ergebnis-Places und Places mit Rewrite-Spinner),
+`duplicate_edge` (zweite Transition für dasselbe from→to-Paar),
+`collection_owned_elsewhere` (ein anderer Authoring-Workflow besitzt die
+Collection laut `forCollection()`-Logik; geteilte Collections mit
+Lokalisierungs-Workflows sind normal und werden nicht gemeldet).
 
 **Backups.** Bevor der Writer eine Workflow-YAML überschreibt oder löscht
 (`persist()`/`save()`, `setActive()`, `delete()`, `resetToExample()`, außerdem

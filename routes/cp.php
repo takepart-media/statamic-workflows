@@ -64,6 +64,14 @@ Route::post('workflows/api/settings/{workflow}/seed', [WorkflowSettingsControlle
 Route::post('workflows/api/settings/{workflow}/definition', [WorkflowSettingsController::class, 'saveDefinition'])
     ->where('workflow', '[A-Za-z0-9_-]+')
     ->name('workflows.settings.save');
+// Dry run of the same payload: {valid, version, errors, warnings, removals}.
+Route::post('workflows/api/settings/{workflow}/validate', [WorkflowSettingsController::class, 'validateDefinition'])
+    ->where('workflow', '[A-Za-z0-9_-]+')
+    ->name('workflows.settings.validate');
+// Entries per place + current version, for the editor's usage badges.
+Route::get('workflows/api/settings/{workflow}/usage', [WorkflowSettingsController::class, 'usage'])
+    ->where('workflow', '[A-Za-z0-9_-]+')
+    ->name('workflows.settings.usage');
 Route::delete('workflows/api/settings/{workflow}',[WorkflowSettingsController::class, 'destroyWorkflow'])
     ->where('workflow', '(?!install)[A-Za-z0-9_-]+')
     ->name('workflows.settings.destroy');

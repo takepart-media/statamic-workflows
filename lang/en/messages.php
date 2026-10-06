@@ -825,6 +825,13 @@ return [
     'mail_auto_transition_or' => 'or',
     'mail_auto_transition_body_single' => 'Without a response, :transition runs automatically on :date.',
 
+    // Warnings from the definition editor (Workflow\DefinitionLinter). They never
+    // block a save; handles stay verbatim, like in the writer messages below.
+    'lint_place_unreachable' => 'Place [:place] cannot be reached from the initial place by any transition.',
+    'lint_place_dead_end' => 'Place [:place] has no outgoing transition – subjects that land here get stuck.',
+    'lint_duplicate_edge' => 'Transition [:handle] leads from [:from] to [:to] like transition [:other].',
+    'lint_collection_owned_elsewhere' => 'Collection [:collection] is owned by workflow [:owner] – this workflow does not create entries in it.',
+
     // Validation failures from the definition editor (Workflow\WorkflowDefinitionWriter).
     // These reach the CP as a toast, so they are translated — but the YAML keys,
     // handles and action types they name stay verbatim: they are what the author

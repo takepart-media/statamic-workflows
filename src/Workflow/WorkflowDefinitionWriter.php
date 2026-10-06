@@ -85,26 +85,25 @@ class WorkflowDefinitionWriter
     {
         $prepared = $this->prepare($name, $definition, $removePlaces);
 
-        $this->check($prepared);
+        $this->validate($prepared);
 
         $this->persist($name, $prepared);
     }
 
     /**
-     * Everything save() does except writing: merge, strip, validate. Throws the
-     * same InvalidArgumentException save() would.
+     * Everything save() does except writing: merge, strip, validate. Never
+     * throws for an invalid definition — the problems come back as `errors`
+     * (see collectErrors()), empty when save() would accept it.
      *
      * @param  array<string, mixed>  $definition
      * @param  array<int, string>  $removePlaces  see save()
-     * @return array{definition: array<string, mixed>}
+     * @return array{definition: array<string, mixed>, errors: array<int, array{path: string, code: string, message: string, node: array{kind: string, handle: string|null}}>}
      */
     public function dryRun(string $name, array $definition, array $removePlaces = []): array
     {
         $prepared = $this->prepare($name, $definition, $removePlaces);
 
-        $this->check($prepared);
-
-        return ['definition' => $prepared];
+        return ['definition' => $prepared, 'errors' => $this->check($prepared)];
     }
 
     /**
@@ -124,18 +123,15 @@ class WorkflowDefinitionWriter
     }
 
     /**
-     * Validate a prepared definition. Returns the list of problems — for now
-     * always empty, because validate() still stops at the first one and throws
-     * it as an InvalidArgumentException.
+     * Validate a prepared definition without throwing. Returns every problem
+     * found (see collectErrors()) — empty means save() would accept it.
      *
      * @param  array<string, mixed>  $definition
-     * @return array<int, mixed>
+     * @return array<int, array{path: string, code: string, message: string, node: array{kind: string, handle: string|null}}>
      */
     public function check(array $definition): array
     {
-        $this->validate($definition);
-
-        return [];
+        return $this->collectErrors($definition);
     }
 
     /**
@@ -832,16 +828,96 @@ class WorkflowDefinitionWriter
     }
 
 
-    private function fail(string $key, array $replace = []): never
+    /**
+     * Raise a validation failure with a translated message (it reaches the CP
+     * as a toast — see the "Raise a validation failure" note further up). The
+     * path defaults to the check unit currently running (see at()), or
+     * `workflow` outside of one.
+     *
+     * @param  array<string, mixed>  $replace
+     */
+    private function fail(string $key, array $replace = [], ?string $path = null): never
     {
-        throw new InvalidArgumentException((string) __("workflows::messages.writer_{$key}", $replace));
+        $current = end($this->paths);
+
+        throw new DefinitionValidationException(
+            (string) __("workflows::messages.writer_{$key}", $replace),
+            $key,
+            $path ?? ($current === false ? 'workflow' : $current),
+        );
     }
 
     /**
-     * Guard against payloads that would produce a non-bootable workflow.
+     * Dot paths of the check units currently running, innermost last.
+     *
+     * @var array<int, string>
+     */
+    private array $paths = [];
+
+    /**
+     * The problems found so far while collectErrors() runs; null outside of it.
+     *
+     * @var array<int, array{path: string, code: string, message: string, node: array{kind: string, handle: string|null}}>|null
+     */
+    private ?array $collected = null;
+
+    /**
+     * Run one check unit under a path. Inside collectErrors() a failure is
+     * recorded and validation carries on with the next unit; the unit itself
+     * stops at its first failure, because the code after a fail() assumes the
+     * shape that fail() just refused.
+     */
+    private function at(string $path, callable $check): void
+    {
+        $this->paths[] = $path;
+
+        try {
+            $check();
+        } catch (DefinitionValidationException $e) {
+            if ($this->collected === null) {
+                throw $e;
+            }
+
+            $this->collected[] = $e->toArray();
+        } finally {
+            array_pop($this->paths);
+        }
+    }
+
+    /**
+     * Every problem with a definition, in the order validate() has always
+     * reported them — so the first entry is exactly the message a save used to
+     * fail with. Each entry: `{path, code, message, node: {kind, handle}}`.
+     *
+     * A later unit can still trip over a shape an earlier one already refused
+     * (a TypeError on a malformed payload, say). Then the list found so far is
+     * returned — it is not empty, and its first entry is the real answer. With
+     * nothing found yet the error propagates, exactly as before.
      *
      * @param  array<string, mixed>  $definition
+     * @return array<int, array{path: string, code: string, message: string, node: array{kind: string, handle: string|null}}>
      */
+    public function collectErrors(array $definition): array
+    {
+        $outer = $this->collected;
+        $this->collected = [];
+
+        try {
+            $this->runChecks($definition);
+        } catch (DefinitionValidationException $e) {
+            $this->collected[] = $e->toArray();
+        } catch (\Throwable $e) {
+            if ($this->collected === []) {
+                throw $e;
+            }
+        } finally {
+            $errors = $this->collected;
+            $this->collected = $outer;
+        }
+
+        return $errors;
+    }
+
     /**
      * A place `label` is a legacy string or a per-language map over
      * DefinitionLoader::LABEL_LOCALES. Empty entries are dropped, and an empty
@@ -881,155 +957,198 @@ class WorkflowDefinitionWriter
         return $place;
     }
 
+    /**
+     * Guard against payloads that would produce a non-bootable workflow: throws
+     * the first problem collectErrors() finds — the same message a save has
+     * always failed with — with the complete list attached.
+     *
+     * @param  array<string, mixed>  $definition
+     */
     private function validate(array $definition): void
+    {
+        $errors = $this->collectErrors($definition);
+
+        if ($errors === []) {
+            return;
+        }
+
+        $first = $errors[0];
+
+        throw new DefinitionValidationException($first['message'], $first['code'], $first['path'], $errors);
+    }
+
+    /**
+     * The checks themselves, in the order they have always run. Each at() is
+     * one unit: it stops at its own first failure, the next unit runs anyway.
+     *
+     * @param  array<string, mixed>  $definition
+     */
+    private function runChecks(array $definition): void
     {
         $places = array_keys($definition['places'] ?? []);
 
-        if ($places === []) {
-            $this->fail('no_places');
-        }
+        $this->at('places', function () use ($places) {
+            if ($places === []) {
+                $this->fail('no_places');
+            }
+        });
 
-        $initial = $definition['initial_place'] ?? null;
-        if ($initial === null || ! in_array($initial, $places, true)) {
-            $this->fail('initial_place_unknown', ['place' => $initial]);
-        }
+        $this->at('initial_place', function () use ($definition, $places) {
+            $initial = $definition['initial_place'] ?? null;
+            if ($initial === null || ! in_array($initial, $places, true)) {
+                $this->fail('initial_place_unknown', ['place' => $initial]);
+            }
+        });
 
         foreach ($definition['transitions'] ?? [] as $handle => $transition) {
-            $froms = (array) ($transition['from'] ?? []);
-            $to = $transition['to'] ?? null;
+            $this->at("transitions.{$handle}", function () use ($handle, $transition, $places) {
+                $froms = (array) ($transition['from'] ?? []);
+                $to = $transition['to'] ?? null;
 
-            foreach ($froms as $from) {
-                if (! in_array($from, $places, true)) {
-                    $this->fail('transition_from_unknown', ['handle' => $handle, 'place' => $from]);
+                foreach ($froms as $from) {
+                    if (! in_array($from, $places, true)) {
+                        $this->fail('transition_from_unknown', ['handle' => $handle, 'place' => $from]);
+                    }
                 }
-            }
 
-            if (! in_array($to, $places, true)) {
-                $this->fail('transition_to_unknown', ['handle' => $handle, 'place' => $to]);
-            }
+                if (! in_array($to, $places, true)) {
+                    $this->fail('transition_to_unknown', ['handle' => $handle, 'place' => $to]);
+                }
+            });
         }
 
         // Editor MUST NOT ship reserved handles — the merge/strip pass already
         // dropped them, but a client that ignores the schema would land here.
         foreach (self::RESERVED_PLACE_HANDLES as $reserved) {
-            if (in_array($reserved, $places, true)) {
-                $this->fail('place_handle_reserved', ['handle' => $reserved]);
-            }
+            $this->at("places.{$reserved}", function () use ($reserved, $places) {
+                if (in_array($reserved, $places, true)) {
+                    $this->fail('place_handle_reserved', ['handle' => $reserved]);
+                }
+            });
         }
 
         // A place colour must resolve to a real Badge variant, otherwise the CP
         // renders an unstyled badge. Empty/absent means "use the default".
         foreach ($definition['places'] ?? [] as $handle => $place) {
-            $color = $place['metadata']['color'] ?? null;
+            $this->at("places.{$handle}", function () use ($handle, $place, $definition) {
+                $color = $place['metadata']['color'] ?? null;
 
-            if ($color !== null && $color !== '' && ! in_array($color, self::PLACE_COLORS, true)) {
-                $this->fail('place_color_unsupported', ['handle' => $handle, 'color' => $color]);
-            }
+                if ($color !== null && $color !== '' && ! in_array($color, self::PLACE_COLORS, true)) {
+                    $this->fail('place_color_unsupported', ['handle' => $handle, 'color' => $color]);
+                }
 
-            // Opts a place into the plain-language manager's loading state: while a
-            // subject sits in this place AND has an open rewrite job
-            // (PlainLanguageJobStore::hasOpen()), its instance page shows a spinner
-            // instead of the content blocks. The store only ever holds rows for a
-            // workflow that named a `plain_language_site` — outside that, the flag
-            // would silently do nothing rather than showing anything.
-            $pendingSpinner = $place['metadata']['pending_rewrite_spinner'] ?? null;
+                // Opts a place into the plain-language manager's loading state: while a
+                // subject sits in this place AND has an open rewrite job
+                // (PlainLanguageJobStore::hasOpen()), its instance page shows a spinner
+                // instead of the content blocks. The store only ever holds rows for a
+                // workflow that named a `plain_language_site` — outside that, the flag
+                // would silently do nothing rather than showing anything.
+                $pendingSpinner = $place['metadata']['pending_rewrite_spinner'] ?? null;
 
-            if ($pendingSpinner !== null && ! is_bool($pendingSpinner)) {
-                $this->fail('place_spinner_not_boolean', ['handle' => $handle]);
-            }
+                if ($pendingSpinner !== null && ! is_bool($pendingSpinner)) {
+                    $this->fail('place_spinner_not_boolean', ['handle' => $handle]);
+                }
 
-            if ($pendingSpinner === true && ($definition['metadata']['plain_language_site'] ?? null) === null) {
-                $this->fail('place_spinner_needs_site', ['handle' => $handle]);
-            }
+                if ($pendingSpinner === true && ($definition['metadata']['plain_language_site'] ?? null) === null) {
+                    $this->fail('place_spinner_needs_site', ['handle' => $handle]);
+                }
 
-            // Draws this place off the progress bar's main line instead of as a
-            // step on it — see Workflow\ProgressSteps. Purely presentational: it
-            // gates nothing and assigns nothing, which is why the only checks here
-            // are that it is a boolean and that it is not on the initial place.
-            $branch = $place['metadata'][ProgressSteps::BRANCH] ?? null;
+                // Draws this place off the progress bar's main line instead of as a
+                // step on it — see Workflow\ProgressSteps. Purely presentational: it
+                // gates nothing and assigns nothing, which is why the only checks here
+                // are that it is a boolean and that it is not on the initial place.
+                $branch = $place['metadata'][ProgressSteps::BRANCH] ?? null;
 
-            if ($branch !== null && ! is_bool($branch)) {
-                $this->fail('place_branch_not_boolean', ['handle' => $handle]);
-            }
+                if ($branch !== null && ! is_bool($branch)) {
+                    $this->fail('place_branch_not_boolean', ['handle' => $handle]);
+                }
 
-            // The start of the flow cannot be a turn-off from it. Every new subject
-            // would begin beside the line rather than on it, and the bar would
-            // open on a branch with nothing to hang off — a nonsense picture that
-            // would otherwise render quietly rather than being reported.
-            if ($branch === true && ($definition['initial_place'] ?? null) === $handle) {
-                $this->fail('place_branch_initial', ['handle' => $handle]);
-            }
+                // The start of the flow cannot be a turn-off from it. Every new subject
+                // would begin beside the line rather than on it, and the bar would
+                // open on a branch with nothing to hang off — a nonsense picture that
+                // would otherwise render quietly rather than being reported.
+                if ($branch === true && ($definition['initial_place'] ?? null) === $handle) {
+                    $this->fail('place_branch_initial', ['handle' => $handle]);
+                }
 
-            // Retired. A place no longer hands the subject to a group when a
-            // transition brings it in — that is the `user_assignment` action's job
-            // now, and only where a transition declares one. Rejected by name
-            // rather than ignored: silently keeping a key that used to reassign
-            // everybody is the one outcome nobody could debug, and its whole
-            // purpose was to name an assignment target apart from the permission
-            // gate, which `required_group` still is.
-            if (array_key_exists('assign_group', $place['metadata'] ?? [])) {
-                $this->fail('place_assign_group_retired', [
-                    'handle' => $handle,
-                    'action' => TransitionActions::USER_ASSIGNMENT,
-                ]);
-            }
+                // Retired. A place no longer hands the subject to a group when a
+                // transition brings it in — that is the `user_assignment` action's job
+                // now, and only where a transition declares one. Rejected by name
+                // rather than ignored: silently keeping a key that used to reassign
+                // everybody is the one outcome nobody could debug, and its whole
+                // purpose was to name an assignment target apart from the permission
+                // gate, which `required_group` still is.
+                if (array_key_exists('assign_group', $place['metadata'] ?? [])) {
+                    $this->fail('place_assign_group_retired', [
+                        'handle' => $handle,
+                        'action' => TransitionActions::USER_ASSIGNMENT,
+                    ]);
+                }
+            });
 
-            $this->validatePlaceActions($handle, $place['metadata']['actions'] ?? null, $definition);
+            $this->at("places.{$handle}.metadata.actions", fn () => $this->validatePlaceActions($handle, $place['metadata']['actions'] ?? null, $definition));
         }
 
         // Same for a transition's button variant.
         $startLocalizationCount = 0;
 
         foreach ($definition['transitions'] ?? [] as $handle => $transition) {
-            $variant = $transition['metadata']['variant'] ?? null;
+            // Counted outside the unit, so a transition refused for something
+            // else still counts towards the workflow-wide rules below.
+            $startsLocalization = $this->declaresAction($transition, TransitionActions::START_LOCALIZATION);
 
-            if ($variant !== null && $variant !== '' && ! in_array($variant, self::TRANSITION_VARIANTS, true)) {
-                $this->fail('transition_variant_unsupported', ['handle' => $handle, 'variant' => $variant]);
+            if ($startsLocalization) {
+                $startLocalizationCount++;
             }
 
-            // The gate: who may take this step, on top of being responsible for
-            // the subject. Two keys because the two answers are asked of Statamic
-            // differently (isInGroup / hasRole); declaring both is a UNION, not
-            // two hurdles — see WorkflowController::canApplyTransition(). Handles
-            // stay unchecked against their repositories, same as everywhere else:
-            // a group or role may be created after the workflow.
-            //
-            // The settings editor writes only ONE of them per transition (a type
-            // and a list), which is the shape the question actually has. The union
-            // remains readable for a hand-written YAML that wants it.
-            foreach (['required_group', 'required_role'] as $key) {
-                foreach ((array) ($transition['metadata'][$key] ?? []) as $gate) {
-                    if (! is_string($gate) || $gate === '') {
-                        $this->fail('transition_key_not_handle_list', ['handle' => $handle, 'key' => $key]);
+            $this->at("transitions.{$handle}", function () use ($handle, $transition, $definition, $startsLocalization) {
+                $variant = $transition['metadata']['variant'] ?? null;
+
+                if ($variant !== null && $variant !== '' && ! in_array($variant, self::TRANSITION_VARIANTS, true)) {
+                    $this->fail('transition_variant_unsupported', ['handle' => $handle, 'variant' => $variant]);
+                }
+
+                // The gate: who may take this step, on top of being responsible for
+                // the subject. Two keys because the two answers are asked of Statamic
+                // differently (isInGroup / hasRole); declaring both is a UNION, not
+                // two hurdles — see WorkflowController::canApplyTransition(). Handles
+                // stay unchecked against their repositories, same as everywhere else:
+                // a group or role may be created after the workflow.
+                //
+                // The settings editor writes only ONE of them per transition (a type
+                // and a list), which is the shape the question actually has. The union
+                // remains readable for a hand-written YAML that wants it.
+                foreach (['required_group', 'required_role'] as $key) {
+                    foreach ((array) ($transition['metadata'][$key] ?? []) as $gate) {
+                        if (! is_string($gate) || $gate === '') {
+                            $this->fail('transition_key_not_handle_list', ['handle' => $handle, 'key' => $key]);
+                        }
                     }
                 }
-            }
 
-            // The "rewrite again" flag: this transition re-submits the plain-language
-            // job for a version that already exists instead of creating one. It only
-            // means something in the plain-language manager, so it is rejected
-            // elsewhere rather than silently ignored — a flag that does nothing is
-            // worse than one that refuses to be set.
-            $resubmit = $transition['metadata']['plain_language_resubmit'] ?? null;
+                // The "rewrite again" flag: this transition re-submits the plain-language
+                // job for a version that already exists instead of creating one. It only
+                // means something in the plain-language manager, so it is rejected
+                // elsewhere rather than silently ignored — a flag that does nothing is
+                // worse than one that refuses to be set.
+                $resubmit = $transition['metadata']['plain_language_resubmit'] ?? null;
 
-            if ($resubmit !== null && ! is_bool($resubmit)) {
-                $this->fail('transition_resubmit_not_boolean', ['handle' => $handle]);
-            }
+                if ($resubmit !== null && ! is_bool($resubmit)) {
+                    $this->fail('transition_resubmit_not_boolean', ['handle' => $handle]);
+                }
 
-            if ($resubmit === true && ($definition['metadata']['plain_language_site'] ?? null) === null) {
-                $this->fail('transition_resubmit_needs_site', ['handle' => $handle]);
-            }
+                if ($resubmit === true && ($definition['metadata']['plain_language_site'] ?? null) === null) {
+                    $this->fail('transition_resubmit_needs_site', ['handle' => $handle]);
+                }
 
-            // Same shape of guard as `plain_language_resubmit` below: a flag that
-            // means nothing outside the plain-language manager is rejected rather
-            // than silently ignored. Unlike `resubmit`, this one is also capped
-            // workflow-wide — there is still exactly one place in the diagram
-            // "the transition that creates the target version" can point at, an
-            // explicit action just lets the author choose WHICH one instead of it
-            // always being the first in the list.
-            if ($this->declaresAction($transition, TransitionActions::START_LOCALIZATION)) {
-                $startLocalizationCount++;
-
+                // Same shape of guard as `plain_language_resubmit` below: a flag that
+                // means nothing outside the plain-language manager is rejected rather
+                // than silently ignored. Unlike `resubmit`, this one is also capped
+                // workflow-wide — there is still exactly one place in the diagram
+                // "the transition that creates the target version" can point at, an
+                // explicit action just lets the author choose WHICH one instead of it
+                // always being the first in the list.
+                //
                 // Any localization workflow, not just the plain-language manager.
                 // The restriction used to be `plain_language_site` — which is
                 // exactly the manager where the language dialog does NOT appear
@@ -1039,72 +1158,78 @@ class WorkflowDefinitionWriter
                 // position-only: the first in the list, and the dialog rode along.
                 // Pinning it here is what makes the language dialog assignable
                 // without inventing a second, storable `site_modal`.
-                if (($definition['metadata']['detail'] ?? null) !== 'translation') {
+                if ($startsLocalization && ($definition['metadata']['detail'] ?? null) !== 'translation') {
                     $this->fail('transition_start_localization_needs_detail', [
                         'handle' => $handle,
                         'action' => TransitionActions::START_LOCALIZATION,
                     ]);
                 }
-            }
 
-            // Same coupling the boolean form of this flag already enforces above —
-            // the action-shaped spelling is not exempt from it.
-            if ($this->declaresAction($transition, TransitionActions::PLAIN_LANGUAGE_RESUBMIT)
-                && ($definition['metadata']['plain_language_site'] ?? null) === null) {
-                $this->fail('transition_resubmit_action_needs_site', [
-                    'handle' => $handle,
-                    'action' => TransitionActions::PLAIN_LANGUAGE_RESUBMIT,
-                ]);
-            }
+                // Same coupling the boolean form of this flag already enforces above —
+                // the action-shaped spelling is not exempt from it.
+                if ($this->declaresAction($transition, TransitionActions::PLAIN_LANGUAGE_RESUBMIT)
+                    && ($definition['metadata']['plain_language_site'] ?? null) === null) {
+                    $this->fail('transition_resubmit_action_needs_site', [
+                        'handle' => $handle,
+                        'action' => TransitionActions::PLAIN_LANGUAGE_RESUBMIT,
+                    ]);
+                }
+            });
 
-            $this->validateActions(
+            $this->at("transitions.{$handle}.metadata.actions", fn () => $this->validateActions(
                 $handle,
                 $transition['metadata']['actions'] ?? null,
                 is_string($definition['name'] ?? null) ? $definition['name'] : null,
-            );
+            ));
         }
 
-        if ($startLocalizationCount > 1) {
-            $this->fail('start_localization_once', ['action' => TransitionActions::START_LOCALIZATION]);
-        }
+        $this->at('transitions', function () use ($definition, $startLocalizationCount) {
+            if ($startLocalizationCount > 1) {
+                $this->fail('start_localization_once', ['action' => TransitionActions::START_LOCALIZATION]);
+            }
 
-        // And a localization workflow needs it SOMEWHERE. Without it no transition
-        // creates the target version, so every button in the manager would move
-        // the source's state and nothing else — a workflow that looks complete and
-        // silently does half its job. There used to be a positional fallback (the
-        // first transition), which spared this check at the price of putting the
-        // language dialog on a step nobody chose.
-        if (($definition['metadata']['detail'] ?? null) === 'translation' && $startLocalizationCount === 0) {
-            $this->fail('start_localization_required', ['action' => TransitionActions::START_LOCALIZATION]);
-        }
+            // And a localization workflow needs it SOMEWHERE. Without it no transition
+            // creates the target version, so every button in the manager would move
+            // the source's state and nothing else — a workflow that looks complete and
+            // silently does half its job. There used to be a positional fallback (the
+            // first transition), which spared this check at the price of putting the
+            // language dialog on a step nobody chose.
+            if (($definition['metadata']['detail'] ?? null) === 'translation' && $startLocalizationCount === 0) {
+                $this->fail('start_localization_required', ['action' => TransitionActions::START_LOCALIZATION]);
+            }
+        });
 
         // The "finished" place used when backfilling states for entries that
         // predate the workflow. An unknown handle would seed every published
         // entry into a state no transition leads out of.
-        $donePlace = $definition['metadata']['seed_published_place'] ?? null;
+        $this->at('metadata.seed_published_place', function () use ($definition, $places) {
+            $donePlace = $definition['metadata']['seed_published_place'] ?? null;
 
-        if ($donePlace !== null && $donePlace !== '' && ! in_array($donePlace, $places, true)) {
-            $this->fail('seed_published_place_unknown', ['place' => $donePlace]);
-        }
+            if ($donePlace !== null && $donePlace !== '' && ! in_array($donePlace, $places, true)) {
+                $this->fail('seed_published_place_unknown', ['place' => $donePlace]);
+            }
+        });
 
-        $this->validateCreateTransition($definition, $places);
+        $this->at('metadata.create_transition', fn () => $this->validateCreateTransition($definition, $places));
 
         // Where PollPlainLanguageCommand moves a subject once its rewrite job
         // completes successfully — see there. Optional; absent means today's
         // behaviour (stays put until a human clicks submit_plain_language).
         // Only means something alongside plain_language_site, same coupling as
         // pending_rewrite_spinner and plain_language_resubmit.
-        $completedPlace = $definition['metadata']['plain_language_completed_place'] ?? null;
+        $this->at('metadata.plain_language_completed_place', function () use ($definition, $places) {
+            $completedPlace = $definition['metadata']['plain_language_completed_place'] ?? null;
 
-        if ($completedPlace !== null && $completedPlace !== '') {
-            if (! in_array($completedPlace, $places, true)) {
-                $this->fail('completed_place_unknown', ['place' => $completedPlace]);
-            }
+            if ($completedPlace !== null && $completedPlace !== '') {
+                if (! in_array($completedPlace, $places, true)) {
+                    $this->fail('completed_place_unknown', ['place' => $completedPlace]);
+                }
 
-            if (($definition['metadata']['plain_language_site'] ?? null) === null) {
-                $this->fail('completed_place_needs_site');
+                if (($definition['metadata']['plain_language_site'] ?? null) === null) {
+                    $this->fail('completed_place_needs_site');
+                }
             }
-        }
+        });
 
         // The failure counterpart: where PollPlainLanguageCommand parks a version whose
         // rewrite terminally failed, instead of deleting it. Optional; absent means the
@@ -1113,42 +1238,48 @@ class WorkflowDefinitionWriter
         // gone in 3.5 seconds and the poll runs unattended, with no session to flash one
         // into. Give it a transition carrying `plain_language_resubmit` and a retry is
         // one click. Same coupling to plain_language_site as the completed place.
-        $failedPlace = $definition['metadata']['plain_language_failed_place'] ?? null;
+        $this->at('metadata.plain_language_failed_place', function () use ($definition, $places) {
+            $failedPlace = $definition['metadata']['plain_language_failed_place'] ?? null;
 
-        if ($failedPlace !== null && $failedPlace !== '') {
-            if (! in_array($failedPlace, $places, true)) {
-                $this->fail('failed_place_unknown', ['place' => $failedPlace]);
-            }
+            if ($failedPlace !== null && $failedPlace !== '') {
+                if (! in_array($failedPlace, $places, true)) {
+                    $this->fail('failed_place_unknown', ['place' => $failedPlace]);
+                }
 
-            if (($definition['metadata']['plain_language_site'] ?? null) === null) {
-                $this->fail('failed_place_needs_site');
+                if (($definition['metadata']['plain_language_site'] ?? null) === null) {
+                    $this->fail('failed_place_needs_site');
+                }
             }
-        }
+        });
 
         // User groups allowed to create entries in this workflow, and those allowed
         // to assign responsibles in it. Handles are not checked against the user-group
         // repository: a group may legitimately be created after the workflow, and a
         // stale handle simply grants nobody.
         foreach (['post_creator_groups', 'assigner_groups'] as $key) {
-            foreach ((array) ($definition['metadata'][$key] ?? []) as $handle) {
-                if (! is_string($handle) || $handle === '') {
-                    $this->fail('metadata_not_group_list', ['key' => $key]);
+            $this->at("metadata.{$key}", function () use ($definition, $key) {
+                foreach ((array) ($definition['metadata'][$key] ?? []) as $handle) {
+                    if (! is_string($handle) || $handle === '') {
+                        $this->fail('metadata_not_group_list', ['key' => $key]);
+                    }
                 }
-            }
+            });
         }
 
-        $this->validateSla($definition, $places);
-        $this->validateSourceDraftPlace($definition, $places);
+        $this->at('metadata.'.SlaSettings::KEY, fn () => $this->validateSla($definition, $places));
+        $this->at('metadata.'.StaleLocalizations::PLACE_KEY, fn () => $this->validateSourceDraftPlace($definition, $places));
 
         // Blueprint field handles forced read-only for localization workflows.
         // Not checked against a blueprint — the same workflow can govern several
         // collections with different blueprints, and a handle that no blueprint
         // declares is harmlessly ignored (ensureFieldHasConfig no-ops).
-        foreach ((array) ($definition['metadata']['site_fields'] ?? []) as $handle) {
-            if (! is_string($handle) || $handle === '') {
-                $this->fail('site_fields_not_list');
+        $this->at('metadata.site_fields', function () use ($definition) {
+            foreach ((array) ($definition['metadata']['site_fields'] ?? []) as $handle) {
+                if (! is_string($handle) || $handle === '') {
+                    $this->fail('site_fields_not_list');
+                }
             }
-        }
+        });
 
         // Blueprint field handles a finished rewrite empties on the plain-language
         // version. Not checked against a blueprint either, for the reason above —
@@ -1156,17 +1287,19 @@ class WorkflowDefinitionWriter
         // reads. What IS checked is the pairing, like the two place keys: without
         // `plain_language_site` nothing in this workflow ever produces a rewrite,
         // so the key could only look effective while emptying nothing.
-        $clearFields = (array) ($definition['metadata']['plain_language_clear_fields'] ?? []);
+        $this->at('metadata.plain_language_clear_fields', function () use ($definition) {
+            $clearFields = (array) ($definition['metadata']['plain_language_clear_fields'] ?? []);
 
-        foreach ($clearFields as $handle) {
-            if (! is_string($handle) || $handle === '') {
-                $this->fail('clear_fields_not_list');
+            foreach ($clearFields as $handle) {
+                if (! is_string($handle) || $handle === '') {
+                    $this->fail('clear_fields_not_list');
+                }
             }
-        }
 
-        if ($clearFields !== [] && ($definition['metadata']['plain_language_site'] ?? null) === null) {
-            $this->fail('clear_fields_needs_site');
-        }
+            if ($clearFields !== [] && ($definition['metadata']['plain_language_site'] ?? null) === null) {
+                $this->fail('clear_fields_needs_site');
+            }
+        });
 
         // The site that carries the plain-language version, and the site a
         // localization workflow translates FROM. Both optional.
@@ -1184,59 +1317,67 @@ class WorkflowDefinitionWriter
         // (or silently translate from the wrong version) without saying so, which
         // is exactly the failure the collection check below exists to prevent.
         foreach (['plain_language_site', 'translation_source_site'] as $key) {
-            $site = $definition['metadata'][$key] ?? null;
+            $this->at("metadata.{$key}", function () use ($definition, $key) {
+                $site = $definition['metadata'][$key] ?? null;
 
-            if ($site === null || $site === '') {
-                continue;
-            }
+                if ($site === null || $site === '') {
+                    return;
+                }
 
-            if (! is_string($site) || Site::get($site) === null) {
-                $printable = is_string($site) ? $site : gettype($site);
+                if (! is_string($site) || Site::get($site) === null) {
+                    $printable = is_string($site) ? $site : gettype($site);
 
-                $this->fail('metadata_site_unknown', ['key' => $key, 'site' => $printable]);
-            }
+                    $this->fail('metadata_site_unknown', ['key' => $key, 'site' => $printable]);
+                }
+            });
         }
 
         // Translating a version into itself has no meaning, and it would make the
         // source disappear from its own manager's targets.
-        if (($definition['metadata']['plain_language_site'] ?? null) !== null
-            && ($definition['metadata']['plain_language_site'] ?? null) === ($definition['metadata']['translation_source_site'] ?? null)) {
-            $this->fail('translation_source_same_as_plain');
-        }
+        $this->at('metadata.translation_source_site', function () use ($definition) {
+            if (($definition['metadata']['plain_language_site'] ?? null) !== null
+                && ($definition['metadata']['plain_language_site'] ?? null) === ($definition['metadata']['translation_source_site'] ?? null)) {
+                $this->fail('translation_source_same_as_plain');
+            }
+        });
 
-        // Letting each run pick its own source. Rejected where there is no dialog to
-        // put the choice in — the plain-language manager asks nothing on purpose, so
-        // a flag that silently does nothing there would be a trap.
         // How the progress bar on the instance page is laid out. Presentation only,
         // so an absent key is the default — but a value nobody can render is
         // refused rather than silently corrected, because the author would
         // otherwise see a horizontal bar and no reason why.
-        $orientation = $definition['metadata'][ProgressSteps::ORIENTATION] ?? null;
+        $this->at('metadata.'.ProgressSteps::ORIENTATION, function () use ($definition) {
+            $orientation = $definition['metadata'][ProgressSteps::ORIENTATION] ?? null;
 
-        if ($orientation !== null && ! in_array($orientation, ProgressSteps::ORIENTATIONS, true)) {
-            $this->fail('progress_orientation_unknown', [
-                'value' => is_string($orientation) ? $orientation : gettype($orientation),
-                'known' => implode(', ', ProgressSteps::ORIENTATIONS),
-            ]);
-        }
+            if ($orientation !== null && ! in_array($orientation, ProgressSteps::ORIENTATIONS, true)) {
+                $this->fail('progress_orientation_unknown', [
+                    'value' => is_string($orientation) ? $orientation : gettype($orientation),
+                    'known' => implode(', ', ProgressSteps::ORIENTATIONS),
+                ]);
+            }
+        });
 
-        $sourcePick = $definition['metadata']['translation_source_pick'] ?? null;
+        // Letting each run pick its own source. Rejected where there is no dialog to
+        // put the choice in — the plain-language manager asks nothing on purpose, so
+        // a flag that silently does nothing there would be a trap.
+        $this->at('metadata.translation_source_pick', function () use ($definition) {
+            $sourcePick = $definition['metadata']['translation_source_pick'] ?? null;
 
-        if ($sourcePick !== null && ! is_bool($sourcePick)) {
-            $this->fail('source_pick_not_boolean');
-        }
-
-        if ($sourcePick === true) {
-            if (($definition['metadata']['detail'] ?? null) !== 'translation') {
-                $this->fail('source_pick_needs_detail');
+            if ($sourcePick !== null && ! is_bool($sourcePick)) {
+                $this->fail('source_pick_not_boolean');
             }
 
-            if (($definition['metadata']['plain_language_site'] ?? null) !== null) {
-                $this->fail('source_pick_conflicts_plain');
-            }
-        }
+            if ($sourcePick === true) {
+                if (($definition['metadata']['detail'] ?? null) !== 'translation') {
+                    $this->fail('source_pick_needs_detail');
+                }
 
-        $this->validateSourceView($definition);
+                if (($definition['metadata']['plain_language_site'] ?? null) !== null) {
+                    $this->fail('source_pick_conflicts_plain');
+                }
+            }
+        });
+
+        $this->at('metadata.'.SourceViewRules::KEY, fn () => $this->validateSourceView($definition));
 
         // No credential keys are validated here because none belong in this file.
         // The translation services read their key and token from
@@ -1253,13 +1394,16 @@ class WorkflowDefinitionWriter
         // workflow shares `posts` with the post manager — and
         // WorkflowResolver::forCollection() resolves it as first-wins over the
         // alphabetically sorted definitions. The settings editor surfaces which
-        // workflow owns a collection instead of forbidding the overlap.
-        foreach ((array) ($definition['collections'] ?? []) as $handle) {
-            if (! is_string($handle) || Collection::find($handle) === null) {
-                $printable = is_string($handle) ? $handle : gettype($handle);
+        // workflow owns a collection instead of forbidding the overlap (and
+        // DefinitionLinter warns about it).
+        foreach (array_values((array) ($definition['collections'] ?? [])) as $index => $handle) {
+            $this->at("collections.{$index}", function () use ($handle) {
+                if (! is_string($handle) || Collection::find($handle) === null) {
+                    $printable = is_string($handle) ? $handle : gettype($handle);
 
-                $this->fail('collection_unknown', ['collection' => $printable]);
-            }
+                    $this->fail('collection_unknown', ['collection' => $printable]);
+                }
+            });
         }
     }
 
@@ -1362,102 +1506,104 @@ class WorkflowDefinitionWriter
         $assignments = 0;
         $mails = 0;
 
-        foreach ($actions as $action) {
-            if (! is_array($action)) {
-                $this->fail('transition_action_not_map', ['handle' => $handle]);
-            }
-
-            $type = $action['type'] ?? null;
-
-            // The site dialog is derived from the workflow's shape, never stored
-            // — see TransitionActions::opensSitePicker(). Naming it here would
-            // put it on a transition of the author's choosing, which is exactly
-            // the mistake the derivation removes, so it gets its own message
-            // rather than the generic "unknown type".
-            if ($type === TransitionActions::SITE_MODAL) {
-                $this->fail('transition_site_modal_not_configurable', [
-                    'handle' => $handle,
-                    'action' => TransitionActions::SITE_MODAL,
-                ]);
-            }
-
-            // The pre-`user_assignment` spelling. Still READ (TransitionActions
-            // folds it into a manual assignment), never written again — so it
-            // gets its own message rather than the generic "unknown type", which
-            // would read as if the concept had gone away.
-            if ($type === TransitionActions::USER_MODAL) {
-                $this->fail('transition_user_modal_retired', [
-                    'handle' => $handle,
-                    'action' => TransitionActions::USER_MODAL,
-                    'replacement' => TransitionActions::USER_ASSIGNMENT,
-                ]);
-            }
-
-            // The older spelling of the mail action. Folded rather than rejected,
-            // because unlike `user_modal` above it is not retired — it means
-            // exactly what `mail` means and every reader already treats it that
-            // way (MailAction::handle()). Validating the folded handle is what
-            // keeps a definition written before the rename saveable.
-            $type = is_string($type) ? MailAction::handle($type) : $type;
-
-            // Built-in, or declared by the project for THIS workflow. Any other
-            // type is rejected rather than ignored, unlike a criterion VALUE
-            // below: a typo here would simply do nothing, and the first sign of it
-            // would be a dialog that never opens in production.
-            $declared = CustomActions::forScope(CustomActions::SCOPE_TRANSITION, $workflow);
-
-            if (! is_string($type) || (! in_array($type, TransitionActions::TYPES, true) && ! isset($declared[$type]))) {
-                $printable = is_string($type) ? $type : gettype($type);
-
-                $this->fail('transition_action_type_unknown', [
-                    'handle' => $handle,
-                    'type' => $printable,
-                    'known' => implode(', ', array_merge(TransitionActions::TYPES, array_keys($declared))),
-                ]);
-            }
-
-            if (isset($declared[$type])) {
-                $this->validateActionValues(
-                    (string) __('workflows::messages.writer_scope_transition', ['handle' => $handle]),
-                    $declared[$type],
-                    $action['values'] ?? null
-                );
-
-                continue;
-            }
-
-            // Only a dialog competes for the one moment between click and
-            // transition. `target_missing` opens nothing, and neither does an
-            // AUTOMATIC user assignment — so neither needs nor consumes that
-            // slot, and a transition can carry a dialog AND several of them.
-            if (TransitionActions::opensDialog($action)) {
-                $modals++;
-            }
-
-            if ($type === TransitionActions::USER_ASSIGNMENT) {
-                $assignments++;
-                $this->validateAssignment($handle, $action);
-            }
-
-            if ($type === TransitionActions::MAIL) {
-                $mails++;
-                $this->validateMailType('transition_action_mail_unknown', $handle, $action);
-            }
-
-            // The site a `target_missing` gate watches. Checked against the real
-            // site list, like plain_language_site above and for the same reason: a
-            // typo would silently turn the gate into a no-op (an unknown site never
-            // matches an existing version) rather than blocking anything, and that
-            // failure is the opposite of what the gate is FOR.
-            if ($type === TransitionActions::TARGET_MISSING) {
-                $site = $action['site'] ?? null;
-
-                if (! is_string($site) || $site === '' || Site::get($site) === null) {
-                    $printable = is_string($site) && $site !== '' ? $site : gettype($site);
-
-                    $this->fail('transition_target_missing_site_unknown', ['handle' => $handle, 'site' => $printable]);
+        foreach ($actions as $index => $action) {
+            $this->at("transitions.{$handle}.metadata.actions.{$index}", function () use ($handle, $action, $workflow, &$modals, &$assignments, &$mails) {
+                if (! is_array($action)) {
+                    $this->fail('transition_action_not_map', ['handle' => $handle]);
                 }
-            }
+
+                $type = $action['type'] ?? null;
+
+                // The site dialog is derived from the workflow's shape, never stored
+                // — see TransitionActions::opensSitePicker(). Naming it here would
+                // put it on a transition of the author's choosing, which is exactly
+                // the mistake the derivation removes, so it gets its own message
+                // rather than the generic "unknown type".
+                if ($type === TransitionActions::SITE_MODAL) {
+                    $this->fail('transition_site_modal_not_configurable', [
+                        'handle' => $handle,
+                        'action' => TransitionActions::SITE_MODAL,
+                    ]);
+                }
+
+                // The pre-`user_assignment` spelling. Still READ (TransitionActions
+                // folds it into a manual assignment), never written again — so it
+                // gets its own message rather than the generic "unknown type", which
+                // would read as if the concept had gone away.
+                if ($type === TransitionActions::USER_MODAL) {
+                    $this->fail('transition_user_modal_retired', [
+                        'handle' => $handle,
+                        'action' => TransitionActions::USER_MODAL,
+                        'replacement' => TransitionActions::USER_ASSIGNMENT,
+                    ]);
+                }
+
+                // The older spelling of the mail action. Folded rather than rejected,
+                // because unlike `user_modal` above it is not retired — it means
+                // exactly what `mail` means and every reader already treats it that
+                // way (MailAction::handle()). Validating the folded handle is what
+                // keeps a definition written before the rename saveable.
+                $type = is_string($type) ? MailAction::handle($type) : $type;
+
+                // Built-in, or declared by the project for THIS workflow. Any other
+                // type is rejected rather than ignored, unlike a criterion VALUE
+                // below: a typo here would simply do nothing, and the first sign of it
+                // would be a dialog that never opens in production.
+                $declared = CustomActions::forScope(CustomActions::SCOPE_TRANSITION, $workflow);
+
+                if (! is_string($type) || (! in_array($type, TransitionActions::TYPES, true) && ! isset($declared[$type]))) {
+                    $printable = is_string($type) ? $type : gettype($type);
+
+                    $this->fail('transition_action_type_unknown', [
+                        'handle' => $handle,
+                        'type' => $printable,
+                        'known' => implode(', ', array_merge(TransitionActions::TYPES, array_keys($declared))),
+                    ]);
+                }
+
+                if (isset($declared[$type])) {
+                    $this->validateActionValues(
+                        (string) __('workflows::messages.writer_scope_transition', ['handle' => $handle]),
+                        $declared[$type],
+                        $action['values'] ?? null
+                    );
+
+                    return;
+                }
+
+                // Only a dialog competes for the one moment between click and
+                // transition. `target_missing` opens nothing, and neither does an
+                // AUTOMATIC user assignment — so neither needs nor consumes that
+                // slot, and a transition can carry a dialog AND several of them.
+                if (TransitionActions::opensDialog($action)) {
+                    $modals++;
+                }
+
+                if ($type === TransitionActions::USER_ASSIGNMENT) {
+                    $assignments++;
+                    $this->validateAssignment($handle, $action);
+                }
+
+                if ($type === TransitionActions::MAIL) {
+                    $mails++;
+                    $this->validateMailType('transition_action_mail_unknown', $handle, $action);
+                }
+
+                // The site a `target_missing` gate watches. Checked against the real
+                // site list, like plain_language_site above and for the same reason: a
+                // typo would silently turn the gate into a no-op (an unknown site never
+                // matches an existing version) rather than blocking anything, and that
+                // failure is the opposite of what the gate is FOR.
+                if ($type === TransitionActions::TARGET_MISSING) {
+                    $site = $action['site'] ?? null;
+
+                    if (! is_string($site) || $site === '' || Site::get($site) === null) {
+                        $printable = is_string($site) && $site !== '' ? $site : gettype($site);
+
+                        $this->fail('transition_target_missing_site_unknown', ['handle' => $handle, 'site' => $printable]);
+                    }
+                }
+            });
         }
 
         // Only one dialog fits between the click and the transition — a second
@@ -1774,115 +1920,117 @@ class WorkflowDefinitionWriter
         $reminders = 0;
         $autos = 0;
 
-        foreach ($actions as $action) {
-            if (! is_array($action)) {
-                $this->fail('place_action_not_map', ['handle' => $handle]);
-            }
+        foreach ($actions as $index => $action) {
+            $this->at("places.{$handle}.metadata.actions.{$index}", function () use ($handle, $action, $definition, &$mails, &$reminders, &$autos) {
+                if (! is_array($action)) {
+                    $this->fail('place_action_not_map', ['handle' => $handle]);
+                }
 
-            $type = $action['type'] ?? null;
+                $type = $action['type'] ?? null;
 
-            // The older spelling of the mail action, folded exactly as on the
-            // transition side — see validateActions().
-            $type = is_string($type) ? MailAction::handle($type) : $type;
+                // The older spelling of the mail action, folded exactly as on the
+                // transition side — see validateActions().
+                $type = is_string($type) ? MailAction::handle($type) : $type;
 
-            // Built-in, or declared by the project for THIS workflow — the
-            // place-side twin of the transition check.
-            $declared = CustomActions::forScope(
-                CustomActions::SCOPE_PLACE,
-                is_string($definition['name'] ?? null) ? $definition['name'] : null,
-            );
-
-            if (! is_string($type) || (! in_array($type, PlaceActions::TYPES, true) && ! isset($declared[$type]))) {
-                $printable = is_string($type) ? $type : gettype($type);
-
-                $this->fail('place_action_type_unknown', [
-                    'handle' => $handle,
-                    'type' => $printable,
-                    'known' => implode(', ', array_merge(PlaceActions::TYPES, array_keys($declared))),
-                ]);
-            }
-
-            if (isset($declared[$type])) {
-                $this->validateActionValues(
-                    (string) __('workflows::messages.writer_scope_place', ['handle' => $handle]),
-                    $declared[$type],
-                    $action['values'] ?? null
+                // Built-in, or declared by the project for THIS workflow — the
+                // place-side twin of the transition check.
+                $declared = CustomActions::forScope(
+                    CustomActions::SCOPE_PLACE,
+                    is_string($definition['name'] ?? null) ? $definition['name'] : null,
                 );
 
-                continue;
-            }
+                if (! is_string($type) || (! in_array($type, PlaceActions::TYPES, true) && ! isset($declared[$type]))) {
+                    $printable = is_string($type) ? $type : gettype($type);
 
-            // Same reasoning as the boolean form above: PlainLanguageJobStore
-            // never holds a row for a workflow without a plain_language_site, so
-            // the action would silently do nothing rather than showing anything.
-            if ($type === PlaceActions::PENDING_REWRITE_SPINNER
-                && ($definition['metadata']['plain_language_site'] ?? null) === null) {
-                $this->fail('place_spinner_action_needs_site', [
-                    'handle' => $handle,
-                    'action' => PlaceActions::PENDING_REWRITE_SPINNER,
-                ]);
-            }
-
-            // General-purpose, unlike the spinner: no site coupling, just a sane
-            // number the client can turn into a timer. Capped at a day — anything
-            // longer belongs in the SLA/ageing system, not a page-open reminder.
-            if ($type === PlaceActions::REFRESH_INTERVAL) {
-                $minutes = $action['minutes'] ?? null;
-
-                if (! is_numeric($minutes) || (int) $minutes != $minutes || (int) $minutes < 1 || (int) $minutes > 1440) {
-                    $printable = is_scalar($minutes) ? $minutes : gettype($minutes);
-
-                    $this->fail('place_refresh_interval_invalid', ['handle' => $handle, 'value' => $printable]);
-                }
-            }
-
-            // Nothing tying it to a particular kind of workflow, unlike the
-            // spinner: any place in any workflow can reasonably want to announce
-            // that a subject arrived. Only the mail type is checked.
-            if ($type === PlaceActions::MAIL) {
-                $mails++;
-                $this->validateMailType('place_action_mail_unknown', $handle, $action);
-            }
-
-            // Whole days, from one to a year. Zero would mail on every scheduler
-            // run; past a year the reminder has stopped being one.
-            if ($type === PlaceActions::REMINDER) {
-                $reminders++;
-                $days = $action['every_days'] ?? null;
-
-                if (! is_numeric($days) || (int) $days != $days || (int) $days < 1 || (int) $days > 365) {
-                    $printable = is_scalar($days) ? $days : gettype($days);
-
-                    $this->fail('place_reminder_invalid', ['handle' => $handle, 'value' => $printable]);
-                }
-
-                $this->validateMailType('place_action_reminder_unknown', $handle, $action);
-            }
-
-            // Must be a real step OUT of this place: a system transition belongs to
-            // the engine, and one that does not start here could never apply.
-            if ($type === PlaceActions::AUTO_TRANSITION) {
-                $autos++;
-                $days = $action['after_days'] ?? null;
-
-                if (! is_numeric($days) || (int) $days != $days || (int) $days < 1 || (int) $days > 365) {
-                    $printable = is_scalar($days) ? $days : gettype($days);
-
-                    $this->fail('place_auto_transition_days_invalid', ['handle' => $handle, 'value' => $printable]);
-                }
-
-                $name = $action['transition'] ?? null;
-                $target = is_string($name) ? ($definition['transitions'][$name] ?? null) : null;
-
-                if (! is_array($target)
-                    || ($target['metadata']['system'] ?? false) === true
-                    || ! in_array($handle, (array) ($target['from'] ?? []), true)) {
-                    $this->fail('place_auto_transition_invalid', [
+                    $this->fail('place_action_type_unknown', [
                         'handle' => $handle,
-                        'transition' => is_scalar($name) ? (string) $name : gettype($name),
+                        'type' => $printable,
+                        'known' => implode(', ', array_merge(PlaceActions::TYPES, array_keys($declared))),
                     ]);
                 }
-            }
+
+                if (isset($declared[$type])) {
+                    $this->validateActionValues(
+                        (string) __('workflows::messages.writer_scope_place', ['handle' => $handle]),
+                        $declared[$type],
+                        $action['values'] ?? null
+                    );
+
+                    return;
+                }
+
+                // Same reasoning as the boolean form above: PlainLanguageJobStore
+                // never holds a row for a workflow without a plain_language_site, so
+                // the action would silently do nothing rather than showing anything.
+                if ($type === PlaceActions::PENDING_REWRITE_SPINNER
+                    && ($definition['metadata']['plain_language_site'] ?? null) === null) {
+                    $this->fail('place_spinner_action_needs_site', [
+                        'handle' => $handle,
+                        'action' => PlaceActions::PENDING_REWRITE_SPINNER,
+                    ]);
+                }
+
+                // General-purpose, unlike the spinner: no site coupling, just a sane
+                // number the client can turn into a timer. Capped at a day — anything
+                // longer belongs in the SLA/ageing system, not a page-open reminder.
+                if ($type === PlaceActions::REFRESH_INTERVAL) {
+                    $minutes = $action['minutes'] ?? null;
+
+                    if (! is_numeric($minutes) || (int) $minutes != $minutes || (int) $minutes < 1 || (int) $minutes > 1440) {
+                        $printable = is_scalar($minutes) ? $minutes : gettype($minutes);
+
+                        $this->fail('place_refresh_interval_invalid', ['handle' => $handle, 'value' => $printable]);
+                    }
+                }
+
+                // Nothing tying it to a particular kind of workflow, unlike the
+                // spinner: any place in any workflow can reasonably want to announce
+                // that a subject arrived. Only the mail type is checked.
+                if ($type === PlaceActions::MAIL) {
+                    $mails++;
+                    $this->validateMailType('place_action_mail_unknown', $handle, $action);
+                }
+
+                // Whole days, from one to a year. Zero would mail on every scheduler
+                // run; past a year the reminder has stopped being one.
+                if ($type === PlaceActions::REMINDER) {
+                    $reminders++;
+                    $days = $action['every_days'] ?? null;
+
+                    if (! is_numeric($days) || (int) $days != $days || (int) $days < 1 || (int) $days > 365) {
+                        $printable = is_scalar($days) ? $days : gettype($days);
+
+                        $this->fail('place_reminder_invalid', ['handle' => $handle, 'value' => $printable]);
+                    }
+
+                    $this->validateMailType('place_action_reminder_unknown', $handle, $action);
+                }
+
+                // Must be a real step OUT of this place: a system transition belongs to
+                // the engine, and one that does not start here could never apply.
+                if ($type === PlaceActions::AUTO_TRANSITION) {
+                    $autos++;
+                    $days = $action['after_days'] ?? null;
+
+                    if (! is_numeric($days) || (int) $days != $days || (int) $days < 1 || (int) $days > 365) {
+                        $printable = is_scalar($days) ? $days : gettype($days);
+
+                        $this->fail('place_auto_transition_days_invalid', ['handle' => $handle, 'value' => $printable]);
+                    }
+
+                    $name = $action['transition'] ?? null;
+                    $target = is_string($name) ? ($definition['transitions'][$name] ?? null) : null;
+
+                    if (! is_array($target)
+                        || ($target['metadata']['system'] ?? false) === true
+                        || ! in_array($handle, (array) ($target['from'] ?? []), true)) {
+                        $this->fail('place_auto_transition_invalid', [
+                            'handle' => $handle,
+                            'transition' => is_scalar($name) ? (string) $name : gettype($name),
+                        ]);
+                    }
+                }
+            });
         }
 
         if ($autos > 1) {
