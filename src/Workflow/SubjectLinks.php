@@ -8,51 +8,20 @@ use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
 
 /**
- * Subject ids → a list of openable posts, plus what the cap left out.
+ * Subject ids → a page of openable posts, plus the manager-page and label
+ * lookups the dashboard widgets share.
  *
  * The one answer to "the reader can see a number, now let them see the posts
- * behind it". Two callers ask it today and they must not answer it differently:
- * the stat row's stacks (QueueStats) and the status row's per-state stacks
- * (WorkflowController::stateSubjects, lazily, on click). It lived inside
- * QueueStats first and moved out when the second caller appeared — a second
- * copy would have meant two caps, two ideas of what a site chip is, and two
- * places to remember that a state row can outlive its entry.
+ * behind it" for the status row's per-state stacks
+ * (WorkflowController::stateSubjects, lazily, on click). The stat row
+ * (QueueStats) asked it too, for a capped list plus "+N more per workflow",
+ * until its cards started linking to the dashboard's own lists instead.
  *
- * Deleted entries are skipped WITHOUT using up a slot: a state row can outlive
- * its entry, and a list that shows 47 links because three subjects are orphans
- * would look like a bug. They fall out of the remainder too — `items` plus every
- * `more` count can therefore come to slightly less than the figure the reader
- * clicked, which is the honest direction to be wrong in: nothing is named that
- * cannot be opened.
- *
- * Two shapes, because the two callers ask different questions:
- *
- * - forSubjects() — a capped list plus "+N more per workflow". For sets that
- *   span several workflows, where a pager has no honest per-workflow total.
- *   In source order: sorting by title would mean resolving every subject just
- *   to decide which fifty to show.
- * - paginate() — one workflow, real pages, sorted by title. See there for why
- *   that one does resolve everything first.
+ * Deleted entries are skipped: a state row can outlive its entry, and nothing
+ * is named that cannot be opened.
  */
 class SubjectLinks
 {
-    /**
-     * How many posts get named by title before the list stops and says "+N
-     * more".
-     *
-     * Fifty, because the list opens in the CP's slide-over `Stack` and that
-     * panel scrolls on its own (`StackContent` is `flex-1 overflow-auto`). It
-     * was ten while the list hung in a popover beside the card, where the
-     * container's own height was the limit — the wrong reason for a cap, and the
-     * reason the popover was replaced: a card counting thirty posts awaiting
-     * approval has to be usable.
-     *
-     * A cap remains, at a height nobody scrolls past on purpose: beyond it the
-     * `more` entries hand over to the manager page, which is the thing that
-     * does long lists properly (filters, sorting, pagination).
-     */
-    public const ITEM_CAP = 50;
-
     /**
      * Page size for paginate(). Twenty-five, because that list sits in the CP's
      * slide-over `Stack` under a real pager: it should fill the panel without
@@ -66,68 +35,8 @@ class SubjectLinks
     ) {}
 
     /**
-     * @param  array<string, array<int, string>>  $perWorkflow  workflow name => subject ids
-     * @return array{items: array<int, array{title: string, url: string, site_code: string|null}>, more: array<int, array{count: int, label: string, url: string|null}>}
-     */
-    public function forSubjects(array $perWorkflow): array
-    {
-        $multiSite = Site::hasMultiple();
-
-        $items = [];
-        $more = [];
-
-        foreach ($perWorkflow as $workflow => $subjectIds) {
-            $workflow = (string) $workflow;
-            // How far into THIS workflow's list the cap let us get. The
-            // remainder counts from here, so a workflow the cap never reached
-            // reports all of its subjects as hidden.
-            $consumed = 0;
-
-            foreach ($subjectIds as $subjectId) {
-                if (count($items) >= self::ITEM_CAP) {
-                    break;
-                }
-
-                $consumed++;
-                $entry = Entry::find($subjectId);
-
-                if ($entry === null) {
-                    continue;
-                }
-
-                $items[] = [
-                    'title' => (string) ($entry->get('title') ?? $entry->slug()),
-                    'url' => $this->urls->for((string) $subjectId, $workflow),
-                    // Uppercased locale, and only where the project has more
-                    // than one site — the same convention (and the same reason)
-                    // as PersonalWorkItems::row().
-                    'site_code' => $multiSite ? strtoupper((string) $entry->locale()) : null,
-                ];
-            }
-
-            $hidden = count($subjectIds) - $consumed;
-
-            if ($hidden > 0) {
-                $more[] = [
-                    'count' => $hidden,
-                    'label' => $this->workflowLabel($workflow),
-                    'url' => $this->managerUrl($workflow),
-                ];
-            }
-        }
-
-        return ['items' => $items, 'more' => $more];
-    }
-
-    /**
-     * The same posts, for ONE workflow, as a page of a real pager instead of a
-     * capped list plus a remainder.
-     *
-     * A second method rather than a switch inside forSubjects(): the stat row's
-     * stacks are still cap-plus-remainder (their sets are unions across several
-     * workflows, and a pager over a union has no honest total per workflow),
-     * and that behaviour must not move underneath them. What the two share is
-     * everything below the shape — the orphan rule, the site chip, the URL.
+     * The posts behind a set of subjects of ONE workflow, as a page of a real
+     * pager.
      *
      * ORDER is by title, natural and case-insensitive, the same ordering
      * PersonalWorkItems gives its rows. Pagination needs a total order that

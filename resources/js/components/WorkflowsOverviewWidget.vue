@@ -7,7 +7,10 @@
          The shell is the CP's own `Widget`; the listing renders `bare` inside it,
          so the card is not drawn twice. `h-full`: fills its grid cell, which
          the dashboard row stretches to its tallest card. -->
-    <Widget :title="__('workflows::messages.all_posts')" class="h-full">
+    <!-- `id` + `tabindex="-1"`: the target of the stat row's cards 2-4
+         (support/dashboardLinks.js), which filter this table, scroll here and
+         move the focus onto the card without adding it to the tab order. -->
+    <Widget :id="OVERVIEW_ANCHOR" tabindex="-1" :title="__('workflows::messages.all_posts')" class="h-full scroll-mt-4">
         <!-- One "new post" button per workflow the user may create in. Named
              after its workflow as soon as there is more than one, since a bare
              "Neuer Beitrag" twice says nothing about where the post goes. -->
@@ -32,36 +35,59 @@
                  with a single workflow in scope, so it only shows from two up.
                  `pressed` and `default` are the same box (same border, padding,
                  weight — only the fill differs), so the active state does not
-                 move the group or the buttons beside it. -->
-            <ButtonGroup v-if="workflowOptions.length > 1" class="mb-3">
-                <Button
-                    v-for="option in workflowOptions"
-                    :key="option.value"
-                    size="sm"
-                    :variant="active === option.value ? 'pressed' : 'default'"
-                    :aria-pressed="active === option.value"
-                    @click="select(option.value)"
-                >
-                    <span class="inline-flex items-center gap-1.5">
-                        <span class="size-[6px] flex-none rounded-full" :class="dotClass(option.color)" aria-hidden="true"></span>
-                        {{ option.label }}
-                    </span>
-                </Button>
-                <Button
-                    size="sm"
-                    :variant="active === ALL ? 'pressed' : 'default'"
-                    :aria-pressed="active === ALL"
-                    :text="__('workflows::messages.all_workflows')"
-                    @click="select(ALL)"
+                 move the group or the buttons beside it.
+
+                 While a stat card filters the table, its removable chip sits in
+                 the same row, beside the buttons rather than above the table, so
+                 applying a card's filter moves nothing below it. -->
+            <div v-if="workflowOptions.length > 1 || preset" class="mb-3 flex flex-wrap items-center gap-2">
+                <ButtonGroup v-if="workflowOptions.length > 1">
+                    <Button
+                        v-for="option in workflowOptions"
+                        :key="option.value"
+                        size="sm"
+                        :variant="active === option.value ? 'pressed' : 'default'"
+                        :aria-pressed="active === option.value"
+                        @click="select(option.value)"
+                    >
+                        <span class="inline-flex items-center gap-1.5">
+                            <span class="size-[6px] flex-none rounded-full" :class="dotClass(option.color)" aria-hidden="true"></span>
+                            {{ option.label }}
+                        </span>
+                    </Button>
+                    <Button
+                        size="sm"
+                        :variant="active === ALL ? 'pressed' : 'default'"
+                        :aria-pressed="active === ALL"
+                        :text="__('workflows::messages.all_workflows')"
+                        @click="select(ALL)"
+                    />
+                </ButtonGroup>
+
+                <!-- The card's filter as a chip, removable: a `Badge` rendered as a
+                     button, so the whole chip is the "remove" control and says so
+                     to a screen reader. Removing it returns to the unfiltered
+                     table of the selected workflow. -->
+                <Badge
+                    v-if="preset"
+                    as="button"
+                    type="button"
+                    color="blue"
+                    icon-append="x"
+                    class="cursor-pointer"
+                    :text="__('workflows::messages.overview_preset_active', { label: preset.label })"
+                    :aria-label="__('workflows::messages.overview_preset_clear', { label: preset.label })"
+                    @click="clearPreset()"
                 />
-            </ButtonGroup>
+            </div>
 
             <!-- The stage. Never shorter than the tallest listing it has shown
                  (`floor`), so a button click — a remount, a narrower table,
                  fewer rows — never pulls the card, or the dashboard below it,
                  up. -->
             <div ref="stage" class="relative flex flex-1 flex-col" :style="floor ? { minHeight: `${floor}px` } : null">
-                <!-- Keyed by the selection, so a switch remounts the listing rather
+                <!-- Keyed by the selection (and the stat card's filter, if any —
+                     see stageKey()), so a switch remounts the listing rather
                      than only changing its parameters: Listing would refetch on its
                      own, but keep sending the old column visibility (the endpoint
                      then hides the site columns the new scope adds), keep the old
@@ -79,9 +105,9 @@
                     v-for="key in stages"
                     :key="key"
                     :url="listingUrl"
-                    :columns="scopes[key].columns"
-                    :filters="scopes[key].filters"
-                    :additional-parameters="scopes[key].parameters"
+                    :columns="scopes[selectionOf(key)].columns"
+                    :filters="scopes[selectionOf(key)].filters"
+                    :additional-parameters="parametersFor(key)"
                     preferences-prefix="workflows.overview"
                     :per-page="perPage"
                     :show-toolbar="true"
@@ -99,12 +125,13 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { Widget, ButtonGroup, Button } from '@statamic/cms/ui';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Badge, Widget, ButtonGroup, Button } from '@statamic/cms/ui';
 import CreatePostButton from './CreatePostButton.vue';
 import WorkflowListing from './WorkflowListing.vue';
 import { registerStateColors, registerStateLabels } from '../support/states.js';
 import { dotClass } from '../support/widgetColors.js';
+import { OVERVIEW_ANCHOR, activePreset, clearPreset, useLinkTarget } from '../support/dashboardLinks.js';
 
 /**
  * Dashboard widget `workflows_overview`. Everything but `perPage` and
@@ -179,18 +206,80 @@ const scopes = computed(() =>
     ),
 );
 
+// The stat row's filter (QueueStats cards 2-4 via support/dashboardLinks.js):
+// {preset, label, workflows} or null. Sent as the listing's `preset` parameter
+// on top of the selection's own.
+const preset = computed(() => activePreset());
+
+// A stage is a selection plus the preset it is filtered by: `postmanager|`,
+// `*|awaiting_approval`. Both are part of the listing's identity, so either
+// change goes through the same background-load swap.
+function stageKey(selection, presetName) {
+    return `${selection}|${presetName ?? ''}`;
+}
+
+function selectionOf(key) {
+    return key.slice(0, key.lastIndexOf('|'));
+}
+
+// Parameters per stage, built once each — Listing refetches when it is handed
+// a new object, and a stage's parameters never change.
+const parameterCache = new Map();
+
+function parametersFor(key) {
+    if (!parameterCache.has(key)) {
+        const presetName = key.slice(key.lastIndexOf('|') + 1);
+        parameterCache.set(key, {
+            ...scopes.value[selectionOf(key)].parameters,
+            ...(presetName ? { preset: presetName } : {}),
+        });
+    }
+
+    return parameterCache.get(key);
+}
+
 // `active` is the pressed button and follows a click at once; `shown` is the
-// listing on screen; `pending` the one loading behind it, if any. A click back
-// to the shown selection simply drops the pending one, and a third click while
+// stage on screen; `pending` the one loading behind it, if any. A click back
+// to the shown stage simply drops the pending one, and a third click while
 // one is pending replaces it.
-const shown = ref(active.value);
+const shown = ref(stageKey(active.value, null));
 const pending = ref(null);
 let fallback = null;
 
 const stages = computed(() => (pending.value ? [shown.value, pending.value] : [shown.value]));
 
+/**
+ * A workflow button. A card's filter survives the switch where it still means
+ * something — "Alle" or one of the workflows the preset draws from — and is
+ * dropped otherwise: "failed translations" over the post manager is always an
+ * empty table, and an empty table under an active chip reads as a bug.
+ */
 function select(key) {
     active.value = key;
+
+    if (preset.value && key !== ALL && !preset.value.workflows.includes(key)) {
+        // The watcher below then shows the unfiltered stage.
+        clearPreset();
+
+        return;
+    }
+
+    show(stageKey(key, preset.value?.preset));
+}
+
+// A card was clicked (or the chip removed). A preset that draws from exactly
+// one of this widget's workflows selects that workflow's button, one spanning
+// several selects "Alle"; removing it keeps the selection.
+watch(preset, (next) => {
+    if (next && props.workflowOptions.length > 1) {
+        const options = props.workflowOptions.filter((option) => next.workflows.includes(option.value));
+        active.value = options.length === 1 ? options[0].value : ALL;
+    }
+
+    show(stageKey(active.value, next?.preset));
+});
+
+function show(key) {
     pending.value = key === shown.value ? null : key;
     clearTimeout(fallback);
     // Listing reports only a SUCCESSFUL request. A failed one (Listing toasts
@@ -210,6 +299,8 @@ function stageClass(key) {
     if (key === pending.value) return 'invisible absolute inset-x-0 top-0';
     return ['flex flex-1 flex-col transition-opacity', pending.value ? 'pointer-events-none opacity-50' : null];
 }
+
+useLinkTarget(OVERVIEW_ANCHOR);
 
 // The height floor of the stage: the tallest it has been since the widget
 // mounted. A ResizeObserver on the stage sees every growth (it cannot shrink

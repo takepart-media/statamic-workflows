@@ -1902,7 +1902,7 @@ angehängt.
 
 | Pfad | Handler | Beschreibung |
 | --- | --- | --- |
-| `GET  workflows/api/listing` | `listing` | Tabellendaten für die Queue (Suche, Filter, Sortierung, Pagination). `workflow=<name>` für einen Manager; `all_workflows=1` für die workflow-übergreifende Liste des Widgets `workflows_overview`, optional eingeengt per `workflows=a,b` — Widget-Config bzw. der eine per Button gewählte Workflow (unbekannte/inaktive Namen fallen still weg). |
+| `GET  workflows/api/listing` | `listing` | Tabellendaten für die Queue (Suche, Filter, Sortierung, Pagination). `workflow=<name>` für einen Manager; `all_workflows=1` für die workflow-übergreifende Liste des Widgets `workflows_overview`, optional eingeengt per `workflows=a,b` — Widget-Config bzw. der eine per Button gewählte Workflow (unbekannte/inaktive Namen fallen still weg). Dazu optional `preset=awaiting_approval\|failed_translations\|published_this_week` (nur mit `all_workflows`): nur die Zeilen, hinter denen eine Karte der Kennzahlreihe steht (`StatsPresets`, § 9); unbekannte Namen werden ignoriert. |
 | `GET  workflows/api/instances/{id}/actions` | `actionsJson` | Verfügbare Transitions ab dem aktuellen State. |
 | `GET  workflows/api/instances/{id}/history/{event}/diff` | `historyDiff` | Diff eines History-Events vs. voriger/erster Snapshot. |
 | `POST workflows/api/instances/{id}/transitions/{name}` | `applyTransition` | Transition anwenden. |
@@ -2886,16 +2886,39 @@ vier Zahlen sind eine Aussage, sie müssen bündig stehen und gleich hoch
 bleiben — vier Dashboard-Slots hätten das Layout der Breitenarithmetik des
 Dashboards überlassen. Config: `workflows` (Teilmenge aktiver Workflow-Namen,
 Default alle) über denselben Trait wie die zwei Listen-Karten
-(`PresentsPersonalEntries`).
+(`PresentsPersonalEntries`). Dieselbe Liste gehört in die Config von
+`workflows_overview`, sonst spannen Kartenzahl und gefilterte Tabelle
+verschiedene Workflows.
+
+**Jede Karte ist ein Link** auf die Beiträge hinter ihrer Zahl (Details unten,
+„Karten als Links"): Karte 1 springt zur Karte „Meine Warteschlange", Karten 2–4
+filtern „Alle Beiträge" auf genau die gezählten Beiträge und scrollen dorthin.
+
+**Karten 2–4 zählen Beiträge, nicht Fassungen** — die Zeilen, die ihr Filter in
+„Alle Beiträge" übrig lässt (eine Zeile je Workflow + Ursprungseintrag),
+`WorkflowController::matchingPostCount()`. Vorher zählten sie Subjects (eine je
+Site-Fassung); zwei Sprachfassungen eines Beitrags am selben Gate hätten „2" über
+einer Tabelle mit einer Zeile bedeutet. Was dabei herausfällt, fällt auch aus der
+Tabelle: Waisen-Zustände (Eintrag gelöscht) und Fassungen, die ein Manager gar
+nicht listet (Site ohne Spalte, Lokalisierungs-Gruppen ohne fertige Quelle). Im
+Referenzprojekt: „Wartet auf Freigabe" 6 Subjects → **3** Beiträge; die drei
+übrigen sind `source_ready`-Zustände deutscher Fassungen im
+Übersetzungsmanager, dessen Quelle inzwischen `simple` ist — Reste einer
+früheren Quell-Einstellung, die kein Manager zeigt.
 
 **Zählsemantik.** Karte 1 ist persönlich, Karten 2–4 sind projektweit:
 
 | Karte | Zählt | Notiz |
 | --- | --- | --- |
 | „In meiner Warteschlange" (indigo) | `PersonalWorkItems::assignedTo()->count()` | — |
-| „Wartet auf Freigabe" (blau) | gespeicherte Zustände, die ein **Freigabe-Gate** des jeweiligen Workflows sind (`TransitionGates::gatePlaces()`) | „älteste seit N Tagen"; Wert öffnet Stack mit den Beiträgen |
-| „Fehlgeschlagene Übersetzungen" (rot) | gespeicherte Zustände im `plain_language_failed_place` des jeweiligen Workflows | „erneut starten" — als Button, wo der Betrachter darf; Wert öffnet Stack |
-| „Diese Woche veröffentlicht" (grün) | Übergänge in `green`/`emerald`-Places dieser Kalenderwoche | „+N/−N zur Vorwoche" |
+| „Wartet auf Freigabe" (blau) | Beiträge mit einer Fassung, deren gespeicherter Zustand ein **Freigabe-Gate** ihres Workflows ist (`TransitionGates::gatePlaces()`) | „älteste seit N Tagen" |
+| „Fehlgeschlagene Übersetzungen" (rot) | Beiträge mit einer Fassung im `plain_language_failed_place` ihres Workflows | „erneut starten" — als Button, wo der Betrachter darf |
+| „Diese Woche veröffentlicht" (grün) | Beiträge mit einer Fassung, die diese Kalenderwoche in einen `green`/`emerald`-Place lief | „+N/−N zur Vorwoche" (Vorwoche ebenfalls in Beiträgen) |
+
+Die Subject-Mengen der Karten 2–4 liefert **`src/Workflow/StatsPresets.php`**
+(`subjects($preset, $only)`, `scope($preset, $only)`, `published()` für das
+Vorwochenfenster) — aus dem Widget herausgezogen, weil der Listing-Filter
+dieselben Mengen lesen muss.
 
 Karte 1 nimmt **denselben Codepfad wie `MyQueue`** — ein Aufruf von
 `PersonalWorkItems::assignedTo()`, gezählt —, nicht die billigere Zählung über
@@ -2955,7 +2978,7 @@ Beiträge der SLA-Stufe mit, die nichts fehlgeschlagen haben.
 also `metadata.color` am Place, dann die eingebauten Defaults) — dort ist sie
 richtig: „fertig" ist genau das, was `color: green` sagt, und dieselbe Lesart
 treibt schon die Dringlichkeitssortierung in `PersonalWorkItems::URGENCY`. Die
-Farbfamilie steht als Konstante im Widget (`DONE_COLORS`).
+Farbfamilie steht als Konstante in `StatsPresets` (`DONE_COLORS`).
 
 **Der Wochenvergleich kommt aus dem Event-Log**, nicht aus den gespeicherten
 Zuständen: „diese Woche veröffentlicht" ist ein Ereignis, und ein Beitrag, der
@@ -2985,113 +3008,56 @@ nur, wenn auch die Vorwoche 0 war, sonst bleibt der Vergleich stehen. Ein
 Rückgang bei Karte 4 ist kein Fehler und bleibt neutral gefärbt; nur ein Zuwachs
 bekommt `tone: positive`.
 
-#### Die Beiträge hinter der Zahl (alle vier Karten)
+#### Karten als Links
 
-**Jede** Karte trägt `items` — bis zu `ITEM_CAP` = **50** Einträge
-`{title, url, site_code}` — plus `more`: den vom Cap verdeckten Rest **pro
-Workflow** als `{count, label, url}`, in derselben Form, die der Footer der
-Listen-Karten schon spricht (`url` null ohne `metadata.nav`). `url` kommt aus
-`InstanceUrl::for()` (eine memoisierte Instanz für die ganze Reihe), `site_code`
-ist das großgeschriebene Locale und nur auf Multisite gesetzt — dieselbe
-Konvention wie `PersonalWorkItems::row()`. Eine Zahl, der man nicht zur Arbeit
-folgen kann, ist eine Zahl, die man von Hand suchen muss.
+Früher öffnete jede Zahl einen `Stack` mit bis zu 50 Beiträgen (`items`/`more`,
+`SubjectLinks::forSubjects()`, `PresentsPersonalEntries::overflow()`). Das hat
+schlecht verdoppelt, was das Dashboard schon kann — die Warteschlangen-Karte mit
+Tabs und Pager, „Alle Beiträge" mit Suche, Filter und Paginierung. Stack, Cap,
+`forSubjects()`, `overflow()` und `widget_more_in` sind entfernt; jede Karte
+trägt stattdessen `link`:
 
-Die Arbeit selbst steht in **`src/Workflow/SubjectLinks.php`** — Cap,
-Waisen-Behandlung (eine State-Zeile kann ihren Eintrag überleben; sie wird
-übersprungen, **ohne** einen Platz zu verbrauchen), Site-Chip, Quell-Reihenfolge
-und der Rest pro Workflow. Sie stand zuerst als `links()` im Widget und ist
-ausgezogen, als der zweite Aufrufer kam: die Statusreihe lädt über
-`WorkflowController::stateSubjects()` dieselbe Liste nach (§ 9), und zwei Kopien
-hätten zwei Caps, zwei Vorstellungen von einem Site-Chip und zwei Stellen
-bedeutet, an denen man an die Waisen denken muss. `QueueStats::links()` ist
-seitdem eine Zeile Delegation; `ITEM_CAP` im Widget ist `SubjectLinks::ITEM_CAP`,
-damit `queueLinks()` (Karte 1, eigener Weg — siehe unten) bei derselben Zahl
-kappt.
-
-Die Klasse hat **zwei** Formen, weil die zwei Aufrufer verschiedene Fragen
-stellen: `forSubjects()` liefert Cap + „+N je Workflow" (diese Reihe — ihre
-Mengen laufen über mehrere Workflows, und ein Pager über eine Vereinigung hat
-keine ehrliche Gesamtzahl je Workflow) und bleibt in Quell-Reihenfolge;
-`paginate()` liefert echte Seiten für **einen** Workflow, nach Titel sortiert —
-das ist die Statusreihe (§ 9). Die Kennzahlreihe bleibt beim Cap; wer sie
-umstellt, stellt `forSubjects()` um, nicht `paginate()`.
-
-Woher die Einträge kommen, ist pro Karte verschieden — die Zählung liefert sie
-jeweils mit, es wird nichts ein zweites Mal ermittelt:
-
-| Karte | Quelle der `items` |
+| Karte | `link` |
 | --- | --- |
-| 1 „In meiner Warteschlange" | die Zeilen von `PersonalWorkItems::assignedTo()`, direkt (`queueLinks()`) |
-| 2 „Wartet auf Freigabe" | die Subject-IDs der Gate-Places, über `links()` |
-| 3 „Fehlgeschlagene Übersetzungen" | die Subject-IDs aus `FailedTranslationRetry::subjects()`, über `links()` |
-| 4 „Diese Woche veröffentlicht" | die Subject-IDs der grünen Übergänge **dieser** Woche, über `links()` |
+| 1 | `{target: 'workflows-my-queue', fallback}` |
+| 2–4 | `{target: 'workflows-overview', fallback, preset, workflows}` |
 
-**Karte 1 nimmt einen eigenen Weg** (`queueLinks()` statt `links()`): ihre Zeilen
-sind bereits aufgelöste Einträge und tragen `title`, `url` und `site_code`
-schon — sie erneut über `Entry::find()` zu holen wären dieselben Lookups für
-dieselbe Antwort, und die Konventionen des Row-Builders (der Site-Chip ist das
-großgeschriebene **Handle**, nicht das Locale) bekämen eine zweite, leicht
-abweichende Implementierung. Der Rest kommt aus `overflow()` des Traits
-(gruppiert je Workflow, mit Manager-URL); nur der zusätzliche Schlüssel `color`
-fällt weg, damit `more` auf allen vier Karten dieselbe Form hat.
+- **`target`** ist die Element-ID der Zielkarte (`QueueStats::MY_QUEUE_ANCHOR` /
+  `::OVERVIEW_ANCHOR`; `MyQueueWidget.vue` und `WorkflowsOverviewWidget.vue`
+  tragen sie mit `tabindex="-1"`). Die Karte ist ein echtes `<a href="#…">`.
+  Der Klick wird abgefangen: Preset setzen (Karten 2–4), dann
+  `scrollIntoView` — `smooth`, bei `prefers-reduced-motion: reduce` sofort — und
+  Fokus auf die Zielkarte (`preventScroll`), wie ein In-Page-Link für Tastatur
+  und Screenreader. Modifier-Klicks bleiben dem Browser.
+- **`preset`/`workflows`:** der Name für den Listing-Parameter `preset` (§ 4) und
+  die Workflows, aus denen er schöpfen kann (`StatsPresets::scope()`, aus der
+  Definition gelesen, nicht aus den heutigen Daten — die Karte zeigt auf dieselbe
+  Tabelle, ob sie 0 oder 30 sagt). Ein Workflow → „Alle Beiträge" wählt dessen
+  Button; mehrere → „Alle".
+- **`fallback`**, wenn die Zielkarte nicht auf diesem Dashboard liegt: Karte 1
+  verlinkt die Manager-Seite des ersten Workflows mit Arbeit, mit
+  `#workflows-my-queue` (die „Meine Warteschlange"-Sektion dort trägt dieselbe
+  ID); bei leerer Queue gibt es kein Ziel. Karten 2–4 verlinken die
+  Manager-Seite, wenn das Preset genau **einen** Workflow hat (z. B. die
+  Fehlschläge → Einfache-Sprache-Manager; ungefiltert), sonst nichts — aus
+  mehreren Workflows einen zu raten wäre geraten. Ohne Ziel und ohne Fallback
+  ist die Karte ein schlichtes `div`.
 
-**Karte 4 braucht IDs statt einer Summe.** Dafür gibt es
-`WorkflowEventStore::subjectIdsEnteringStates(array $states, Carbon $from, Carbon
-$to): array` — dieselbe Abfrage wie der Zähler, aber als `[workflow => [ids]]`.
-Gruppiert nach Workflow, weil jeder Konsument das ohnehin braucht (eine
-Instanz-URL ist nur mit dem Workflow auflösbar). **Distinct über Workflows
-hinweg**, nicht je Workflow: ein Beitrag, der in derselben Woche in zwei
-Workflows grün wurde, erscheint nur unter dem ersten — nur so bleibt die Summe
-der Gruppen gleich dem Zähler. `subjectsEnteringStates()` **delegiert** jetzt
-hierher und summiert, statt ein eigenes `COUNT` zu fahren: die Karte zeigt die
-Zahl und listet die Beiträge dahinter, und zwei getrennte Abfragen für „wie
-viele" und „welche" wären zwei Gelegenheiten, sich zu widersprechen. Nur die
-**laufende** Woche bekommt `items`; die Vorwoche bleibt eine reine
-Vergleichszahl in der Notiz (eine Liste über zwei Wochen bräuchte pro Woche eine
-Überschrift, um lesbar zu sein).
+Ob die Zielkarte da ist, beantwortet **`resources/js/support/dashboardLinks.js`**:
+ein modulweiter reaktiver Store, in den sich die Zielkarten beim Mounten
+eintragen (`useLinkTarget()`), dazu das aktive Preset (`applyPreset()`,
+`clearPreset()`, `activePreset()`). Ein Store statt eines `window`-Events, weil
+er auch die Frage beantwortet, die ein Event nicht kann — „gibt es die andere
+Karte überhaupt?" —, für eine Karte, die vor ihr rendert.
 
-Gelöschte Einträge werden übersprungen, **ohne einen Platz zu verbrauchen** (ein
-Zustand kann seinen Eintrag überleben; eine Liste mit 47 Links, weil drei
-Subjects Waisen sind, sähe wie ein Fehler aus) — sie fallen damit auch aus dem
-Rest heraus, `items` plus alle `more`-Counts können also etwas unter dem
-Kartenwert liegen. Das ist die richtige Richtung, falsch zu sein: es wird nichts
-benannt, was sich nicht öffnen lässt. Sortiert wird **nicht** — nach Titel zu
-sortieren hieße, alle Subjects aufzulösen, nur um zu entscheiden, welche fünfzig
-man zeigt.
-
-Clientseitig wird die **Zahl selbst** zum Trigger eines `Stack` — des
-Slide-over-Panels des CP. Slots: `#trigger` und der Default-Slot, der dank
-`wrapSlot` automatisch in einen `StackContent` gewickelt wird; `title` +
-`show-close-button` bauen den Header, und weil `#footer-start` belegt ist,
-rendert das Kit von selbst einen `StackFooter`. `StackHeader`/`StackContent`/
-`StackFooter`/`StackClose` exportiert das Kit auch einzeln, hier braucht es sie
-nicht. Inhalt: eine Liste von Links wie in den Zeilen der Listen-Karten,
-`site_code` als `Badge size="sm" color="default"`; im Footer die
-`more`-Einträge als „+N Label" mit `widget_more_in` im `title` — sie sind der Weg
-*aus* dem Panel heraus, keine weitere seiner Zeilen. Ohne `items` bleibt die Zahl
-ein schlichtes `Heading` — die Vue-Seite ist generisch und fragt nur, ob `items`
-gefüllt ist, weshalb eine leere Karte (Karte 4 in einer Woche ohne
-Veröffentlichung) von selbst keinen Stack rendert. Stack und Retry-Button sind
-voneinander unabhängig: der Stack hängt am Wert, der Button an der Notiz —
-Karte 3 hat beides.
-
-> **Warum Stack und nicht Popover.** Zuerst hing die Liste in einem `Popover`.
-> Ein Popover muss neben die Karte passen, an der es hängt — bei 30 Beiträgen in
-> der Freigabe war das unbenutzbar, und der Cap von 10 war eine Folge des
-> Containers, nicht der Sache. `StackContent` ist `flex-1 overflow-auto`, das
-> Panel scrollt also selbst; deshalb steht der Cap jetzt bei 50 und begrenzt nur
-> noch, was sinnvoll *gelesen* wird. Darüber übernehmen die `more`-Links die
-> Managerseite, die lange Listen richtig kann (Filter, Sortierung, Paginierung).
-
-> **Abweichung.** Der Trigger ist ein nacktes `<button>` um das unveränderte
-> `Heading`, kein Kit-`Button`: `Stack` rendert seinen Trigger als
-> `<Primitive as-child @click="open">`, adoptiert also das übergebene Element und
-> stylt nichts — es gibt hier keine Kit-Trigger-Optik zu erben. Ein Kit-`Button`
-> brächte eigene mit: seine Größenvarianten pinnen eine Höhe (`h-6` bei `xs` bis
-> `h-10` bei `base`), eine xl-Zahl in einem 24-px-Button wird abgeschnitten.
-> Affordanz ist deshalb `cursor-pointer` + `hover:underline` — dasselbe Paar, das
-> die Zeilentitel der Listen-Karten benutzen. Der zugängliche Name kommt aus
-> `widget_stats_show_posts`.
+**Markup:** der Link umfasst Label und Zahl; sein `::after` ist über die ganze
+(`relative`) Karte gespannt, sodass die ganze Karte klickbar ist. Der
+Retry-Button ist ein **Geschwister** des Links, mit `relative z-10` über dem
+Overlay — keine verschachtelten Bedienelemente, und sein Klick erreicht den Link
+nie. Ein `sr-only`-Zusatz sagt, wohin der Link führt
+(`widget_stats_jump_to_queue` / `widget_stats_filter_overview` /
+`widget_stats_open_manager`). Die Karte, deren Preset „Alle Beiträge" gerade
+zeigt, bekommt einen blauen Ring und `aria-current`.
 
 #### Layout der Reihe
 
@@ -3130,7 +3096,9 @@ Fassung ist, sieht weiterhin die reine Notiz.
 (`workflows.api.stats.retry` → `WorkflowController::retryFailedTranslations()`).
 Ohne Parameter — die Menge *ist* „alles, was fehlgeschlagen ist", deshalb hängt
 die Route an `stats` und nicht an einer Instanz. Antwort:
-`{retried, skipped, remaining_failed}`.
+`{retried, skipped, remaining_failed}`; `retried`/`skipped` zählen Subjects,
+`remaining_failed` ersetzt der Endpoint durch die Einheit der Karte, Beiträge
+(`matchingPostCount()`).
 
 Die Arbeit macht **`src/Workflow/FailedTranslationRetry.php`**, und zwar pro
 Subject:
@@ -3527,9 +3495,12 @@ Im **Footer**-Slot des `Widget` steht nur noch der Pager (siehe Paginierung
 oben). Die frühere „● +3 Beiträge ● +1 Übersetzungen"-Leiste
 (`PersonalWidgetFooter.vue`, je Workflow auf die Manager-Seite verlinkt) ist
 entfallen: sie zählte und verlinkte, was `limit` verdeckte — mit Paginierung ist
-nichts mehr verdeckt, und die Manager-Seiten erreicht man über die Nav. Nur die
-Kennzahlreihe (`QueueStats`) kappt noch und nutzt dafür weiter
-`PresentsPersonalEntries::overflow()`.
+nichts mehr verdeckt, und die Manager-Seiten erreicht man über die Nav.
+(`PresentsPersonalEntries::overflow()` ist mit dem Stack der Kennzahlreihe
+entfallen.)
+
+Die Karte trägt die ID `workflows-my-queue` (+ `tabindex="-1"`): Ziel der
+Kennzahl-Karte „In meiner Warteschlange" (siehe `QueueStats`).
 
 Die Workflow-Farbe (Dot) kommt aus `metadata.color` im Workflow-YAML (jeder
 Statamic-Badge-Farbname); ohne Deklaration vergibt
@@ -3613,6 +3584,22 @@ Create-Buttons können so nicht von dem abweichen, was der Endpoint antwortet
   Manager-Seite (`createOptions()`: Collection-Owner, kein
   Lokalisierungs-Workflow, `post_creator_groups`). Ab zwei Buttons tragen sie den
   Workflow im Text (`new_post_in`, „Beitragsmanager: neuer Beitrag").
+- **Filter aus der Kennzahlreihe:** die Karte trägt die ID `workflows-overview`
+  (+ `tabindex="-1"`). Ein Klick auf Karte 2–4 von `QueueStats` setzt über
+  `support/dashboardLinks.js` ein Preset; die Karte wählt dann den Button des
+  einen Workflows, aus dem das Preset schöpft, sonst „Alle", schickt
+  `preset=<name>` zusätzlich zu den Parametern der Auswahl und zeigt neben der
+  `ButtonGroup` einen entfernbaren Chip („Gefiltert: Wartet auf Freigabe ✕",
+  `overview_preset_active` / `overview_preset_clear`, ein `Badge as="button"`).
+  Chip entfernen → ungefilterte Tabelle der aktuellen Auswahl. Ein anderer
+  Workflow-Button **behält** das Preset, wenn der Workflow zu dessen Scope gehört
+  (oder „Alle" ist), und **verwirft** es sonst — „fehlgeschlagene Übersetzungen"
+  im Beitragsmanager wäre immer leer, und eine leere Tabelle unter einem aktiven
+  Chip sieht nach Fehler aus. Preset und Auswahl bilden zusammen den Key der
+  Liste (`stageKey()`), jeder Wechsel läuft also durch denselben
+  Hintergrund-Tausch wie ein Button-Klick — kein Layout-Shift. Der Chip steht in
+  der Zeile der Buttons und verschiebt die Tabelle nicht (nur bei einem einzigen
+  Workflow im Scope entsteht die Zeile erst mit dem Chip).
 - **Sichtbarkeit:** für alle CP-User, wie das Listing selbst (§ 12).
 
 ### `UserHeader` (`workflows_user_header`)
@@ -3756,8 +3743,8 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
     Dashboard-Widget `workflows_overview` (§ 9): `Widget`-Shell, im
     `#actions`-Slot ein `CreatePostButton` je `creates`-Eintrag, darunter die
     Workflow-`ButtonGroup` (Punkt aus `dotClass()`, `variant="pressed"` für den
-    aktiven) und `WorkflowListing` mit `bare` und `perPage`, nach der Auswahl
-    gekeyt.
+    aktiven), daneben ggf. der Preset-Chip der Kennzahlreihe, und
+    `WorkflowListing` mit `bare` und `perPage`, nach Auswahl + Preset gekeyt.
   - `WorkflowHistory.vue` — History-Liste samt Diff-Panel und dem LCS-Wort-Diff.
     Von **beiden** Detailansichten benutzt (§ 5.10).
   - `workflows-queue-stats-widget` → `QueueStatsWidget.vue` — die Kennzahlreihe
@@ -3766,8 +3753,9 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
     `Heading size="xl"` als Wert und eine optionale `Description` als Notiz —
     bzw., wo die Karte ein `action` mitbringt, ein `Button` an deren Stelle, der
     `workflows.api.stats.retry` postet und die Karte aus der Antwort neu schreibt
-    (§ 9). Wo sie `items` mitbringt, wird der Wert zusätzlich zum Trigger eines
-    `Stack` mit den Beiträgen dahinter. Rechnet sonst nichts — alles kommt
+    (§ 9). Jede Karte ist ein Link (`link`): zur Warteschlangen-Karte bzw. auf
+    „Alle Beiträge", gefiltert per Preset (`support/dashboardLinks.js`, § 9).
+    Rechnet sonst nichts — alles kommt
     fertig übersetzt aus dem Widget. Die Ton- und
     Punktfarben stehen als ausgeschriebene Klassennamen in zwei Lookup-Objekten,
     damit Tailwind sie beim Scannen der Datei findet; die Ton-Klassen tragen ein
@@ -3786,7 +3774,7 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
     gemeinsamen `Stack` (`v-model:open`, kein `#trigger` — nur eine Auswahl kann
     offen sein), dessen Inhalt beim ersten Öffnen von `segment.links_url` geholt
     und danach pro URL **und Seite** gecacht wird; die Zeilen darin sind exakt
-    das Markup der Stacks der Kennzahlreihe, im Fuß der Kit-`Pagination`
+    das Markup, das früher die Stacks der Kennzahlreihe hatten, im Fuß der Kit-`Pagination`
     (`resourceMeta` aus der Antwort, `scroll-to-top` aus — der Default scrollt
     das FENSTER, und diese Liste sitzt in einem Slide-over, das selbst scrollt)
     und gegenüber der Link auf die Manager-Seite. Chart.js wird tree-shaken registriert, Instanzen
@@ -3821,6 +3809,11 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
     `setPage()`); klemmt die Seite, wenn die Liste schrumpft. `fillers` sind die
     Platzhalter-Zeilen bis zur vollen Seite, solange `reserved`. Für die drei
     persönlichen Karten (§ 9).
+  - `support/dashboardLinks.js` — die Verbindung zwischen den Dashboard-Karten:
+    `useLinkTarget()` / `hasLinkTarget()` (welche Zielkarte liegt auf der
+    Seite), `jumpTo()` (scrollen + fokussieren, `prefers-reduced-motion`
+    beachtet) und das Preset der Kennzahlreihe für „Alle Beiträge"
+    (`applyPreset()`, `clearPreset()`, `activePreset()`) (§ 9).
   - `support/widgetColors.js` — Farbname → `.wf-rail--` / `.wf-dot--`-Klasse für
     die zwei Dashboard-Karten, mit Whitelist und `default`-Fallback. Der State
     steht NICHT darin, der ist ein Kit-`Badge` (§ 9). Dazu `colorHex()`: Farbname

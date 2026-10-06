@@ -231,7 +231,6 @@ return [
     'widget_header_no_groups' => 'No functions',
     'widget_header_affiliation' => 'Affiliation',
     'widget_header_responsible' => 'Responsible',
-    'widget_more_in' => 'Open all in “:workflow”',
     'widget_tab_all' => 'All',
     'widget_created_subline' => 'Last edited',
     // Carbon supplies the complete phrase ("6 days ago") — see
@@ -263,6 +262,16 @@ return [
     'widget_stats_retry_error' => 'Could not restart.',
     // :diff arrives with its sign already attached ("+3", "−2", "±0").
     'widget_stats_vs_last_week' => ':diff vs. last week',
+    // The stat row's cards are links: appended for screen readers only, so a
+    // card does not just read "Awaiting approval 3" but says where it leads.
+    // See QueueStatsWidget.vue.
+    'widget_stats_jump_to_queue' => 'jump to “My Queue”',
+    'widget_stats_filter_overview' => 'show in “All posts”',
+    'widget_stats_open_manager' => 'open in the workflow',
+    // The removable chip above "All posts" while a stat card filters the table.
+    // :label is the card's label.
+    'overview_preset_active' => 'Filtered: :label',
+    'overview_preset_clear' => 'Remove filter “:label”',
     // Status row `workflows_status` — one card per active workflow. The line
     // under the workflow name; it sits on every card because the cards may wrap
     // onto a second line, where a heading above the row would only cover some

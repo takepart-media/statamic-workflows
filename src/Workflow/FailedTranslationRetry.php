@@ -161,8 +161,9 @@ class FailedTranslationRetry
             'skipped' => $skipped,
             // Re-counted from the store rather than subtracted: the transition
             // moved the subjects out, and reading the truth back costs one query
-            // per workflow and cannot drift from what the card will show on the
-            // next dashboard load.
+            // per workflow. In SUBJECTS — the dashboard endpoint replaces it with
+            // the card's own unit, posts (WorkflowController::
+            // retryFailedTranslations()).
             'remaining_failed' => $this->count($only),
         ];
     }

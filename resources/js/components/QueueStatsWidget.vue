@@ -6,14 +6,15 @@
          inside the cells instead: `min-w-0` plus truncation on the label, so a
          narrow viewport shortens the words rather than breaking the row.
 
-         Read-only but for two spots, and they are independent of each other: a
-         card that arrives with `items` turns its VALUE into a stack listing the
-         posts behind the figure, and a card that arrives with an `action` turns
-         its NOTE into a button. The failed-translations card has both. -->
-
-    <!-- Two `v-if`s per card rather than one "interactive card" branch, because
-         the stack and the retry belong to different lines of the card and
-         either can be absent on its own.
+         Every card is a LINK to the posts behind its figure — card 1 to the
+         "My queue" card, cards 2-4 to "Alle Beiträge", filtered to what they
+         count (see support/dashboardLinks.js). The failed-translations card
+         may carry one more control, its retry button, and the two must not
+         nest: the link is a sibling of the button, and only its `::after` is
+         stretched over the whole card (the card is `relative`, the button
+         `relative z-10` above the overlay). So the whole card is the click
+         target, the button stays its own, and a screen reader meets two
+         separate controls.
 
          Each card is Statamic's own `Card`, so the surface (radius, ring,
          shadow, dark mode) is the CP's and not ours — the same shell `Widget`
@@ -28,111 +29,52 @@
              stays the kit's and only the vertical rhythm is overridden. The
              bangs are not decorative — same reason as TONE_CLASSES below: the
              addon's utilities sit in the low-priority `addon-utilities` layer
-             and would otherwise lose to the CP's own sheet. -->
-        <Card v-for="(card, index) in rows" :key="card.label" class="min-w-0 py-3! space-y-1!">
-            <div class="flex min-w-0 items-center gap-2">
-                <!-- Purple-ish = my own work, blue = review, red = broken,
-                     green = done. `shrink-0` because the label beside it wraps
-                     before the dot may give up a pixel. -->
-                <span class="size-[7px] shrink-0 rounded-full" :class="DOT_CLASSES[card.color]"></span>
-                <!-- Truncated, not wrapped: four labels in one row at any width
-                     means the longest one has to give, and half a word on a
-                     second line would make its card taller than its neighbours. -->
-                <Description class="min-w-0 truncate">{{ card.label }}</Description>
-            </div>
+             and would otherwise lose to the CP's own sheet.
 
-            <!-- The figure. `Heading` from the kit rather than an inline
-                 font-size: the kit's typography wins over the mockup's exact px
-                 (see the note in the widget's PHP docblock). `xl`, one step down
-                 from the largest the component offers (`base`/`lg`/`xl`/`2xl`),
-                 because four of these now share one row at every width.
-
-                 Where the server sent posts, that same figure opens a `Stack` —
-                 the CP's slide-over panel. A popover sat here first and was the
-                 wrong container: it has to fit beside the card it hangs off, so
-                 thirty posts awaiting approval were unusable. `StackContent` is
-                 `flex-1 overflow-auto`, i.e. the panel scrolls by itself and the
-                 list can be as long as the cap allows.
-
-                 The number IS the trigger — the figure and the posts behind it
-                 are one thing, and a second control beside it would suggest they
-                 are two.
-
-                 The trigger is a bare `<button>` wrapping the unchanged
-                 `Heading`, NOT a kit `Button`. `Stack` renders its trigger as
-                 `<Primitive as-child @click="open">` — exactly like `Popover`
-                 did: it adopts whatever element it is given and styles nothing,
-                 so there is no kit trigger styling to inherit. A kit `Button`
-                 would have brought its own: every size variant pins a height
-                 (`h-6` at `xs` up to `h-10` at `base`), and an xl figure inside
-                 a 24px button is clipped. So the affordance is the one the addon
-                 already uses for "this opens something you can read": pointer
-                 plus underline on hover, the same pair as the row titles in the
-                 list widgets. -->
-            <Stack v-if="card.items?.length" :title="card.label" size="narrow" show-close-button>
-                <template #trigger>
-                    <button
-                        type="button"
-                        class="cursor-pointer text-left hover:underline"
-                        :aria-label="__('workflows::messages.widget_stats_show_posts')"
-                    >
-                        <Heading size="xl" :text="card.value" />
-                    </button>
-                </template>
-
-                <!-- No `StackHeader`/`StackContent`/`StackFooter` assembled by
-                     hand, although the kit exports them: `title` +
-                     `show-close-button` build the header, the default slot is
-                     wrapped in a `StackContent` automatically (`wrapSlot`), and
-                     the `#footer-start` below makes the kit render its own
-                     `StackFooter`. Fewer of our own decisions about a panel the
-                     CP already knows how to lay out. -->
-                <div class="divide-y divide-gray-100 dark:divide-gray-800">
-                    <div v-for="item in card.items" :key="item.url" class="flex items-center gap-2 py-2">
-                        <!-- Same link treatment as the list widgets' rows: a bare
-                             `<a>`, because a link is not a component in the kit,
-                             and truncated because one long headline must not
-                             widen the panel. -->
-                        <a
-                            :href="item.url"
-                            class="min-w-0 flex-1 truncate text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
-                        >{{ item.title }}</a>
-
-                        <!-- Neutral: the site is an identifier, not a status.
-                             Only present at all on a multisite project. -->
-                        <Badge
-                            v-if="item.site_code"
-                            :text="item.site_code"
-                            color="default"
-                            size="sm"
-                            class="flex-none"
-                        />
-                    </div>
+             The ring marks the card whose filter "Alle Beiträge" is showing. -->
+        <Card
+            v-for="(card, index) in rows"
+            :key="card.label"
+            class="relative min-w-0 py-3! space-y-1!"
+            :class="isActive(card) ? 'ring-2! ring-blue-500! dark:ring-blue-400!' : null"
+        >
+            <!-- An `<a>` wherever the card has somewhere to go: the widget on
+                 this dashboard (`#…`, handled in follow()), else the server's
+                 fallback page. With neither it is a plain `div` — a link to
+                 nowhere is worse than no link. -->
+            <component
+                :is="hrefFor(card) ? 'a' : 'div'"
+                :href="hrefFor(card) || undefined"
+                :aria-current="isActive(card) ? 'true' : undefined"
+                class="group block min-w-0 space-y-1 focus-visible:outline-none"
+                :class="hrefFor(card) ? STRETCHED_LINK : null"
+                @click="follow($event, card)"
+            >
+                <div class="flex min-w-0 items-center gap-2">
+                    <!-- Purple-ish = my own work, blue = review, red = broken,
+                         green = done. `shrink-0` because the label beside it
+                         wraps before the dot may give up a pixel. -->
+                    <span class="size-[7px] shrink-0 rounded-full" :class="DOT_CLASSES[card.color]"></span>
+                    <!-- Truncated, not wrapped: four labels in one row at any
+                         width means the longest one has to give, and half a
+                         word on a second line would make its card taller than
+                         its neighbours. -->
+                    <Description class="min-w-0 truncate">{{ card.label }}</Description>
                 </div>
 
-                <!-- What the cap hides, per workflow, pointing at the manager
-                     page where those posts actually are — in the footer, because
-                     it is the way OUT of this panel rather than another of its
-                     rows. A workflow without `metadata.nav` has no such page:
-                     its remainder is stated as plain text instead of as a dead
-                     link. The `v-if` sits on the template so the kit sees no
-                     `footer-start` slot at all and skips the footer entirely. -->
-                <template v-if="card.more?.length" #footer-start>
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <component
-                            :is="entry.url ? 'a' : 'span'"
-                            v-for="(entry, moreIndex) in card.more"
-                            :key="moreIndex"
-                            :href="entry.url || undefined"
-                            :title="entry.url ? __('workflows::messages.widget_more_in', { workflow: entry.label }) : undefined"
-                            class="truncate text-xs"
-                            :class="entry.url ? 'text-blue-600 hover:underline dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'"
-                        >+{{ entry.count }} {{ entry.label }}</component>
-                    </div>
-                </template>
-            </Stack>
+                <!-- The figure. `Heading` from the kit rather than an inline
+                     font-size: the kit's typography wins over the mockup's exact
+                     px (see the note in the widget's PHP docblock). `xl`, one
+                     step down from the largest the component offers, because
+                     four of these share one row at every width. Underlined on
+                     hover like the row titles of the list widgets — the
+                     addon's "this opens something" affordance. -->
+                <Heading size="xl" :text="card.value" :class="hrefFor(card) ? 'group-hover:underline' : null" />
 
-            <Heading v-else size="xl" :text="card.value" />
+                <!-- Where the link goes, for screen readers: the visible text
+                     is a label and a bare number. -->
+                <span v-if="hrefFor(card)" class="sr-only">— {{ hintFor(card) }}</span>
+            </component>
 
             <!-- The note's place, in one of two shapes.
 
@@ -143,12 +85,13 @@
                  keeps it at the weight of the `Description` it replaces, and
                  `inset` strips the invisible padding a ghost-style button
                  carries so it stays flush with the label and the figure above.
-                 -->
+                 `relative z-10` lifts it over the card's link overlay. -->
             <Button
                 v-if="card.action"
                 variant="subtle"
                 size="xs"
                 inset
+                class="relative z-10"
                 :text="card.action.label"
                 :loading="pending === index"
                 :disabled="pending !== null"
@@ -166,7 +109,8 @@
 
 <script setup>
 import { getCurrentInstance, ref } from 'vue';
-import { Badge, Button, Card, Description, Heading, Stack } from '@statamic/cms/ui';
+import { Button, Card, Description, Heading } from '@statamic/cms/ui';
+import { activePreset, applyPreset, hasLinkTarget, jumpTo } from '../support/dashboardLinks.js';
 
 /**
  * Dashboard widget `workflows_queue_stats`. A Vue component rather than Blade
@@ -181,11 +125,9 @@ import { Badge, Button, Card, Description, Heading, Stack } from '@statamic/cms/
  * re-prints the counts the server sends back.
  */
 const props = defineProps({
-    // [{label, value, note, tone, color, action, items, more}] — four of them,
-    // in row order. `action` is {url, label} or null; `items` is up to
-    // QueueStats::ITEM_CAP {title, url, site_code} and `more` the per-workflow
-    // remainder {count, label, url}. Both lists are empty on the cards without
-    // a stack. See QueueStats::card().
+    // [{label, value, note, tone, color, action, link}] — four of them, in row
+    // order. `action` is {url, label} or null; `link` is {target, fallback}
+    // plus, on cards 2-4, {preset, workflows}. See QueueStats::card().
     cards: { type: Array, default: () => [] },
 });
 
@@ -275,6 +217,57 @@ async function request(method, url, payload = null) {
 
     return await res.json();
 }
+
+/**
+ * Where a card's link points: the widget on this dashboard when it is there,
+ * else the server's fallback page (QueueStats: the manager page), else nowhere.
+ * Reactive on the widget's presence, which is registered when it mounts — a
+ * card renders before the widgets below it.
+ */
+function hrefFor(card) {
+    const link = card.link;
+
+    if (!link?.target) return null;
+
+    return hasLinkTarget(link.target) ? `#${link.target}` : link.fallback || null;
+}
+
+function hintFor(card) {
+    if (!hasLinkTarget(card.link.target)) return __('workflows::messages.widget_stats_open_manager');
+
+    return card.link.preset
+        ? __('workflows::messages.widget_stats_filter_overview')
+        : __('workflows::messages.widget_stats_jump_to_queue');
+}
+
+function isActive(card) {
+    return Boolean(card.link?.preset) && activePreset()?.preset === card.link.preset;
+}
+
+/**
+ * An in-page link: set the overview's filter (cards 2-4), then scroll and move
+ * the focus there. Only taken over when the target is actually on the page —
+ * a fallback link is left to the browser, and so is a modified click.
+ */
+function follow(event, card) {
+    const link = card.link;
+
+    if (!link?.target || !hasLinkTarget(link.target)) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+    if (link.preset) {
+        applyPreset({ preset: link.preset, label: card.label, workflows: link.workflows });
+    }
+
+    if (jumpTo(link.target)) event.preventDefault();
+}
+
+/**
+ * The card-wide click target: the link's `::after`, stretched over the
+ * `relative` card. `rounded-xl` follows the card's own corners, so the focus
+ * outline drawn on it does too.
+ */
+const STRETCHED_LINK = 'after:absolute after:inset-0 after:rounded-xl focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-blue-500';
 
 /**
  * The dot colours, spelled out as whole class names rather than built from the

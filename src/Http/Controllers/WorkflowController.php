@@ -49,6 +49,7 @@ use TakepartMedia\Workflows\Workflow\Filters\StateFilter;
 use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
 use TakepartMedia\Workflows\Workflow\ProgressSteps;
 use TakepartMedia\Workflows\Workflow\PublishedFlag;
+use TakepartMedia\Workflows\Workflow\StatsPresets;
 use TakepartMedia\Workflows\Workflow\SubjectLinks;
 use TakepartMedia\Workflows\Workflow\WorkflowAssigneeStore;
 use TakepartMedia\Workflows\Workflow\WorkflowComment;
@@ -94,6 +95,15 @@ class WorkflowController extends CpController
 
     /** @var array<string, array<string, int>> */
     private array $commentCountsCache = [];
+
+    /**
+     * entryGroups() per workflow, for matchingPostCount() only: the stat row
+     * asks it four times on one dashboard load (three cards plus last week's
+     * comparison), mostly about the same workflows.
+     *
+     * @var array<string, \Illuminate\Support\Collection>
+     */
+    private array $postGroupsCache = [];
 
     private function currentUserName(): string
     {
@@ -149,12 +159,6 @@ class WorkflowController extends CpController
     private function entryRows(string $workflow, ?string $collection = null): array
     {
         $raw = app(DefinitionLoader::class)->raw($workflow);
-        $collections = $raw['collections'] ?? [];
-
-        if ($collection !== null && in_array($collection, $collections, true)) {
-            $collections = [$collection];
-        }
-
         $states = app(WorkflowStateStore::class)->statesFor($workflow);
         $enteredAt = app(WorkflowStateStore::class)->enteredAtLabels($workflow);
         $assignees = app(WorkflowAssigneeStore::class)->byWorkflow($workflow);
@@ -162,40 +166,7 @@ class WorkflowController extends CpController
         $resolver = app(WorkflowResolver::class);
         $isLocalization = $resolver->isLocalizationWorkflow($raw);
 
-        return Entry::query()
-            ->whereIn('collection', $collections)
-            ->get()
-            ->groupBy(fn ($entry) => $entry->root()->id())
-            // A localization manager lists what it can actually work on: a post
-            // without a version in its source site has nothing to translate FROM, so
-            // it is not this manager's work — it belongs to whoever produces that
-            // source. With no source configured this drops nothing (the fallback is
-            // the post's own origin, which exists by definition); with
-            // `translation_source_site: simple` the list collapses to the posts that
-            // have an Einfache-Sprache version.
-            ->filter(function ($group) use ($isLocalization, $resolver, $raw, $workflow) {
-                if (! $isLocalization) {
-                    return true;
-                }
-
-                $locales = $group->map(fn ($entry) => (string) $entry->locale())->all();
-                $origin = (string) ($group->first()->root()?->locale() ?? '');
-                $sourceSite = $resolver->sourceSiteFor($raw, $locales, $origin);
-
-                if (! in_array($sourceSite, $locales, true)) {
-                    return false;
-                }
-
-                // Having a source version is not enough — it must also have
-                // finished ITS OWN workflow (published in the post manager,
-                // `plain_approved` in the plain-language manager). A post still
-                // mid-review has nothing worth translating yet, and the start
-                // transition refuses it anyway (see readySourceSites()) — better
-                // to not list it as work at all than to list it and then block it.
-                $source = $group->first(fn ($entry) => (string) $entry->locale() === $sourceSite);
-
-                return $source !== null && $resolver->sourceIsReady($source, $workflow);
-            })
+        return $this->entryGroups($workflow, $collection)
             ->map(function ($group, $rootId) use ($raw, $states, $enteredAt, $assignees, $sites, $workflow, $resolver, $isLocalization) {
                 $byLocale = $group->keyBy(fn ($entry) => $entry->locale());
                 $root = $group->first(fn ($entry) => $entry->isRoot()) ?? $group->first()->root();
@@ -294,9 +265,96 @@ class WorkflowController extends CpController
                 $row['_stale'] = $stale !== [];
                 $row['_states'] = array_values(array_unique($stateList));
                 $row['_assignee_ids'] = array_values(array_unique($assigneeIds));
+                // What the stat row's presets match against — see
+                // cellSubjectIds().
+                $row['_subject_ids'] = $this->cellSubjectIds($group, $sites);
 
                 return $row;
             })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The posts of an entry-backed workflow as its pivot sees them: every entry
+     * of its collections, grouped by origin root (one group = one row), minus
+     * what a localization manager cannot work on.
+     *
+     * Split out of entryRows() so the dashboard's stat cards can count the rows
+     * a preset leaves in the overview (matchingPostCount()) without building
+     * every cell of every row first — the grouping and the source rule are what
+     * decide whether a row exists, and they must be the same rule in both
+     * places.
+     *
+     * Pass `$collection` to restrict the groups to one of the workflow's
+     * collections (the per-collection tabs). A handle the workflow doesn't govern
+     * falls back to all of them rather than yielding an empty listing.
+     *
+     * @return \Illuminate\Support\Collection<string, \Illuminate\Support\Collection<int, mixed>>
+     */
+    private function entryGroups(string $workflow, ?string $collection = null)
+    {
+        $raw = app(DefinitionLoader::class)->raw($workflow);
+        $collections = $raw['collections'] ?? [];
+
+        if ($collection !== null && in_array($collection, $collections, true)) {
+            $collections = [$collection];
+        }
+
+        $resolver = app(WorkflowResolver::class);
+        $isLocalization = $resolver->isLocalizationWorkflow($raw);
+
+        return Entry::query()
+            ->whereIn('collection', $collections)
+            ->get()
+            ->groupBy(fn ($entry) => $entry->root()->id())
+            // A localization manager lists what it can actually work on: a post
+            // without a version in its source site has nothing to translate FROM, so
+            // it is not this manager's work — it belongs to whoever produces that
+            // source. With no source configured this drops nothing (the fallback is
+            // the post's own origin, which exists by definition); with
+            // `translation_source_site: simple` the list collapses to the posts that
+            // have an Einfache-Sprache version.
+            ->filter(function ($group) use ($isLocalization, $resolver, $raw, $workflow) {
+                if (! $isLocalization) {
+                    return true;
+                }
+
+                $locales = $group->map(fn ($entry) => (string) $entry->locale())->all();
+                $origin = (string) ($group->first()->root()?->locale() ?? '');
+                $sourceSite = $resolver->sourceSiteFor($raw, $locales, $origin);
+
+                if (! in_array($sourceSite, $locales, true)) {
+                    return false;
+                }
+
+                // Having a source version is not enough — it must also have
+                // finished ITS OWN workflow (published in the post manager,
+                // `plain_approved` in the plain-language manager). A post still
+                // mid-review has nothing worth translating yet, and the start
+                // transition refuses it anyway (see readySourceSites()) — better
+                // to not list it as work at all than to list it and then block it.
+                $source = $group->first(fn ($entry) => (string) $entry->locale() === $sourceSite);
+
+                return $source !== null && $resolver->sourceIsReady($source, $workflow);
+            });
+    }
+
+    /**
+     * The ids of a row's site-versions that have a CELL in the pivot — the
+     * versions in one of the listed sites. A stat preset matches a row through
+     * these and nothing else: a version the row does not show cannot be the
+     * reason the row is in a filtered table.
+     *
+     * @param  \Illuminate\Support\Collection<int, mixed>  $group
+     * @param  array<int, string>  $sites
+     * @return array<int, string>
+     */
+    private function cellSubjectIds($group, array $sites): array
+    {
+        return $group
+            ->filter(fn ($entry) => in_array((string) $entry->locale(), $sites, true))
+            ->map(fn ($entry) => (string) $entry->id())
             ->values()
             ->all();
     }
@@ -649,6 +707,83 @@ class WorkflowController extends CpController
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * How many rows of the overview the given subjects light up: the posts
+     * (one per workflow and origin root, as overviewRows() lists them) that hold
+     * at least one of the subjects in a listed site.
+     *
+     * This is the figure of the dashboard's stat cards. Those cards used to
+     * count SUBJECTS — site-versions — and now filter the "Alle Beiträge" table,
+     * which is one row per post; two versions of one post waiting at the same
+     * gate would have read "2" above a table showing one row. So the card counts
+     * rows, through the same grouping (entryGroups()) and the same match
+     * (cellSubjectIds()) the listing's `preset` filter uses, and without building
+     * a single cell: the number and the filtered table's total cannot differ as
+     * long as both widgets span the same workflows.
+     *
+     * Orphaned state rows (the entry is gone) and versions a localization
+     * manager does not list drop out here exactly as they drop out of the table.
+     *
+     * @param  array<string, array<int, string>>  $perWorkflow  workflow => subject ids
+     * @param  array<int, string>|null  $only  Workflow names to restrict to.
+     */
+    public function matchingPostCount(array $perWorkflow, ?array $only = null): int
+    {
+        $count = 0;
+
+        foreach ($this->overviewWorkflows($only) as $workflow) {
+            $lookup = array_flip(array_map('strval', $perWorkflow[$workflow] ?? []));
+
+            if ($lookup === []) {
+                continue;
+            }
+
+            $sites = $this->listingSitesFor($workflow);
+
+            $count += ($this->postGroupsCache[$workflow] ??= $this->entryGroups($workflow))
+                ->filter(fn ($group) => $this->matchesSubjects($this->cellSubjectIds($group, $sites), $lookup))
+                ->count();
+        }
+
+        return $count;
+    }
+
+    /**
+     * The overview rows a stat preset filters to — the listing's `preset`
+     * parameter, see StatsPresets. Same match as matchingPostCount().
+     *
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
+     * @param  array<int, string>  $scope
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function applyStatsPreset($rows, string $preset, array $scope)
+    {
+        $lookups = array_map(
+            fn (array $ids) => array_flip(array_map('strval', $ids)),
+            app(StatsPresets::class)->subjects($preset, $scope)
+        );
+
+        return $rows->filter(fn (array $row) => $this->matchesSubjects(
+            $row['_subject_ids'] ?? [],
+            $lookups[$row['workflow'] ?? ''] ?? []
+        ));
+    }
+
+    /**
+     * @param  array<int, string>  $ids
+     * @param  array<string, int>  $lookup  Subject id => anything (array_flip()).
+     */
+    private function matchesSubjects(array $ids, array $lookup): bool
+    {
+        foreach ($ids as $id) {
+            if (isset($lookup[$id])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -3535,7 +3670,16 @@ class WorkflowController extends CpController
     {
         abort_if(User::current() === null, 403);
 
-        return response()->json(app(FailedTranslationRetry::class)->run());
+        $result = app(FailedTranslationRetry::class)->run();
+
+        // The card counts POSTS (the rows its preset leaves in the overview,
+        // see matchingPostCount()), the retry counts subjects — the figure the
+        // card re-prints has to be the card's own unit.
+        $result['remaining_failed'] = $this->matchingPostCount(
+            app(StatsPresets::class)->subjects(StatsPresets::FAILED_TRANSLATIONS)
+        );
+
+        return response()->json($result);
     }
 
     /**
@@ -5483,6 +5627,16 @@ class WorkflowController extends CpController
             default => $this->rowsFor($workflow, $collection),
         });
 
+        // A stat card of the dashboard (QueueStats) narrowed the overview to the
+        // posts behind its figure: `preset=awaiting_approval` and so on, see
+        // StatsPresets. Overview only; an unknown name is ignored rather than
+        // answered with an empty table.
+        $preset = $request->query('preset');
+
+        if ($scope !== null && StatsPresets::isPreset($preset)) {
+            $rows = $this->applyStatsPreset($rows, $preset, $scope);
+        }
+
         // The overview's badges are read off these same rows below; building the
         // row set of every workflow a second time would double the request.
         $unfiltered = $rows->all();
@@ -5566,7 +5720,7 @@ class WorkflowController extends CpController
         $total = $rows->count();
         $items = $rows->forPage($page, $perPage)->values()
             ->map(fn (array $row) => collect($row)
-                ->except(['_assignees', '_assignee_ids', '_states', '_created_by', '_content_updated_at', '_stale'])
+                ->except(['_assignees', '_assignee_ids', '_states', '_created_by', '_content_updated_at', '_stale', '_subject_ids'])
                 ->all())
             ->all();
 

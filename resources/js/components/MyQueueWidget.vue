@@ -6,7 +6,10 @@
          The shell is the CP's own `Widget`: the canonical dashboard card, header
          included. Nothing here re-draws a card. `h-full` lets it fill its grid
          cell, which the dashboard row stretches to its tallest card. -->
-    <Widget :title="__('workflows::messages.my_queue')" class="h-full">
+    <!-- `id` + `tabindex="-1"`: the target of the stat row's "In meiner
+         Warteschlange" card (support/dashboardLinks.js), which scrolls here
+         and moves the focus onto the card without adding it to the tab order. -->
+    <Widget :id="MY_QUEUE_ANCHOR" tabindex="-1" :title="__('workflows::messages.my_queue')" class="h-full scroll-mt-4">
         <!-- The filter. A tab row rather than a select, because the counts are
              the point: they are visible at a glance without opening anything,
              and they say how much work there is before anyone pages.
@@ -71,6 +74,7 @@ import { Badge, Description, TabContent, TabList, TabTrigger, Tabs, Widget } fro
 import PersonalWidgetRow from './PersonalWidgetRow.vue';
 import WidgetPagination from './WidgetPagination.vue';
 import { useClientPagination } from '../support/pagination';
+import { MY_QUEUE_ANCHOR, useLinkTarget } from '../support/dashboardLinks.js';
 
 /**
  * Dashboard widget `workflows_my_queue`. A Vue component rather than Blade for
@@ -96,6 +100,8 @@ const props = defineProps({
 // 'all' rather than the first workflow: the card's job on a dashboard is the
 // cross-workflow view, and the per-workflow ones are the drill-down.
 const activeTab = ref('all');
+
+useLinkTarget(MY_QUEUE_ANCHOR);
 
 const allTabs = computed(() => [
     {

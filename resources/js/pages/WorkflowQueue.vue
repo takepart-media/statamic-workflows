@@ -17,7 +17,9 @@
             />
         </header>
 
-        <section class="mb-8">
+        <!-- The anchor of the dashboard's "In meiner Warteschlange" card when
+             the "My queue" card is not on the dashboard (QueueStats). -->
+        <section id="workflows-my-queue" tabindex="-1" class="mb-8 scroll-mt-4">
             <h2 class="mb-3 text-lg font-semibold dark:text-white">{{ __('workflows::messages.my_queue') }}</h2>
             <WorkflowListing
                 :url="listingUrl"

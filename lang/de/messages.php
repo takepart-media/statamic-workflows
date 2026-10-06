@@ -235,7 +235,6 @@ return [
     'widget_header_no_groups' => 'Keine Funktionen',
     'widget_header_affiliation' => 'Zugehörigkeit',
     'widget_header_responsible' => 'Verantwortlicher',
-    'widget_more_in' => 'Alle in „:workflow“ öffnen',
     'widget_tab_all' => 'Alle',
     'widget_created_subline' => 'Zuletzt bearbeitet',
     // Carbon liefert die vollständige, korrekt deklinierte Wendung („vor 6
@@ -267,6 +266,16 @@ return [
     'widget_stats_retry_error' => 'Konnte nicht neu starten.',
     // :diff kommt fertig mit Vorzeichen („+3", „−2", „±0").
     'widget_stats_vs_last_week' => ':diff zur Vorwoche',
+    // Die Karten der Kennzahlreihe sind Links: nur für Screenreader angehängt,
+    // damit die Karte nicht bloß „Wartet auf Freigabe 3" vorliest, sondern sagt,
+    // wohin sie führt. Siehe QueueStatsWidget.vue.
+    'widget_stats_jump_to_queue' => 'zu „Meine Warteschlange" springen',
+    'widget_stats_filter_overview' => 'in „Alle Beiträge" anzeigen',
+    'widget_stats_open_manager' => 'im Workflow öffnen',
+    // Der entfernbare Chip über „Alle Beiträge", solange eine Karte der
+    // Kennzahlreihe die Tabelle filtert. :label ist die Beschriftung der Karte.
+    'overview_preset_active' => 'Gefiltert: :label',
+    'overview_preset_clear' => 'Filter „:label" entfernen',
     // Statusreihe „workflows_status" — eine Karte je aktivem Workflow. Die
     // Zeile unter dem Workflow-Namen; steht auf jeder Karte, weil die Karten
     // umbrechen dürfen und eine Überschrift über der Reihe dann nur noch über
