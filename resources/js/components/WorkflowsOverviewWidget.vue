@@ -5,8 +5,9 @@
          the table narrows it to one workflow; it opens on the authoring one.
 
          The shell is the CP's own `Widget`; the listing renders `bare` inside it,
-         so the card is not drawn twice. -->
-    <Widget :title="__('workflows::messages.all_posts')">
+         so the card is not drawn twice. `h-full`: fills its grid cell, which
+         the dashboard row stretches to its tallest card. -->
+    <Widget :title="__('workflows::messages.all_posts')" class="h-full">
         <!-- One "new post" button per workflow the user may create in. Named
              after its workflow as soon as there is more than one, since a bare
              "Neuer Beitrag" twice says nothing about where the post goes. -->
@@ -25,7 +26,7 @@
             </div>
         </template>
 
-        <div class="min-w-0 flex-1 px-4 pt-2">
+        <div class="flex min-w-0 flex-1 flex-col px-4 pt-2">
             <!-- One button per scoped workflow (its dot, as in the workflow
                  column), single-select, plus "All" for the mixed table. Pointless
                  with a single workflow in scope, so it only shows from two up. -->
@@ -69,6 +70,7 @@
                 :per-page="perPage"
                 :show-toolbar="true"
                 bare
+                class="flex flex-1 flex-col"
                 @open-summary="openSummary"
             />
         </div>

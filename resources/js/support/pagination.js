@@ -12,8 +12,19 @@ import { computed, ref, unref, watch } from 'vue';
  *
  * The page is clamped whenever the list shrinks (an unwatched row) so the pager
  * never points past the end: the last page emptying steps back one page.
+ *
+ * `fillers` is what keeps a paged card from jumping: while the card is
+ * `reserved`, it is the rows the current page is short of a full one — copies
+ * of the page's first row, which the card renders as invisible placeholders
+ * (PersonalWidgetRow's `placeholder`). A copy of a real row rather than a
+ * computed min-height, because the copy is exactly as tall as the rows it
+ * stands in for, whatever the font, the badge or the zoom level. The short last
+ * page therefore keeps a full page's height and the pager stays where it was.
+ * `reserved` defaults to "there is more than one page"; a card whose list
+ * changes under the pager (MyQueue's tabs) passes its own `reserve`. Nothing is
+ * reserved while everything fits on one page.
  */
-export function useClientPagination(items, perPage) {
+export function useClientPagination(items, perPage, { reserve } = {}) {
     const page = ref(1);
 
     const list = computed(() => resolve(items) ?? []);
@@ -42,11 +53,19 @@ export function useClientPagination(items, perPage) {
         };
     });
 
+    const reserved = computed(() => (reserve === undefined ? lastPage.value > 1 : Boolean(resolve(reserve))));
+
+    const fillers = computed(() => {
+        const missing = reserved.value ? size.value - pageItems.value.length : 0;
+        const template = pageItems.value[0];
+        return missing > 0 && template ? Array.from({ length: missing }, () => template) : [];
+    });
+
     function setPage(next) {
         page.value = Math.min(Math.max(1, Number(next) || 1), lastPage.value);
     }
 
-    return { page, pageItems, meta, setPage };
+    return { page, pageItems, meta, setPage, reserved, fillers };
 }
 
 function resolve(source) {

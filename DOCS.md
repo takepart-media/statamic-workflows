@@ -2871,6 +2871,12 @@ der Bestand (Auswertung zum Schluss).
 Workflows haben keinen eigenen Nav-Eintrag mehr (§ 3), `/cp/workflows` leitet
 aufs Dashboard um.
 
+Widgets einer Dashboard-Zeile sind gleich hoch: Statamics Widget-Raster ist eine
+`flex-wrap`-Zeile, die ihre Zellen ohnehin auf die höchste streckt; die
+Addon-Karten füllen ihre Zelle (`h-full` am `Widget`), Leerzustände zentrieren
+sich, der Pager sitzt unten. Paginierte Karten halten auf der kurzen letzten
+Seite die Höhe einer vollen (§ 11), damit der Pager nicht springt.
+
 ### `QueueStats` (`workflows_queue_stats`)
 
 `src/Widgets/QueueStats.php` — die Kennzahlreihe ganz oben: vier Karten, reine
@@ -3391,7 +3397,11 @@ mit deren Defaults (Summenzeile „1–7 von 283" plus Seitenzahl-Buttons) im se
 (seine Optionen sind die globalen Listing-Größen des CP, `limit` gehört nicht
 dazu; die Seitengröße ist die Widget-Config) und `scroll-to-top` auch (scrollt
 das Fenster, also das ganze Dashboard). Passt alles auf eine Seite, rendert er
-nichts. Die Seiten-Logik (`page`, Slice, `meta` im Laravel-Resource-Format für
+nichts. Ist die Liste paginiert, füllt die Karte eine kurze Seite mit
+unsichtbaren Platzhalter-Zeilen (Kopien einer echten Zeile, `placeholder`) auf
+`limit` Zeilen auf, damit Karte und Pager nicht springen; MyQueue tut das auf
+jedem Tab, sobald „Alle" mehr als eine Seite hat, und hält dann auch die Höhe
+des Pagers (unsichtbar). Die Seiten-Logik (`page`, Slice, `meta` im Laravel-Resource-Format für
 `resourceMeta`, Klemmen beim Schrumpfen der Liste) ist das Composable
 `useClientPagination()` in `resources/js/support/pagination.js`. In MyQueue
 blättert der Pager den aktiven Tab; ein Tab-Wechsel springt auf Seite 1.
@@ -3722,7 +3732,9 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
   - `WorkflowListing.vue` — dünner Wrapper über Statamics `Listing` mit
     passenden Slots. Props u. a. `perPage` (an `Listing` durchgereicht, sonst
     dessen Default) und `bare` (ohne `Panel`/`PanelFooter`-Hülle, für einen Host,
-    der selbst eine Karte ist). Zelltyp `workflow`: Workflow-Punkt + Label, als
+    der selbst eine Karte ist; dort hält der Scroll-Container per
+    `min-height` die größte gemessene Höhe, solange paginiert wird — die kurze
+    letzte Seite schrumpft nicht, der Pager bleibt stehen). Zelltyp `workflow`: Workflow-Punkt + Label, als
     Link auf `manager_url`. State-Zellen einer Site, die nicht in `row.sites`
     steht, bleiben leer. Verwendet:
     - `GroupedListingTable.vue` — Zwei-Zeilen-Header (Site-Gruppe + Sprach-Flag)
@@ -3795,10 +3807,11 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
       gefüttert von `useClientPagination()` (§ 9).
 - Support
   - `support/states.js` — zentrale `stateColor()` und `humanize()`.
-  - `support/pagination.js` — `useClientPagination(items, perPage)`:
+  - `support/pagination.js` — `useClientPagination(items, perPage, { reserve })`:
     clientseitiges Blättern über eine vollständig geladene Liste (`page`,
     `pageItems`, `meta` als Laravel-Resource-`meta` für die Kit-`Pagination`,
-    `setPage()`); klemmt die Seite, wenn die Liste schrumpft. Für die drei
+    `setPage()`); klemmt die Seite, wenn die Liste schrumpft. `fillers` sind die
+    Platzhalter-Zeilen bis zur vollen Seite, solange `reserved`. Für die drei
     persönlichen Karten (§ 9).
   - `support/widgetColors.js` — Farbname → `.wf-rail--` / `.wf-dot--`-Klasse für
     die zwei Dashboard-Karten, mit Whitelist und `default`-Fallback. Der State

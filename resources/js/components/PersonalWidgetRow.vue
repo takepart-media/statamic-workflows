@@ -18,10 +18,18 @@
          urgency rail and a meta line, "Created by me" shows neither (its order
          already says "recent", so a second time reference beside every title
          would repeat it). Everything else about the two rows has to stay
-         identical, which is exactly what a shared component enforces. -->
+         identical, which is exactly what a shared component enforces.
+
+         A `placeholder` row is one of the invisible fillers that hold a short
+         last page at a full page's height (see support/pagination.js):
+         `invisible` keeps its box and hides everything in it, border included;
+         `inert` and `aria-hidden` keep its copied link out of the tab order and
+         the accessibility tree. -->
     <div
         class="flex items-center border-b border-gray-100 px-[18px] py-[12px] hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50"
-        :class="withRail ? 'gap-[14px]' : 'gap-[12px]'"
+        :class="[withRail ? 'gap-[14px]' : 'gap-[12px]', { invisible: placeholder }]"
+        :inert="placeholder || null"
+        :aria-hidden="placeholder ? 'true' : null"
     >
         <!-- Stretched to the row's full height rather than given one: the row is
              as tall as its content, and the rail should follow. The negative
@@ -96,5 +104,8 @@ defineProps({
     // The "seit 3 Tagen" / "heute 09:14" text. Only the queue asks the server
     // for it, so only the queue can show it.
     withMeta: { type: Boolean, default: false },
+    // An invisible stand-in that only takes up a row's height — a copy of a real
+    // row, so it is exactly as tall as one.
+    placeholder: { type: Boolean, default: false },
 });
 </script>

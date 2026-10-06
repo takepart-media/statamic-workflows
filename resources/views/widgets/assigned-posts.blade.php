@@ -1,4 +1,4 @@
-<div class="overflow-hidden rounded-xl bg-white shadow-ui-md ring ring-gray-200 dark:bg-gray-850 dark:ring-gray-700/80">
+<div class="h-full overflow-hidden rounded-xl bg-white shadow-ui-md ring ring-gray-200 dark:bg-gray-850 dark:ring-gray-700/80">
     <div class="flex h-full min-h-54 flex-col">
         <header class="flex min-h-[49px] items-center border-b border-gray-200 px-4.5 py-2 dark:border-gray-700">
             <h2 class="font-medium text-gray-800 dark:text-gray-200">{{ __('workflows::messages.widget_assigned_title') }}</h2>

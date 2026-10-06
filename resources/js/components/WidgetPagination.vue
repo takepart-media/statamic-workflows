@@ -3,10 +3,22 @@
          component the "Alle Beiträge" card's `ListingPagination` renders — with
          the Listing's own defaults (totals line plus page-number buttons), in the
          same `px-4 py-2` wrapper the bare listing uses. Nothing at all when the
-         list fits on one page: a "1–3 of 3" line would only restate the card. -->
-    <div v-if="meta.last_page > 1" class="px-4 py-2">
+         list fits on one page: a "1–3 of 3" line would only restate the card.
+
+         Unless the card `reserve`s its paged height (MyQueue, on a tab that fits
+         one page while "Alle" does not): then the pager is still rendered, but
+         invisible and inert, and with a second page faked into its meta so it
+         draws its page buttons — exactly as tall as the real one, so switching
+         tabs does not move the card's bottom edge. -->
+    <div
+        v-if="paged || reserve"
+        class="px-4 py-2"
+        :class="{ invisible: !paged }"
+        :inert="!paged || null"
+        :aria-hidden="paged ? null : 'true'"
+    >
         <Pagination
-            :resource-meta="meta"
+            :resource-meta="paged ? meta : { ...meta, last_page: 2 }"
             :per-page="meta.per_page"
             show-totals
             show-page-links
@@ -18,6 +30,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { Pagination } from '@statamic/cms/ui';
 
 /**
@@ -32,10 +45,14 @@ import { Pagination } from '@statamic/cms/ui';
  * - scroll-to-top: it scrolls the WINDOW, i.e. jumps the dashboard to its top
  *   when paging a card further down.
  */
-defineProps({
+const props = defineProps({
     // Laravel-resource-shaped meta: {current_page, last_page, per_page, total, from, to}.
     meta: { type: Object, required: true },
+    // Keep the pager's height while there is only one page (see the template).
+    reserve: { type: Boolean, default: false },
 });
+
+const paged = computed(() => props.meta.last_page > 1);
 
 defineEmits(['page-selected']);
 </script>

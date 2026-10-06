@@ -1,8 +1,9 @@
 <template>
     <!-- "Beobachtet": the posts the current user bookmarked on a detail page,
          latest edit first. Same shell and rows as "Created by me" next to it,
-         plus a button per row to stop watching. -->
-    <Widget :title="__('workflows::messages.widget_watched_title')">
+         plus a button per row to stop watching. `h-full`: fills its grid cell,
+         which the dashboard row stretches to its tallest card. -->
+    <Widget :title="__('workflows::messages.widget_watched_title')" class="h-full">
         <Description class="border-b border-gray-200 px-4.5 py-2 dark:border-gray-700">
             {{ __('workflows::messages.widget_watched_subline') }}
         </Description>
@@ -23,8 +24,16 @@
                     />
                 </template>
             </PersonalWidgetRow>
+            <!-- Invisible stand-ins up to a full page, so a short last page (or
+                 an unwatched row on it) does not shrink the card. They carry the
+                 same button as a real row, so they are the same height. -->
+            <PersonalWidgetRow v-for="(row, index) in fillers" :key="`filler-${index}`" :row="row" placeholder>
+                <template #actions>
+                    <Button icon="bookmark" variant="ghost" size="xs" icon-only class="flex-none" disabled />
+                </template>
+            </PersonalWidgetRow>
         </div>
-        <Description v-else class="flex-1 py-6 text-center">
+        <Description v-else class="flex flex-1 items-center justify-center py-6 text-center">
             {{ __('workflows::messages.widget_no_watched') }}
         </Description>
 
@@ -65,7 +74,7 @@ const busy = reactive({});
 
 const visible = computed(() => props.rows.filter((row) => !removed.value.has(row.unwatch_url)));
 
-const { pageItems, meta, setPage } = useClientPagination(visible, () => props.limit);
+const { pageItems, meta, setPage, fillers } = useClientPagination(visible, () => props.limit);
 
 async function unwatch(row) {
     const url = row.unwatch_url;

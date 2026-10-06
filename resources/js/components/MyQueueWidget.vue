@@ -4,8 +4,9 @@
          to one workflow.
 
          The shell is the CP's own `Widget`: the canonical dashboard card, header
-         included. Nothing here re-draws a card. -->
-    <Widget :title="__('workflows::messages.my_queue')">
+         included. Nothing here re-draws a card. `h-full` lets it fill its grid
+         cell, which the dashboard row stretches to its tallest card. -->
+    <Widget :title="__('workflows::messages.my_queue')" class="h-full">
         <!-- The filter. A tab row rather than a select, because the counts are
              the point: they are visible at a glance without opening anything,
              and they say how much work there is before anyone pages.
@@ -36,19 +37,30 @@
             <!-- One panel per tab. `Tabs` unmounts the hidden ones, so only the
                  active panel exists — which is why every panel can simply
                  render the active tab's current page. -->
-            <TabContent v-for="tab in allTabs" :key="tab.key" :name="tab.key">
+            <TabContent v-for="tab in allTabs" :key="tab.key" :name="tab.key" class="flex flex-1 flex-col">
                 <template v-if="pageItems.length">
                     <PersonalWidgetRow v-for="row in pageItems" :key="row.url" :row="row" with-rail with-meta />
+                    <!-- Invisible stand-ins up to a full page, so a short page
+                         or a smaller tab does not shrink the card. -->
+                    <PersonalWidgetRow
+                        v-for="(row, index) in fillers"
+                        :key="`filler-${index}`"
+                        :row="row"
+                        with-rail
+                        with-meta
+                        placeholder
+                    />
                 </template>
-                <Description v-else class="py-6 text-center">
+                <Description v-else class="flex flex-1 items-center justify-center py-6 text-center">
                     {{ __('workflows::messages.widget_no_assigned') }}
                 </Description>
             </TabContent>
         </Tabs>
 
-        <!-- Pages the active tab; hides itself while that tab fits on one page. -->
+        <!-- Pages the active tab. On a tab that fits one page it only holds its
+             place (invisibly) while "Alle" is paged, else it is gone. -->
         <template #footer>
-            <WidgetPagination :meta="meta" @page-selected="setPage" />
+            <WidgetPagination :meta="meta" :reserve="reserved" @page-selected="setPage" />
         </template>
     </Widget>
 </template>
@@ -101,7 +113,13 @@ const tabRows = computed(() =>
     activeTab.value === 'all' ? props.rows : props.rows.filter((row) => row.workflow === activeTab.value),
 );
 
-const { pageItems, meta, setPage } = useClientPagination(tabRows, () => props.limit);
+// The card keeps a full page's height on EVERY tab as soon as "Alle" — the
+// superset, so the longest tab — needs a second page: switching to a tab with
+// three rows then changes the rows, not the card's height or where its pager
+// sits. A queue that fits one page altogether reserves nothing.
+const { pageItems, meta, setPage, reserved, fillers } = useClientPagination(tabRows, () => props.limit, {
+    reserve: () => props.rows.length > props.limit,
+});
 
 // Each tab starts on its first page: page 3 of "Alle" means nothing on a tab
 // that may only have one.

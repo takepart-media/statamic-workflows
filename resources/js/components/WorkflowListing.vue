@@ -22,10 +22,15 @@
             </div>
 
             <!-- `bare` drops the Panel shell for a host that already is a card (the
-                 dashboard widget); table and pagination stay. -->
-            <component :is="bare ? 'div' : Panel" class="relative">
-                <!-- Single scroll container (both axes) so the table header can stick. -->
-                <div :class="bare ? 'max-h-[28rem] overflow-auto' : 'max-h-[calc(100vh-16rem)] overflow-auto'">
+                 dashboard widget); table and pagination stay. Bare, it also grows
+                 to the card's height and pins the pager to the bottom (`mt-auto`),
+                 for a card stretched by a taller neighbour in its dashboard row. -->
+            <component :is="bare ? 'div' : Panel" class="relative" :class="bare ? 'flex flex-1 flex-col' : null">
+                <!-- Single scroll container (both axes) so the table header can stick.
+                     Bare, it keeps the height of the tallest page it has shown, so
+                     the short last page does not pull the pager up (see
+                     KeepPageHeight below). -->
+                <KeepPageHeight :enabled="bare" :class="bare ? 'max-h-[28rem] overflow-auto' : 'max-h-[calc(100vh-16rem)] overflow-auto'">
                     <GroupedListingTable sticky-header>
                         <!-- One cell slot per column, rendered by the column's type. -->
                         <template v-for="col in columns" :key="col.field" #[`cell-${col.field}`]="{ row }">
@@ -128,8 +133,8 @@
                             </span>
                         </template>
                     </GroupedListingTable>
-                </div>
-                <component :is="bare ? 'div' : PanelFooter" :class="bare ? 'px-4 py-2' : null">
+                </KeepPageHeight>
+                <component :is="bare ? 'div' : PanelFooter" :class="bare ? 'mt-auto px-4 py-2' : null">
                     <ListingPagination />
                 </component>
             </component>
@@ -151,7 +156,7 @@ import {
     Button,
     Icon,
 } from '@statamic/cms/ui';
-import { defineComponent, inject, watch } from 'vue';
+import { computed, defineComponent, h, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import GroupedListingTable from './GroupedListingTable.vue';
 import { stateColor, humanize } from '../support/states.js';
 import { dotClass } from '../support/widgetColors.js';
@@ -178,6 +183,56 @@ const ListingRefresh = defineComponent({
         });
 
         return () => null;
+    },
+});
+
+/**
+ * The table's scroll container, holding on to the tallest height it has had
+ * while the listing is paged — so the last page, shorter than `per_page` rows,
+ * keeps a full page's height and the pager below it stays where it was.
+ *
+ * A measured floor rather than `per_page × row height`: these rows are not of
+ * one height (a wrapped title, a state cell with comment flags), so the only
+ * reliable figure for "a full page" is a full page, measured. The floor is a
+ * `min-height`; the container's own `max-height` still caps it.
+ *
+ * Applied only while there is more than one page: a listing that fits one page
+ * is as tall as its rows. The floor starts over when the page size or the
+ * visible columns change (both change what a full page measures). A refetch
+ * does not collapse the table in the first place — Listing keeps the old rows
+ * until the new ones arrive — and switching the widget's workflow remounts the
+ * listing, floor included.
+ */
+const KeepPageHeight = defineComponent({
+    props: { enabled: { type: Boolean, default: false } },
+    setup(props, { slots }) {
+        const { meta, visibleColumns } = inject('ListingContext', {});
+        const el = ref(null);
+        const floor = ref(0);
+
+        const paged = computed(() => props.enabled && (meta?.value?.last_page ?? 1) > 1);
+
+        watch(
+            // One string, not an array: every fetch brings a new `meta` object, and
+            // a fresh array would count as a change on each page turn.
+            () => `${meta?.value?.per_page}|${visibleColumns?.value?.map((column) => column.field).join()}`,
+            () => (floor.value = 0),
+        );
+
+        let observer = null;
+
+        onMounted(() => {
+            if (!props.enabled || typeof ResizeObserver === 'undefined') return;
+            observer = new ResizeObserver(() => {
+                if (el.value) floor.value = Math.max(floor.value, el.value.getBoundingClientRect().height);
+            });
+            observer.observe(el.value);
+        });
+
+        onBeforeUnmount(() => observer?.disconnect());
+
+        return () =>
+            h('div', { ref: el, style: paged.value && floor.value ? { minHeight: `${floor.value}px` } : null }, slots.default?.());
     },
 });
 

@@ -1,8 +1,10 @@
 <template>
     <!-- "Von mir erstellt": what the current user brought into a workflow, newest
          edit first. Same shell (the CP's `Widget`) and the same rows as the queue
-         beside it; no tab row, no meta line — see the script note. -->
-    <Widget :title="__('workflows::messages.my_created')">
+         beside it; no tab row, no meta line — see the script note. `h-full`:
+         fills its grid cell, which the dashboard row stretches to its tallest
+         card. -->
+    <Widget :title="__('workflows::messages.my_created')" class="h-full">
         <!-- The subline is the card's sort order, stated: without it a list in no
              obvious sequence looks arbitrary. `Widget` has no subtitle prop, so it
              opens the body — bordered like the queue's tab row, so the two cards
@@ -13,8 +15,11 @@
 
         <div v-if="pageItems.length" class="flex-1">
             <PersonalWidgetRow v-for="row in pageItems" :key="row.url" :row="row" />
+            <!-- Invisible stand-ins up to a full page: a short last page keeps
+                 the card's height and the pager stays put. -->
+            <PersonalWidgetRow v-for="(row, index) in fillers" :key="`filler-${index}`" :row="row" placeholder />
         </div>
-        <Description v-else class="flex-1 py-6 text-center">
+        <Description v-else class="flex flex-1 items-center justify-center py-6 text-center">
             {{ __('workflows::messages.widget_no_created') }}
         </Description>
 
@@ -49,5 +54,5 @@ const props = defineProps({
     limit: { type: Number, default: 5 },
 });
 
-const { pageItems, meta, setPage } = useClientPagination(() => props.rows, () => props.limit);
+const { pageItems, meta, setPage, fillers } = useClientPagination(() => props.rows, () => props.limit);
 </script>
