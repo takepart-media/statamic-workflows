@@ -311,10 +311,11 @@ Enable them in `config/statamic/cp.php → widgets` (details in DOCS.md § 9):
 'widgets' => [
     ['type' => 'workflows_user_header', 'width' => 100],
     ['type' => 'workflows_queue_stats', 'width' => 100],
-    ['type' => 'workflows_status', 'width' => 100],
-    ['type' => 'workflows_my_queue', 'width' => 50, 'limit' => 7],
+    ['type' => 'workflows_my_queue', 'width' => 100, 'limit' => 7],
+    ['type' => 'workflows_watched', 'width' => 50, 'limit' => 5],
     ['type' => 'workflows_created_by_me', 'width' => 50, 'limit' => 5],
     ['type' => 'workflows_overview', 'width' => 100, 'per_page' => 25],
+    ['type' => 'workflows_status', 'width' => 100],
 ],
 ```
 

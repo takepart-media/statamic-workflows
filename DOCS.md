@@ -2855,15 +2855,17 @@ schaltet sie in `config/statamic/cp.php → widgets` frei:
 'widgets' => [
     ['type' => 'workflows_user_header', 'width' => 100],
     ['type' => 'workflows_queue_stats', 'width' => 100],
-    ['type' => 'workflows_status', 'width' => 100],
-    ['type' => 'workflows_my_queue', 'width' => 50, 'limit' => 7],
+    ['type' => 'workflows_my_queue', 'width' => 100, 'limit' => 7],
+    ['type' => 'workflows_watched', 'width' => 50, 'limit' => 5],
     ['type' => 'workflows_created_by_me', 'width' => 50, 'limit' => 5],
     ['type' => 'workflows_overview', 'width' => 100, 'per_page' => 25],
+    ['type' => 'workflows_status', 'width' => 100],
 ],
 ```
 
-Die Reihenfolge ist die Leserichtung des Dashboards: wer bin ich → wie viel liegt
-an → wie verteilt sich der Bestand → welche Beiträge konkret → alle Beiträge.
+Die Reihenfolge geht vom Persönlichen zum Ganzen: wer bin ich → wie viel liegt
+an → was muss ich tun → meine übrigen Beiträge → alle Beiträge → wie verteilt sich
+der Bestand (Auswertung zum Schluss).
 
 `workflows_overview` ist zugleich der Einstieg in die Manager-Seiten: die
 Workflows haben keinen eigenen Nav-Eintrag mehr (§ 3), `/cp/workflows` leitet
