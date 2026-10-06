@@ -485,6 +485,23 @@ return [
     'install_already_installed' => 'Workflow-Typ [:type] ist bereits installiert. Bearbeite ihn in seinen Einstellungen.',
     'install_all_installed' => 'Alle mitgelieferten Workflow-Typen sind schon installiert.',
 
+    // Create a workflow (settings index, workflows:make — WorkflowScaffolder)
+    'create_workflow' => 'Workflow anlegen',
+    'create_success' => 'Workflow angelegt. Er ist noch deaktiviert.',
+    'create_error' => 'Workflow konnte nicht angelegt werden.',
+    'create_handle_invalid' => 'Ungültiger Handle [:handle] — Kleinbuchstaben, Ziffern und Unterstrich, mit einem Buchstaben beginnend, höchstens :max Zeichen.',
+    'create_handle_reserved' => 'Der Handle [:handle] ist reserviert — er ist Teil der Adressen in den Einstellungen.',
+    'create_handle_taken' => 'Es gibt bereits einen Workflow [:handle] (Groß-/Kleinschreibung zählt nicht).',
+    'create_label_too_long' => 'Der Name darf höchstens :max Zeichen lang sein.',
+    'create_from_invalid' => 'Unbekannte Vorlage — erlaubt sind blank, example und copy.',
+    'create_copy_unknown' => 'Workflow [:workflow] gibt es nicht und kann nicht kopiert werden.',
+    'create_collections_invalid' => 'Collections müssen als Liste übergeben werden.',
+    'create_source_blank' => 'leer',
+    'create_source_example' => 'aus dem Beispiel [:template]',
+    'create_source_copy' => 'als Kopie von [:workflow]',
+    'create_inactive_hint' => 'Neue Workflows starten deaktiviert: erst prüfen, dann einschalten. Bestehende Einträge lassen sich danach über „Status nachtragen“ übernehmen.',
+    'event_note_workflow_created' => 'Workflow [:workflow] angelegt (:source).',
+
     // Aktiv/Inaktiv und Löschen je Workflow (Settings-Übersicht)
     'status' => 'Status',
     'workflow_active' => 'Aktiv',
@@ -857,6 +874,8 @@ return [
     'writer_declared_none' => 'keine',
     'writer_no_example' => 'Für den Workflow [:workflow] ist kein Beispiel mitgeliefert.',
     'writer_workflow_file_missing' => 'Workflow [:workflow] liegt nicht unter :path.',
+    'writer_workflow_exists' => 'Ein Workflow [:workflow] existiert bereits — er wird nicht überschrieben.',
+    'writer_workflow_name_invalid' => 'Ungültiger Workflow-Name [:workflow].',
     'writer_no_places' => 'Ein Workflow muss mindestens ein Place definieren.',
     'writer_places_mismatch' => 'Im Speichern fehlen bestehende Places (:places). Places werden nicht durch Weglassen entfernt.',
     'writer_initial_place_unknown' => 'initial_place [:place] ist keines der definierten Places.',

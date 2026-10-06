@@ -1919,6 +1919,7 @@ angehängt.
 | `GET  workflows/api/definitions` | `definitions` | Rohdaten aller Definitions für Diagramme/Debug. |
 | `POST workflows/api/stats/retry-failed` | `retryFailedTranslations` | Sammel-Neustart aller geparkten Übersetzungen, die der Betrachter neu starten darf (Dashboard, § 9). |
 | `GET  workflows/api/stats/state-subjects` | `stateSubjects` | Die Beiträge in einem (Workflow, State)-Paar, seitenweise — lazy nachgeladen von der Statusreihe (§ 9). Read-only, `?workflow=&state=&page=`, Antwort `{items, meta, manager_url}`. |
+| `POST workflows/api/settings/create` | `createWorkflow`* | Neuen Workflow anlegen — leer, aus einem Beispiel oder als Kopie (Name `workflows.settings.create`). Body `{handle, label?, from?: blank\|example\|copy, template?, copy_of?, collections?, backfill?}`; 201 `{data: {workflow, slug, active, edit_url, backfill_skipped}}`, 422 im Laravel-Format `{message, errors: {feld: [..]}}`. Siehe „Workflows anlegen“ (§ 5.9). Vor den `{workflow}`-Routen registriert; diese schließen `install`/`create` als ganzes Wort aus. |
 | `POST workflows/api/settings/install` | `installWorkflow` | Mitgelieferten Workflow-Typ ins Projekt kopieren. Nur noch **nicht** installierte Typen. |
 | `POST workflows/api/settings/{workflow}/active` | `setWorkflowActive` | Workflow an-/abschalten (`active` in der YAML). |
 | `POST workflows/api/settings/{workflow}/seed` | `seedWorkflowStates` | Status für bestehende Einträge nachtragen (nur aktive Workflows). |
@@ -1929,7 +1930,7 @@ angehängt.
 | `POST workflows/api/{workflow}/settings` | `saveSettings`* | Editor-Payload speichern. `{workflow}` = Handle (Slug als Fallback). |
 | `POST workflows/api/{workflow}/places/{place}/delete` | `deletePlace`* | Place löschen, ggf. mit `migrate_to`. `{workflow}` = Handle (Slug als Fallback). |
 
-\* Die Super-Admin-Settings-Routen (Übersicht, Install, an/aus, Seed, Löschen,
+\* Die Super-Admin-Settings-Routen (Übersicht, Install, Anlegen, an/aus, Seed, Löschen,
 Editor samt Save/Place-Löschen) laufen über `WorkflowSettingsController`, alles
 andere über `WorkflowController`. Gemeinsame Helfer (`isSuperAdmin`,
 `workflowBySlug`, `siteHandles`, `siteName`, `workflowForCollection`, `t`) liegen
@@ -2565,6 +2566,77 @@ Zwei Randfälle, die im Code festgeschrieben sind:
 - `WorkflowDefinitionWriter::resetToExample()` stellt `active: false` nach dem
   Kopieren wieder her. Ein Reset betrifft Places und Transitions, nicht die Frage,
   ob der Workflow läuft.
+
+#### Workflows anlegen (`createWorkflow`, `workflows:make`)
+
+Ein neuer Workflow entsteht auf drei Wegen — **leer**, **aus einem mitgelieferten
+Beispiel** oder als **Kopie eines bestehenden** —, und CP wie CLI bauen ihn mit
+derselben Klasse: `Workflow\WorkflowScaffolder` liefert die Definition,
+`WorkflowDefinitionWriter::create()` validiert und schreibt sie.
+
+- **Handle** (`WorkflowScaffolder::validateHandle()`): `^[a-z][a-z0-9_]*$`,
+  höchstens 48 Zeichen (`HANDLE_MAX`), nicht `install`, `create`, `settings`, `api`,
+  `instances` (feste Pfadsegmente der Settings-Routen), und noch nicht vergeben —
+  **ohne Rücksicht auf Groß-/Kleinschreibung**: `PostManager.yaml` und
+  `postmanager.yaml` sind auf einem case-insensitiven Dateisystem (macOS) dieselbe
+  Datei. Fehler-Keys: `create_handle_invalid`, `create_handle_reserved`,
+  `create_handle_taken`. Der Handle ist danach unveränderlich (Dateiname und
+  Schlüssel jeder Status-/Event-Zeile).
+- **Nav-Slug** (`uniqueSlug()`): Handle mit `_` → `-`, bei Kollision `-2`, `-3`, …
+  — geprüft gegen **alle** Workflows, inaktive eingeschlossen (sonst gäbe es nach
+  dem Einschalten zwei Manager-Seiten unter einer URL). Beginnt der Slug mit einem
+  reservierten Routen-Wort als ganzem Wort (`api-…`, `settings-…`), wird
+  `workflow-` vorangestellt. Anders als ein Save (`merge()` pinnt den Slug der
+  bestehenden Datei) übernimmt `create()` den Slug aus dem Payload.
+- **Leer** (`blank()`): `draft` → `published` (`allow_publish`) mit `publish` /
+  `unpublish`, `initial_place: draft`, `nav: {label, slug, icon: workflow,
+  order: 100}`, Startpositionen in `metadata.editor`. Bewusst **kein**
+  `required_group` — welche Gruppen es gibt, weiß nur das Projekt.
+- **Aus Beispiel** (`fromExample()`): die Beispiel-YAML geparst, mit neuem
+  `name`, Label (`metadata.label` und `nav.label`), Slug und optional Collections
+  (ohne Angabe: die des Beispiels). Die Kommentare des Beispiels gehen dabei
+  verloren — der Writer dumpt; das kommentierte Original bleibt unter
+  `resources/workflows/examples/`. Ein Beispiel, das im Projekt nicht validiert
+  (z. B. `plainlanguage` ohne Site `plain`), wird mit 422 abgelehnt — die Fehler
+  stehen unter `errors["definition.<pfad>"]` und vollständig in
+  `definition_errors`.
+- **Kopie** (`copyOf()`): die gespeicherte YAML (ohne die vom Loader injizierte
+  Revisionsstufe), neue Identität wie oben, Editor-Positionen bleiben;
+  Collections ohne Angabe wie die Quelle.
+- `create()` verweigert eine existierende Datei (case-insensitiv), validiert
+  vollständig (`DefinitionValidationException` mit allen Fehlern) und legt kein
+  Backup an — es gibt keinen Vorgänger.
+
+**Neue Workflows starten deaktiviert** (`active: false`). Ein frisch angelegter
+Workflow ist unfertig: eingeschaltet würde er sofort die Einträge seiner
+Collections beanspruchen, in Nav und Beitrags-Editor auftauchen, und ein Backfill
+würde jedem bestehenden Eintrag einen Status aus einer Definition geben, die noch
+niemand geprüft hat. Deshalb ignoriert `createWorkflow` auch `backfill` (der
+Seeder füllt nur aktive Workflows und würde `0` melden) und sagt das mit
+`backfill_skipped: true`; nachgetragen wird nach dem Einschalten über
+„Status nachtragen“ in der Zeile. Protokolliert wird `workflow_created`
+(Subject `workflow:<handle>`).
+
+Die Settings-Übersicht liefert dafür `create: {submit_url, templates,
+workflows, collections, handle_pattern, handle_max, reserved_handles}` —
+`templates` sind **alle** Beispiele (mit `installed`), denn hier ist ein Beispiel
+eine Vorlage unter neuem Handle; `workflows` (`{handle, label}`) die Quellen für
+„Kopie“. Die `install`-Props bleiben vorerst daneben stehen.
+
+**CLI** — `php artisan workflows:make <handle> [--from=<beispiel>]
+[--collection=posts] [--label=] [--inactive]` nutzt Scaffolder und
+`create()`, behält aber seine Defaults: die leere Vorlage hängt an
+`--collection` (Default `posts`), und der Workflow wird **aktiv** geschrieben,
+außer mit `--inactive`. Bei `--from` bleiben die Collections des Beispiels, außer
+`--collection` wird ausdrücklich angegeben. Exit-Codes wie bisher: `2` bei
+ungültigem Handle/unbekanntem Beispiel, `1` bei vergebenem Handle oder
+Validierungsfehler.
+
+**Routen-Constraints:** Die `{workflow}`-Routen unter
+`workflows/api/settings/` schließen `install` und `create` als **ganzes Wort**
+aus (`(?!(?:install|create)\b)`), die Slug- und Editor-Routen ebenso
+`instances|api|settings`. Vorher war das ein Präfix-Ausschluss — ein Handle wie
+`apiary` oder ein Slug `settingsx` war damit unerreichbar.
 
 #### Ungelesene Kommentare sichtbar machen
 

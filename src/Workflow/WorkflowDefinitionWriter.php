@@ -160,6 +160,44 @@ class WorkflowDefinitionWriter
     }
 
     /**
+     * Write a NEW workflow file. Refuses when a workflow of that name already
+     * exists — compared case-insensitively, since `Foo.yaml` and `foo.yaml` are
+     * one file on a case-insensitive file system — and validates exactly like a
+     * save (throwing DefinitionValidationException with every problem attached).
+     *
+     * Unlike save(), there is nothing to merge over: the definition is taken
+     * as given, `metadata.nav.slug` included (save() pins the slug to the
+     * existing file's; a new file has none, so the caller — WorkflowScaffolder
+     * — picks a unique one). `name` is still forced to the file name. No backup:
+     * there is no previous content.
+     *
+     * @param  array<string, mixed>  $definition
+     */
+    public function create(string $name, array $definition): void
+    {
+        if (! preg_match('/^[A-Za-z0-9_-]+$/', $name)) {
+            $this->fail('workflow_name_invalid', ['workflow' => $name], 'name');
+        }
+
+        $needle = strtolower($name);
+        $exists = is_file($this->loader->path($name)) || collect($this->loader->allIncludingInactive())
+            ->contains(fn (string $existing) => strtolower($existing) === $needle);
+
+        if ($exists) {
+            $this->fail('workflow_exists', ['workflow' => $name], 'name');
+        }
+
+        $prepared = $this->stripAutoInjected($this->merge([], $definition, $name));
+
+        $this->validate($prepared);
+
+        File::ensureDirectoryExists($this->loader->directory());
+        File::put($this->loader->path($name), Yaml::dump($prepared, 6, 2));
+
+        DefinitionLoader::flush();
+    }
+
+    /**
      * The version token of a workflow file — what the editor sends back with a
      * save so a concurrent change (another admin, a deploy, a hand edit) is
      * detected instead of overwritten. Content-based rather than mtime-based,

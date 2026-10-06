@@ -480,6 +480,23 @@ return [
     'install_already_installed' => 'Workflow type [:type] is already installed. Edit it in its own settings.',
     'install_all_installed' => 'Every shipped workflow type is already installed.',
 
+    // Create a workflow (settings index, workflows:make — WorkflowScaffolder)
+    'create_workflow' => 'Create workflow',
+    'create_success' => 'Workflow created. It is still inactive.',
+    'create_error' => 'Could not create workflow.',
+    'create_handle_invalid' => 'Invalid handle [:handle] — lowercase letters, digits and underscores, starting with a letter, at most :max characters.',
+    'create_handle_reserved' => 'The handle [:handle] is reserved — it is part of the settings URLs.',
+    'create_handle_taken' => 'A workflow [:handle] already exists (case is ignored).',
+    'create_label_too_long' => 'The name may be at most :max characters long.',
+    'create_from_invalid' => 'Unknown source — use blank, example or copy.',
+    'create_copy_unknown' => 'Workflow [:workflow] does not exist and cannot be copied.',
+    'create_collections_invalid' => 'Collections must be sent as a list.',
+    'create_source_blank' => 'blank',
+    'create_source_example' => 'from example [:template]',
+    'create_source_copy' => 'as a copy of [:workflow]',
+    'create_inactive_hint' => 'New workflows start inactive: review first, then switch on. Existing entries can then be taken over with “Backfill states”.',
+    'event_note_workflow_created' => 'Workflow [:workflow] created (:source).',
+
     // Per-workflow on/off and delete (settings index)
     'status' => 'Status',
     'workflow_active' => 'Active',
@@ -848,6 +865,8 @@ return [
     'writer_declared_none' => 'none',
     'writer_no_example' => 'No shipped example for workflow [:workflow].',
     'writer_workflow_file_missing' => 'Workflow [:workflow] not found at :path.',
+    'writer_workflow_exists' => 'A workflow [:workflow] already exists — it is not overwritten.',
+    'writer_workflow_name_invalid' => 'Invalid workflow name [:workflow].',
     'writer_no_places' => 'A workflow must define at least one place.',
     'writer_places_mismatch' => 'The save leaves out existing places (:places). Places are not removed by omitting them.',
     'writer_initial_place_unknown' => 'initial_place [:place] is not one of the defined places.',

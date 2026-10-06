@@ -22,7 +22,7 @@ Route::get('workflows', [WorkflowController::class, 'queue'])->name('workflows.q
 // The id-only form stays for bookmarks and older stored links; it resolves the
 // workflow and redirects to the canonical URL.
 Route::get('workflows/{slug}/instances/{id}', [WorkflowController::class, 'showInWorkflow'])
-    ->where('slug', '(?!instances|api|settings)[a-z0-9-]+')
+    ->where('slug', '(?!(?:instances|api|settings)\b)[a-z0-9-]+')
     ->name('workflows.workflow.show');
 Route::get('workflows/instances/{id}', [WorkflowController::class, 'show'])->name('workflows.show');
 
@@ -30,7 +30,7 @@ Route::get('workflows/instances/{id}', [WorkflowController::class, 'show'])->nam
 // workflow's `metadata.nav.slug` (see DefinitionLoader). Constrained so it never
 // shadows the `instances`/`api`/`settings` sub-paths above/below.
 Route::get('workflows/{slug}', [WorkflowController::class, 'workflow'])
-    ->where('slug', '(?!instances|api|settings)[a-z0-9-]+')
+    ->where('slug', '(?!(?:instances|api|settings)\b)[a-z0-9-]+')
     ->name('workflows.workflow');
 
 // Super-admin-only settings index: one card per workflow, linking to its
@@ -45,11 +45,19 @@ Route::get('workflows/settings', [WorkflowSettingsController::class, 'settingsIn
 Route::post('workflows/api/settings/install', [WorkflowSettingsController::class, 'installWorkflow'])
     ->name('workflows.settings.install');
 
+// Create a new workflow: blank, from a shipped example, or as a copy of an
+// existing one (WorkflowScaffolder — the same code `workflows:make` uses). The
+// new workflow starts inactive. Registered before the `{workflow}` routes, and
+// those exclude `create`/`install` anyway, so the verb can never be read as a
+// workflow handle (the scaffolder reserves both as handles, too).
+Route::post('workflows/api/settings/create', [WorkflowSettingsController::class, 'createWorkflow'])
+    ->name('workflows.settings.create');
+
 // Switch an installed workflow on/off, or remove its definition. Keyed by the
 // workflow HANDLE (the YAML basename), not the nav slug: an inactive workflow
 // has no manager page, and a workflow without `metadata.nav` has no slug at all.
 Route::post('workflows/api/settings/{workflow}/active', [WorkflowSettingsController::class, 'setWorkflowActive'])
-    ->where('workflow', '[A-Za-z0-9_-]+')
+    ->where('workflow', '(?!(?:install|create)\b)[A-Za-z0-9_-]+')
     ->name('workflows.settings.active');
 
 // CP-side "workflows:seed-states" for one workflow — backfill the state rows of
@@ -57,23 +65,23 @@ Route::post('workflows/api/settings/{workflow}/active', [WorkflowSettingsControl
 // variant of the command stays CLI-only: re-deriving states that already exist
 // is the repair case, not the everyday one.
 Route::post('workflows/api/settings/{workflow}/seed', [WorkflowSettingsController::class, 'seedWorkflowStates'])
-    ->where('workflow', '[A-Za-z0-9_-]+')
+    ->where('workflow', '(?!(?:install|create)\b)[A-Za-z0-9_-]+')
     ->name('workflows.settings.seed');
 // The graph editor's save: the whole definition plus the `version` it was
 // loaded with (409 on a stale version unless `force`). Keyed by handle.
 Route::post('workflows/api/settings/{workflow}/definition', [WorkflowSettingsController::class, 'saveDefinition'])
-    ->where('workflow', '[A-Za-z0-9_-]+')
+    ->where('workflow', '(?!(?:install|create)\b)[A-Za-z0-9_-]+')
     ->name('workflows.settings.save');
 // Dry run of the same payload: {valid, version, errors, warnings, removals}.
 Route::post('workflows/api/settings/{workflow}/validate', [WorkflowSettingsController::class, 'validateDefinition'])
-    ->where('workflow', '[A-Za-z0-9_-]+')
+    ->where('workflow', '(?!(?:install|create)\b)[A-Za-z0-9_-]+')
     ->name('workflows.settings.validate');
 // Entries per place + current version, for the editor's usage badges.
 Route::get('workflows/api/settings/{workflow}/usage', [WorkflowSettingsController::class, 'usage'])
-    ->where('workflow', '[A-Za-z0-9_-]+')
+    ->where('workflow', '(?!(?:install|create)\b)[A-Za-z0-9_-]+')
     ->name('workflows.settings.usage');
-Route::delete('workflows/api/settings/{workflow}',[WorkflowSettingsController::class, 'destroyWorkflow'])
-    ->where('workflow', '(?!install)[A-Za-z0-9_-]+')
+Route::delete('workflows/api/settings/{workflow}', [WorkflowSettingsController::class, 'destroyWorkflow'])
+    ->where('workflow', '(?!(?:install|create)\b)[A-Za-z0-9_-]+')
     ->name('workflows.settings.destroy');
 
 // Super-admin-only settings editor for a workflow's places, transitions and
@@ -89,7 +97,7 @@ Route::delete('workflows/api/settings/{workflow}',[WorkflowSettingsController::c
 // is editable too. A nav slug in this position still resolves: the controller
 // answers it with a 301 to the handle URL.
 Route::get('workflows/settings/{workflow}', [WorkflowSettingsController::class, 'editSettings'])
-    ->where('workflow', '(?!instances|api|settings)[a-z0-9_-]+')
+    ->where('workflow', '(?!(?:instances|api|settings)\b)[a-z0-9_-]+')
     ->name('workflows.settings.edit');
 // Built by the editor from the handle; the slug is still accepted as a fallback.
 Route::post('workflows/api/{workflow}/settings', [WorkflowSettingsController::class, 'saveSettings'])

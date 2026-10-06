@@ -5,6 +5,7 @@ namespace TakepartMedia\Workflows\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\File;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -26,6 +27,7 @@ use TakepartMedia\Workflows\Workflow\WorkflowDataPurger;
 use TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter;
 use TakepartMedia\Workflows\Workflow\WorkflowEventStore;
 use TakepartMedia\Workflows\Workflow\WorkflowInstaller;
+use TakepartMedia\Workflows\Workflow\WorkflowScaffolder;
 use TakepartMedia\Workflows\Workflow\WorkflowState;
 use TakepartMedia\Workflows\Workflow\WorkflowStateSeeder;
 use TakepartMedia\Workflows\Workflow\WorkflowStateStore;
@@ -130,7 +132,190 @@ class WorkflowSettingsController extends CpController
                 'collections' => $installer->projectCollections(),
                 'submit_url' => cp_route('workflows.settings.install'),
             ],
+            // The "create workflow" modal. Unlike the installer it offers EVERY
+            // shipped type: an example is a template here, created under a new
+            // handle, so having one installed already is no reason to hide it.
+            'create' => [
+                'submit_url' => cp_route('workflows.settings.create'),
+                'templates' => collect($installer->describedTypes())
+                    ->map(fn (array $type) => [
+                        'value' => $type['value'],
+                        'label' => $type['label'],
+                        'description' => $type['description'],
+                        'installed' => $type['installed'],
+                    ])
+                    ->values()
+                    ->all(),
+                'workflows' => collect($workflows)
+                    ->map(fn (array $row) => ['handle' => $row['handle'], 'label' => $row['title']])
+                    ->values()
+                    ->all(),
+                'collections' => $installer->projectCollections(),
+                // So the modal can check a handle before sending it; the
+                // endpoint checks again (and alone knows what is taken).
+                'handle_pattern' => '^[a-z][a-z0-9_]*$',
+                'handle_max' => WorkflowScaffolder::HANDLE_MAX,
+                'reserved_handles' => WorkflowScaffolder::RESERVED_HANDLES,
+            ],
         ]);
+    }
+
+    /**
+     * Create a new workflow — blank, from a shipped example (`template`) or as
+     * a copy of an existing one (`copy_of`). Super-admin-only.
+     *
+     * Body: `{handle, label?, from?: blank|example|copy, template?, copy_of?,
+     * collections?: [], backfill?: bool}`. Validation problems come back
+     * Laravel-style — 422 `{message, errors: {field: [messages]}}` — with the
+     * definition's own problems (should a template not validate in this
+     * project, e.g. an example naming a site the project lacks) under
+     * `definition.<path>` and in full as `definition_errors`.
+     *
+     * The new workflow is INACTIVE (see WorkflowScaffolder), which is also why
+     * `backfill` is accepted but never acted on here: the seeder only seeds
+     * active workflows and would report a useless 0. The answer says so
+     * (`backfill_skipped`), and the row's "backfill states" action is there
+     * once the workflow is switched on.
+     *
+     * 201 `{data: {workflow, slug, active, edit_url, backfill_skipped}}`.
+     */
+    public function createWorkflow(Request $request)
+    {
+        abort_unless($this->isSuperAdmin(), 403);
+
+        $loader = app(DefinitionLoader::class);
+        $scaffolder = app(WorkflowScaffolder::class);
+        $installer = app(WorkflowInstaller::class);
+        $errors = [];
+
+        $handle = $request->input('handle');
+        $handle = is_string($handle) ? trim($handle) : '';
+
+        if (($key = $scaffolder->validateHandle($handle)) !== null) {
+            $errors['handle'][] = $this->t($key, ['handle' => $handle, 'max' => WorkflowScaffolder::HANDLE_MAX]);
+        }
+
+        $label = $request->input('label');
+        $label = is_string($label) ? trim($label) : '';
+
+        if (mb_strlen($label) > 120) {
+            $errors['label'][] = $this->t('create_label_too_long', ['max' => 120]);
+        }
+
+        if ($label === '') {
+            $label = (string) Str::of($handle)->replace('_', ' ')->title();
+        }
+
+        $from = $request->input('from', 'blank') ?: 'blank';
+
+        if (! in_array($from, ['blank', 'example', 'copy'], true)) {
+            $errors['from'][] = $this->t('create_from_invalid');
+        }
+
+        $template = (string) $request->input('template', '');
+
+        if ($from === 'example' && ! in_array($template, $installer->availableTypes(), true)) {
+            $errors['template'][] = $this->t('install_unknown_type', ['type' => $template]);
+        }
+
+        $copyOf = (string) $request->input('copy_of', '');
+
+        if ($from === 'copy' && ! in_array($copyOf, $loader->allIncludingInactive(), true)) {
+            $errors['copy_of'][] = $this->t('create_copy_unknown', ['workflow' => $copyOf]);
+        }
+
+        // Null keeps a template's or a copy's own list; a blank workflow
+        // starts without one.
+        $collections = null;
+
+        if ($request->has('collections')) {
+            $input = $request->input('collections');
+
+            if (! is_array($input)) {
+                $errors['collections'][] = $this->t('create_collections_invalid');
+            } else {
+                $collections = [];
+
+                foreach (array_values($input) as $index => $collection) {
+                    if (! is_string($collection) || Collection::find($collection) === null) {
+                        $errors["collections.{$index}"][] = $this->t('collection_unknown', [
+                            'collection' => is_string($collection) ? $collection : gettype($collection),
+                        ]);
+
+                        continue;
+                    }
+
+                    $collections[] = $collection;
+                }
+
+                $collections = array_values(array_unique($collections));
+            }
+        }
+
+        if ($errors !== []) {
+            return $this->createErrorResponse($errors);
+        }
+
+        try {
+            $definition = match ($from) {
+                'example' => $scaffolder->fromExample($template, $handle, $label, $collections),
+                'copy' => $scaffolder->copyOf($copyOf, $handle, $label, $collections),
+                default => $scaffolder->blank($handle, $label, $collections ?? []),
+            };
+
+            app(WorkflowDefinitionWriter::class)->create($handle, $definition);
+        } catch (DefinitionValidationException $e) {
+            $list = $e->errors !== [] ? $e->errors : [$e->toArray()];
+            $byPath = [];
+
+            foreach ($list as $error) {
+                // A name clash found by the writer (a race with another
+                // request) is a handle problem, not a definition one.
+                $field = $error['path'] === 'name' ? 'handle' : 'definition.'.$error['path'];
+                $byPath[$field][] = $error['message'];
+            }
+
+            return $this->createErrorResponse($byPath, ['definition_errors' => $list]);
+        } catch (\InvalidArgumentException $e) {
+            return $this->createErrorResponse(['from' => [$e->getMessage()]]);
+        }
+
+        app(WorkflowEventStore::class)->log('workflow:'.$handle, $handle, 'workflow_created', [
+            'note' => $this->t('event_note_workflow_created', [
+                'workflow' => $handle,
+                'source' => match ($from) {
+                    'example' => $this->t('create_source_example', ['template' => $template]),
+                    'copy' => $this->t('create_source_copy', ['workflow' => $copyOf]),
+                    default => $this->t('create_source_blank'),
+                },
+            ]),
+        ]);
+
+        $raw = $loader->raw($handle);
+
+        return response()->json([
+            'data' => [
+                'workflow' => $handle,
+                'slug' => $raw['metadata']['nav']['slug'] ?? null,
+                'active' => $loader->isActive($handle),
+                'edit_url' => cp_route('workflows.settings.edit', ['workflow' => $handle]),
+                'backfill_skipped' => $request->boolean('backfill') && ((array) ($raw['collections'] ?? [])) !== [],
+            ],
+        ], 201);
+    }
+
+    /**
+     * A 422 in Laravel's validation shape: the first message on top, every
+     * message per field below.
+     *
+     * @param  array<string, array<int, string>>  $errors
+     * @param  array<string, mixed>  $extra
+     */
+    private function createErrorResponse(array $errors, array $extra = []): JsonResponse
+    {
+        $first = collect($errors)->flatten()->first();
+
+        return response()->json(['message' => (string) $first, 'errors' => $errors] + $extra, 422);
     }
 
     /**

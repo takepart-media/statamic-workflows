@@ -3,108 +3,94 @@
 namespace TakepartMedia\Workflows\Console;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\File;
-use TakepartMedia\Workflows\Workflow\DefinitionLoader;
+use InvalidArgumentException;
+use TakepartMedia\Workflows\Workflow\DefinitionValidationException;
+use TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter;
+use TakepartMedia\Workflows\Workflow\WorkflowInstaller;
+use TakepartMedia\Workflows\Workflow\WorkflowScaffolder;
 
 /**
  * Scaffold a new workflow YAML in `resources/workflows/`. Two modes:
- *   - Blank: creates a minimal draft → published skeleton.
- *   - From example: copies one of the shipped example YAMLs and renames it.
- * Never overwrites; refuses if the target file already exists.
+ *   - Blank: a minimal draft → published skeleton.
+ *   - From example: one of the shipped example YAMLs under the new handle.
+ * Built by WorkflowScaffolder and written by WorkflowDefinitionWriter::create()
+ * — the same path as the CP's "create workflow" — so the handle rules, the
+ * unique nav slug and the validation are the CP's. Never overwrites.
+ *
+ * CLI defaults differ from the CP on purpose and are kept from before: the
+ * blank template is attached to `--collection` (posts), and the workflow is
+ * written ACTIVE unless `--inactive` is given — whoever runs the command is
+ * about to open the file anyway. An example keeps its own collections unless
+ * `--collection` is passed explicitly.
  */
 class MakeWorkflowCommand extends Command
 {
     protected $signature = 'workflows:make
                             {name : Workflow handle (snake_case, e.g. postmanager)}
-                            {--from= : Start from a shipped example (postmanager, translation)}
-                            {--collection=posts : Collection handle for the blank template}';
+                            {--from= : Start from a shipped example (postmanager, translation, plainlanguage)}
+                            {--collection=posts : Collection handle for the blank template (for --from: overrides the example\'s collections)}
+                            {--label= : Display name (defaults to the handle)}
+                            {--inactive : Write the workflow switched off (active: false)}';
 
     protected $description = 'Scaffold a new workflow YAML in resources/workflows/.';
 
-    public function handle(DefinitionLoader $loader): int
+    public function handle(WorkflowScaffolder $scaffolder, WorkflowDefinitionWriter $writer, WorkflowInstaller $installer): int
     {
-        $name = $this->argument('name');
+        $name = (string) $this->argument('name');
 
-        if (! preg_match('/^[a-z][a-z0-9_]*$/', $name)) {
-            $this->error("Invalid handle [{$name}] — use snake_case, start with a letter.");
+        if (($key = $scaffolder->validateHandle($name)) !== null) {
+            $this->error(__("workflows::messages.{$key}", ['handle' => $name, 'max' => WorkflowScaffolder::HANDLE_MAX]));
+
+            return $key === 'create_handle_taken' ? self::FAILURE : self::INVALID;
+        }
+
+        $label = (string) ($this->option('label') ?: $name);
+        $from = $this->option('from');
+
+        if ($from && ! in_array($from, $installer->availableTypes(), true)) {
+            $this->error("Example [{$from}] not found. Available: ".implode(', ', $installer->availableTypes()));
 
             return self::INVALID;
         }
 
-        File::ensureDirectoryExists($loader->directory());
-        $target = $loader->directory().'/'.$name.'.yaml';
+        // `--collection` has a default, so "was it given" has to be read off
+        // the raw input: an example keeps its own list unless overridden.
+        $collectionGiven = $this->input->hasParameterOption('--collection');
+        $collection = (string) $this->option('collection');
 
-        if (File::exists($target)) {
-            $this->error("resources/workflows/{$name}.yaml already exists — refusing to overwrite.");
+        try {
+            $definition = $from
+                ? $scaffolder->fromExample($from, $name, $label, $collectionGiven ? [$collection] : null)
+                : $scaffolder->blank($name, $label, [$collection]);
+
+            // The scaffolder builds inactive definitions (the CP's rule); the
+            // CLI has always written active ones.
+            $definition['active'] = ! $this->option('inactive');
+
+            $writer->create($name, $definition);
+        } catch (DefinitionValidationException $e) {
+            $this->error($e->getMessage());
+
+            foreach (array_slice($e->errors, 1) as $error) {
+                $this->line("  • {$error['path']}: {$error['message']}");
+            }
+
+            return self::FAILURE;
+        } catch (InvalidArgumentException $e) {
+            $this->error($e->getMessage());
 
             return self::FAILURE;
         }
 
-        if ($from = $this->option('from')) {
-            $source = $loader->examplesDirectory().'/'.$from.'.yaml';
-
-            if (! File::exists($source)) {
-                $available = collect(glob($loader->examplesDirectory().'/*.yaml') ?: [])
-                    ->map(fn ($f) => basename($f, '.yaml'))
-                    ->implode(', ');
-                $this->error("Example [{$from}] not found. Available: {$available}");
-
-                return self::INVALID;
-            }
-
-            $yaml = File::get($source);
-            // Rewrite the `name:` line so the new file identifies itself correctly.
-            $yaml = preg_replace('/^name:\s*\S+/m', "name: {$name}", $yaml, 1);
-            File::put($target, $yaml);
-            $this->info("Created resources/workflows/{$name}.yaml (from example: {$from})");
-        } else {
-            File::put($target, $this->blankTemplate($name, $this->option('collection')));
-            $this->info("Created resources/workflows/{$name}.yaml");
-        }
-
-        // Nothing has read this file yet, so there is no stale memo to drop — but
-        // every writer of a definition flushing is a rule that holds without being
-        // rechecked, and one line is cheaper than the next person wondering.
-        DefinitionLoader::flush();
+        $this->info("Created resources/workflows/{$name}.yaml".($from ? " (from example: {$from})" : '').'.');
+        $this->line('Nav slug: '.$definition['metadata']['nav']['slug'].($definition['active'] ? '' : ' — inactive, switch it on in Settings › Workflows.'));
 
         $this->line('');
         $this->line('Next steps:');
-        $this->line(" • Open resources/workflows/{$name}.yaml and define your places + transitions.");
-        $this->line(' • Ensure the user groups you reference (metadata.required_group) exist in resources/users/groups.yaml.');
+        $this->line(" • Open resources/workflows/{$name}.yaml (or its settings editor) and define your places + transitions.");
+        $this->line(' • Gate steps by group where needed (metadata.required_group) — the groups must exist in resources/users/groups.yaml.');
         $this->line(" • Reload the CP dashboard; the workflow appears in the 'workflows_overview' widget (config/statamic/cp.php → widgets).");
 
         return self::SUCCESS;
-    }
-
-    private function blankTemplate(string $name, string $collection): string
-    {
-        $navSlug = str_replace('_', '-', $name);
-
-        return <<<YAML
-name: {$name}
-type: state_machine
-marking_store: { type: method, property: current_state }
-collections: [{$collection}]
-initial_place: draft
-metadata:
-  label: '{$name}'
-  nav: { label: '{$name}', slug: {$navSlug}, icon: tasks, order: 10 }
-places:
-  draft:
-    label: Draft
-    metadata: { required_group: editor }
-  published:
-    label: Published
-    metadata: { required_group: editor, allow_publish: true }
-transitions:
-  publish:
-    from: draft
-    to: published
-    metadata: { label: 'Publish', required_group: editor }
-  unpublish:
-    from: published
-    to: draft
-    metadata: { label: 'Unpublish', required_group: editor }
-YAML;
     }
 }
