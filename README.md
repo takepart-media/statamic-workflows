@@ -150,7 +150,7 @@ never overwrites.
 | Command                                                       | Purpose                                                                   |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `workflows:install`                                           | Interactive first-run setup: migrate, publish, pick type, pick collections, offer backfill |
-| `workflows:make <name>`                                       | Scaffold a blank workflow YAML                                            |
+| `workflows:make <name>`                                       | Scaffold a blank workflow YAML (same scaffolder as "Create workflow" in the CP) |
 | `workflows:make <name> --from=postmanager`                    | Scaffold from a shipped example                                           |
 | `workflows:seed-states`                                       | Backfill workflow states for existing entries (idempotent)                |
 | `workflows:seed-states --workflow=<name>`                     | Restrict backfill to one workflow                                         |
@@ -252,6 +252,52 @@ install command does not seed groups — that's the project's responsibility.
 
 The full schema, including SLA, history-fields, and the revision loop, is in
 [`DOCS.md`](./DOCS.md).
+
+---
+
+## Workflow editor
+
+Super admins don't have to edit YAML by hand: **Settings › Workflows** lists
+every workflow (active or not), and each row opens a graph editor at
+`/cp/workflows/settings/<handle>`.
+
+- **Graph** — places and transitions are both nodes; lines connect a place to
+  a transition (`from`) and a transition to a place (`to`). Drawing a line from
+  place to place creates the transition in between. Node positions are stored
+  in `metadata.editor` (no runtime effect); without them the graph is laid out
+  automatically.
+- **Panels** — select a node to edit it in the side panel (general,
+  permissions, actions, connections & usage). Workflow-wide settings
+  (permissions, localization or SLA, collections, order, advanced) open in a
+  stack from the toolbar.
+- **Saving** — one save writes the whole definition (with a backup under
+  `storage/app/workflows/backups/`, see `editor_backups`). Problems are shown
+  live at the node and the field; the server validates again on save. Deleting
+  a place is deferred until the save, and entries still in it must be moved to
+  another place. A save over a file changed in the meantime asks first (409).
+- **Handles are immutable** once saved — labels are what people see.
+- **Creating workflows** — "Create workflow" on the index: blank, from a
+  shipped example, or as a copy of an existing one. New workflows start
+  **inactive**; switch them on from their row (or the editor's toolbar) once
+  they are ready. `workflows:make` does the same from the CLI.
+- **Unsaved changes** are guarded (leaving the page asks first); undo/redo
+  covers every edit.
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl/⌘+S` | Save |
+| `Ctrl/⌘+Z`, `Ctrl/⌘+Shift+Z` / `Ctrl+Y` | Undo, redo |
+| `Ctrl/⌘+,` | Workflow settings |
+| `Esc` | Close settings / menu, deselect, collapse the panel |
+| `Delete` / `Backspace` | Delete the selection |
+| `Tab` | Add menu next to the selected node |
+| `Enter` | Open the focused node's panel |
+| Arrow keys (`Shift`: further) | Nudge the node |
+| `1` / `0` / `+` / `-` | Fit / 100 % / zoom in / zoom out |
+| `Shift+L` | Arrange automatically |
+
+Details (payload, validation, versioning, architecture) are in
+[`DOCS.md`](./DOCS.md) §§ 4, 5.9 and 11.
 
 ---
 
@@ -366,6 +412,17 @@ described under [Installation → Local path repo](#alternative-local-path-repo-
 
 ```bash
 npm run build
+```
+
+The graph editor is a separate lazy chunk (`WorkflowEditor-*.js`); the main
+`addon-*.js` bundle must not grow with it. Neither may import Vue itself —
+after a build, `grep -c 'from"vue"\|from "vue"' resources/dist/build/assets/*.js`
+must print 0 for every file.
+
+**Tests** — the editor's model and composables are covered by vitest:
+
+```bash
+npm test
 ```
 
 The bundle under `resources/dist/build/` is **committed** to the repo so

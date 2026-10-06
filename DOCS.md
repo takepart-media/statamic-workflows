@@ -128,11 +128,11 @@ transitions:
 | Key | Wirkung |
 | --- | --- |
 | `allow_publish: true` | Entry wird beim Eintritt veröffentlicht (`published(true)`), Publish-Gate geöffnet. |
-| ~~`required_group`~~ | **Entfallen.** Hat nie eine Transition gegated — das tut nur der gleichnamige Schlüssel an der **Transition**. Der Settings-Editor bietet ihn nicht mehr an und entfernt ihn beim nächsten Speichern; bestehende YAMLs bleiben gültig, der Schlüssel ist wirkungslos. Ersatz: Gate → an die Transition, Zuweisung → `user_assignment`-Action. Das gilt auch für die Alterungsstufen: sie sind gewöhnliche Places mit gewöhnlichen Transitions und haben deshalb keine eigene Sprache mehr (§ 15). |
+| ~~`required_group`~~ | **Entfallen.** Hat nie eine Transition gegated — das tut nur der gleichnamige Schlüssel an der **Transition**. Der Graph-Editor bietet ihn nicht mehr an und entfernt ihn beim nächsten Speichern; bestehende YAMLs bleiben gültig, der Schlüssel ist wirkungslos. Ersatz: Gate → an die Transition, Zuweisung → `user_assignment`-Action. Das gilt auch für die Alterungsstufen: sie sind gewöhnliche Places mit gewöhnlichen Transitions und haben deshalb keine eigene Sprache mehr (§ 15). |
 | ~~`assign_group: <handle>`~~ | **Entfallen.** Der Writer lehnt den Schlüssel ab. Eine Transition weist ausschließlich über ihre `user_assignment`-Action zu — siehe „Zuweisung passiert nur noch, wo es dransteht" unten. |
 | `revision_pending: true` | Interner Marker (wird automatisch für den `pending_revision`-Place gesetzt — bitte selbst nicht setzen). |
-| `branch: true` | **Nur Darstellung, kein Verhalten.** Der Place ist keine Stufe auf dem Weg, sondern ein Abstecher davon (Fehlerfall, Parkplatz). Die Fortschrittsleiste im Summary-Header zeichnet ihn versetzt am vorherigen Schritt und **nur dann, wenn eine Fassung tatsächlich darin steht**; die Hauptlinie bleibt unverändert. Im Settings-Editor als Checkbox „Abzweigung". Auf dem Start-Place abgelehnt — jede neue Fassung stünde sofort neben dem Weg. Siehe `Workflow\ProgressSteps`. |
-| `actions: [...]` | Verhalten, das gilt, solange eine Fassung hier steht — kein Klick-Moment wie bei Transitions, deshalb eine eigene, kleinere Typ-Menge. Im Settings-Editor pflegbar (Place-Karte → „Actions"). Siehe die Place-Typen-Tabelle unten. |
+| `branch: true` | **Nur Darstellung, kein Verhalten.** Der Place ist keine Stufe auf dem Weg, sondern ein Abstecher davon (Fehlerfall, Parkplatz). Die Fortschrittsleiste im Summary-Header zeichnet ihn versetzt am vorherigen Schritt und **nur dann, wenn eine Fassung tatsächlich darin steht**; die Hauptlinie bleibt unverändert. Im Graph-Editor als Checkbox „Abzweigung". Auf dem Start-Place abgelehnt — jede neue Fassung stünde sofort neben dem Weg. Siehe `Workflow\ProgressSteps`. |
+| `actions: [...]` | Verhalten, das gilt, solange eine Fassung hier steht — kein Klick-Moment wie bei Transitions, deshalb eine eigene, kleinere Typ-Menge. Im Graph-Editor pflegbar (Place-Panel → „Actions"). Siehe die Place-Typen-Tabelle unten. |
 
 **Place-Action-Typen** (`places.<name>.metadata.actions[]`)
 
@@ -200,7 +200,7 @@ Place-Gruppe ist, aber nicht der Transition-Gruppe: `canApplyTransition()` sagt
 | Zuweisung bei „Status setzen" | nichts — der Handeingriff weist nicht mehr zu, der Assignee-Drawer steht daneben |
 | Quelle der SLA-Injektion | **entfallen** — die Alterungsstufen sind selbst gepflegte Places und Transitions (§ 15) |
 
-Der Settings-Editor zeigt den Place-Schlüssel nicht mehr und entfernt ihn beim
+Der Graph-Editor zeigt den Place-Schlüssel nicht mehr und entfernt ihn beim
 nächsten Speichern. Bestehende YAMLs bleiben gültig — der Schlüssel wird schlicht
 ignoriert, statt einen Fehler zu werfen, der jede noch nicht neu gespeicherte
 Definition unspeicherbar machte.
@@ -218,7 +218,7 @@ und `syncPlaceAssignees()` beim privilegierten Handeingriff „Status setzen"
 | `required_group: <handle>` oder Liste | Ausführender Nutzer muss zusätzlich zur Assignee-Bedingung in einer dieser Gruppen sein. |
 | `required_role: <handle>` oder Liste | Dasselbe über Statamic-Rollen (`hasRole`). Mit `required_group` eine **Vereinigung**: eine Gruppe ODER eine Rolle genügt — ein Schritt, der „der Fachgruppe oder jedem mit Prüfer-Rolle" offensteht, ist ein Publikum, zweifach beschrieben. Beide weglassen = offen für jeden Assignee. |
 
-**Im Settings-Editor ist das ein Feld, nicht zwei.** Die Transition-Karte zeigt
+**Im Graph-Editor ist das ein Feld, nicht zwei.** Das Transition-Panel zeigt
 „Ausführen darf" mit den Optionen **Alle Zuständigen / Gruppe / Rolle** und
 daneben — außer bei „Alle Zuständigen" — die passende Handle-Liste. Gespeichert
 wird daraus je Transition genau **einer** der beiden Schlüssel; ein Wechsel des
@@ -237,7 +237,7 @@ richtigen Leute übergeben hat — siehe „Zuweisung passiert nur noch, wo es
 dransteht" oben. Sobald aus einem Place aber **mehrere** Wege herausführen, ist
 das Gate das Einzige, was sie auseinanderhält: es gibt einen Zuständigen-Satz,
 aber zwei Publika.
-| `actions: [...]` | Schritte um die Transition herum — die meisten zwischen Klick und Vollzug, `mail` danach. Im Settings-Editor pflegbar (Transition-Karte → „Actions"). Siehe die Typen-Tabelle unten. |
+| `actions: [...]` | Schritte um die Transition herum — die meisten zwischen Klick und Vollzug, `mail` danach. Im Graph-Editor pflegbar (Transition-Panel → „Actions"). Siehe die Typen-Tabelle unten. |
 | `system: true` | Transition erscheint **nicht** als Button; ist rein für die Diagramm-Vollständigkeit bzw. wird automatisch getrieben (z. B. `mark_pending`, `publish_revision`). |
 
 **Action-Typen** (`transitions.<name>.metadata.actions[]`)
@@ -247,7 +247,7 @@ aber zwei Publika.
 | `user_assignment` | Wer den Beitrag als Nächstes übernimmt. `mode: manual` öffnet einen Auswahl-Dialog (**mehrfach wählbar**), `mode: automatic` weist **alle** Treffer ohne Dialog zu. Wer überhaupt infrage kommt, sagen in **beiden** Fällen dieselben `criteria`, verknüpft über `match: all` (alle Bedingungen) oder `match: any` (eine genügt); ein Eintrag darf eine **Gruppe** mit eigenem `match` sein, womit UND und ODER gemischt sagbar sind — siehe „Zuweisungs-Kriterien" unten. Die Gewählten bzw. Getroffenen werden zu den Assignees des Ziel-Places. Höchstens **eine** je Transition. |
 | `target_missing` | **Kein Dialog, sondern eine stille Sperre.** Blockiert die Transition (`can_apply: false`, mit Begründung), solange der Beitrag bereits eine Version in `site` hat — root-basiert geprüft (`WorkflowResolver::groupLocales()`), gilt also unabhängig davon, welche Fassung angeklickt wurde. Fehlt die Version noch, tut die Action nichts: sie sperrt nur, sie erlaubt nie etwas, was sonst gesperrt wäre. `site` ist Pflicht und wird wie `plain_language_site` gegen die echte Site-Liste geprüft. |
 | `start_localization` | **Keine Konfiguration, nur eine Markierung.** UI-Label „Erzeugt die Ziel-Fassung (mit Sprachauswahl)". Benennt die Transition, die die Ziel-Version erzeugt. In einem Lokalisierungs-Workflow (`metadata.detail: translation`) **Pflicht**, genau einmal — beides prüft der Writer; außerhalb abgelehnt. **Im Übersetzungsmanager sitzt die Sprachauswahl an genau dieser Transition** und an keiner anderen. Siehe „Die Sprachauswahl ist nicht konfigurierbar — aber WELCHE Transition sie trägt, ist es" unten. |
-| `plain_language_resubmit` | **Keine Konfiguration, aber kein Zähl-Limit.** Legt nichts an: schickt den Text der bestehenden Version erneut an den Dienst und überschreibt sie mit dem Ergebnis — der Reparatur-Pfad für einen misslungenen Rewrite. Kann auf mehreren Transitions gleichzeitig stehen (aus der Prüfung, aus der Freigabe). Nur in einem Workflow mit `plain_language_site` (dieselbe Kopplung wie bei `pending_rewrite_spinner`). Im Settings-Editor nur wählbar in dessen Manager, außer auf der Start-Transition (die erzeugt die Version erst). |
+| `plain_language_resubmit` | **Keine Konfiguration, aber kein Zähl-Limit.** Legt nichts an: schickt den Text der bestehenden Version erneut an den Dienst und überschreibt sie mit dem Ergebnis — der Reparatur-Pfad für einen misslungenen Rewrite. Kann auf mehreren Transitions gleichzeitig stehen (aus der Prüfung, aus der Freigabe). Nur in einem Workflow mit `plain_language_site` (dieselbe Kopplung wie bei `pending_rewrite_spinner`). Im Graph-Editor nur wählbar in dessen Manager, außer auf der Start-Transition (die erzeugt die Version erst). |
 | `mail` | **Die einzige eingebaute Action mit einer Wirkung nach außen — und die einzige, die auch an einem Place stehen darf.** Mailt jedem, der dem Beitrag nach der Transition zugewiesen ist, eine Nachricht mit einem Button auf die Workflow-Übersicht des Beitrags (`InstanceUrl`) und — als Fußzeile — den Stufen des Workflows. Läuft **nach** dem Vollzug, kann die Transition also nicht verhindern; ein nicht erreichbarer Mailserver wird protokolliert, der Klick gilt trotzdem. Eine Mail **je Empfänger**, jeweils in dessen CP-Sprache. Höchstens **eine** je Transition. Einzige Konfiguration: `mail_type: <typ>` — WELCHE Mail (siehe Mail-Typen unten); weggelassen heißt `assigned`. Wer stattdessen eine Mail beim Ankommen in einem Status braucht, hängt dieselbe Action an den **Place** — dieselbe Action, anderer Auslöser. Ältere Definitionen schreiben `type: notify_assignees` mit `mail:`; beides wird weiter gelesen und beim nächsten Speichern umgeschrieben (`Workflow\MailAction`). |
 
 Aufgelöst wird das von `Workflow\TransitionActions` — der einzigen Stelle, die die
@@ -290,11 +290,11 @@ davon:
 
 **Betriebshinweis, der öfter zuschlägt als jeder Code-Fehler hier:** mit
 `MAIL_MAILER=log` (Laravels Standard) gelingt jede Transition, das Log füllt sich
-und **niemand bekommt eine Mail**. Genau deshalb steht im Settings-Editor direkt an
+und **niemand bekommt eine Mail**. Genau deshalb steht im Graph-Editor direkt an
 der Action, welcher Mailer eingerichtet ist und ob er zustellt — grün heißt „gibt
 die Nachricht aus diesem Prozess heraus", nicht „ist korrekt konfiguriert" (ein
 falsches SMTP-Passwort sieht von dort identisch aus und fällt erst im Log auf).
-Zugangsdaten erreichen den Client nicht, siehe `WorkflowController::mailStatus()`.
+Zugangsdaten erreichen den Client nicht, siehe `WorkflowSettingsController::mailStatus()`.
 Kopf und Fuß der Mail kommen aus Laravels Default-Theme; wer sie ändern will,
 published im Hostprojekt `php artisan vendor:publish --tag=laravel-mail`.
 
@@ -507,7 +507,7 @@ einer `groups`-Liste, und davor der Solo-Key `assign_from_group: <handle>`. Beid
 werden von `TransitionActions::for()` zu einer **manuellen** Zuweisung gefaltet,
 mit `match: any` und je einem `group is <handle>` pro Eintrag — genau das, was die
 Vereinigung der Gruppenmitglieder bedeutete. Nichts geht dabei verloren, und keine
-Definition muss dafür neu gespeichert werden. Der Settings-Editor übernimmt beide
+Definition muss dafür neu gespeichert werden. Der Graph-Editor übernimmt beide
 beim Laden und schreibt beim ersten Speichern nur noch die neue Form; der Writer
 lehnt ein erneut gespeichertes `user_modal` mit eigener Meldung ab.
 
@@ -520,7 +520,7 @@ unten.
 Eine Zeile aus `criteria` ist ein Tripel: **welche Eigenschaft** des Nutzers
 (`field`), **wie verglichen** wird (`operator`) und **womit** (`value`).
 
-**`match` steht im Settings-Editor direkt neben dem Modus.** Standard für eine
+**`match` steht im Graph-Editor direkt neben dem Modus.** Standard für eine
 neue Action ist `all` — jede Bedingung muss gelten, so liest sich ein Filter.
 `any` ist kein Randfall: jede migrierte `user_modal`-Action trägt es, weil deren
 Gruppenliste eine Vereinigung WAR (siehe oben). Wer so eine Action öffnet, muss
@@ -661,7 +661,7 @@ die Liste selbst damit die Unterscheidung IST
 
 **Eine Ebene, und der Writer setzt das durch.** Der Abgleich in
 `AssignmentCandidates::satisfies()` würde beliebig tief rekursieren, aber der
-Settings-Editor zeichnet eine Ebene — und eine Bedingung, die im Editor nicht
+Graph-Editor zeichnet eine Ebene — und eine Bedingung, die im Editor nicht
 lesbar ist, wäre schlimmer als eine, die das Format ablehnt. Eine leere Gruppe
 wird ebenfalls abgelehnt: sie träfe auf niemanden zu und sagt nichts.
 
@@ -761,12 +761,12 @@ Transition wie `review_ok` schreibt genau so eine Zeile und verschiebt die Quell
 auf `plain_reviewed` — exakt der Fall, den die Übersteuerung ermöglichen soll.
 
 **Die Reihenfolge bleibt inhaltlich, solange keine Übersteuerung existiert.**
-Damit „die erste Karte" nicht auf eine Transition zeigen kann, die mitten im
-Ablauf steht, koppelt der Settings-Editor ihr `from` an den `initial_place` — der
+Damit „die erste Transition" (der Reihenfolge nach) nicht auf eine zeigen kann,
+die mitten im Ablauf steht, koppelt der Graph-Editor ihr `from` an den `initial_place` — der
 Start-Place bleibt die Quelle der Wahrheit, die Reihenfolge entscheidet nur,
 **welche** Transition aus ihm herausführt. Sobald eine `start_localization`-Action
-irgendwo im Workflow gesetzt ist, hört diese Kopplung auf: die erste Karte wird
-wieder eine gewöhnliche Transition (ihr `from`-Feld ist dann editierbar), und die
+irgendwo im Workflow gesetzt ist, hört diese Kopplung auf: die erste Transition wird
+wieder eine gewöhnliche (ihr `from`-Feld ist dann editierbar), und die
 markierte Transition ist für ihr eigenes `from` selbst verantwortlich — geprüft
 erst beim Speichern, indem sie schlicht nie einen Button zeigt, wenn ihr `from`
 unerreichbar ist.
@@ -785,12 +785,12 @@ dieselbe Transition, weil er immer an der ersten stand.
 
 | Key | Wirkung |
 | --- | --- |
-| `nav.{label,slug,icon,order}` | Gibt dem Workflow seine Manager-Seite unter `/cp/workflows/<slug>` (verlinkt aus der Workflow-Spalte von `workflows_overview`, § 9) und einen Unterpunkt unter „Settings › Workflows" (nur Super-Admins), sortiert nach `order`. Eine eigene Nav-Sektion pro Workflow gibt es nicht mehr; `config('workflows.nav_section')` ist deprecated und wird nicht mehr gelesen. Ohne `nav` → keine Manager-Seite, kein Settings-Unterpunkt. **`label` gewinnt über die Übersetzung** und gilt dann in jeder CP-Sprache — das ist das Feld „Nav-Titel" im Settings-Editor. Leer lassen, damit `workflows::messages.nav.<slug>` greift und der Titel der CP-Sprache folgt; ohne beides erscheint kein Eintrag. |
+| `nav.{label,slug,icon,order}` | Gibt dem Workflow seine Manager-Seite unter `/cp/workflows/<slug>` (verlinkt aus der Workflow-Spalte von `workflows_overview`, § 9) und einen Unterpunkt unter „Settings › Workflows" (nur Super-Admins), sortiert nach `order`. Eine eigene Nav-Sektion pro Workflow gibt es nicht mehr; `config('workflows.nav_section')` ist deprecated und wird nicht mehr gelesen. Ohne `nav` → keine Manager-Seite, kein Settings-Unterpunkt. **`label` gewinnt über die Übersetzung** und gilt dann in jeder CP-Sprache — das ist das Feld „Nav-Titel" im Graph-Editor. Leer lassen, damit `workflows::messages.nav.<slug>` greift und der Titel der CP-Sprache folgt; ohne beides erscheint kein Eintrag. |
 | `default_assignee_group` | Auto-Assignment, wenn ein Subjekt entsteht („Neuer Beitrag" bzw. eine neue Localization). Gated außerdem, wer einen Entry in eine andere Site überführen darf (`canTransfer()`) — ein früherer separater `transfer_group`-Key ist darin aufgegangen. |
 | `assign_creator: true` | Weist beim Entstehen eines Subjekts **zusätzlich** zu `default_assignee_group` dessen Ersteller zu. Wichtig, wenn der Ersteller nicht in dieser Gruppe ist (z. B. Super-Admin) — nur Assignees dürfen eine Transition ausführen. Gilt für **beide** Workflow-Arten: „Ersteller" ist beim Beitragsmanager wer den Beitrag anlegt (`storePost`), beim Übersetzungsmanager wer die Localization auslöst (`transfer` bzw. eine `site_modal`-Transition). Die Zuweisung endet mit der ersten Transition; ein reines „Speichern" des aktuellen Schritts ändert sie nicht. |
 | `history_fields: [...]` | Whitelist von **Inhalts**-Feld-Handles für den Diff-View des Verlaufs. Sidebar-Felder (Taxonomien, sticky …) und die Meta-Attribute Slug, Datum, Veröffentlichung erscheinen immer, auch wenn sie hier nicht stehen (§ 5.10). Leer/fehlend = alle geänderten. |
 | `detail: translation` | Markiert den Workflow als **Lokalisierungs-Workflow** — siehe unten. Aktiviert außerdem die alternative `TranslationInstanceDetail`-Ansicht (Quelle vs. Übersetzung nebeneinander). |
-| `progress_orientation` | `horizontal` (Standard) oder `vertical`. Bestimmt **Ausrichtung und Position** der Fortschrittsleiste auf der Detailseite: waagerecht über dem Inhalt der Zusammenfassung, senkrecht in einer Spalte links davon. Im Settings-Editor als Auswahl bei den Workflow-Metadaten. Ein Wert daneben wird beim Speichern abgelehnt; eine hand-editierte YAML mit Müll fällt beim Lesen auf `horizontal` zurück. Siehe `Workflow\ProgressSteps::ORIENTATION`. |
+| `progress_orientation` | `horizontal` (Standard) oder `vertical`. Bestimmt **Ausrichtung und Position** der Fortschrittsleiste auf der Detailseite: waagerecht über dem Inhalt der Zusammenfassung, senkrecht in einer Spalte links davon. Im Graph-Editor als Auswahl bei den Workflow-Metadaten. Ein Wert daneben wird beim Speichern abgelehnt; eine hand-editierte YAML mit Müll fällt beim Lesen auf `horizontal` zurück. Siehe `Workflow\ProgressSteps::ORIENTATION`. |
 | `post_creator_groups: [...]` | Nutzergruppen, die in diesem Workflow Beiträge anlegen dürfen. Im CP editierbar (Settings > Workflows > „Darf Beiträge anlegen"). Überschreibt `config → post_creator_groups`; eine **leere Liste ist eine Aussage** („nur Super-Admins") und wird deshalb geschrieben, nicht weggelassen. Fehlt der Key ganz, greift die Config. |
 | `create_transition` | Handle einer Transition, die der Bestätigen-Button des „Neuer Beitrag"-Dialogs **direkt nach dem Anlegen** ausführt — der „Workflow-CTA". Der Button trägt dann das Label der Transition (z. B. „Entwurf erstellen"); der Dialog fragt den Titel ab, daraus entsteht auch der Slug (`uniqueSlug`, `-2`/`-3` bei Kollision). Nur eine echte (nicht `system`) Transition, die vom Start-Place ausgeht; nur in Beitrags-Workflows. Läuft durch dieselben Gates wie ein Button auf der Detailseite (`canApplyTransition`, `mechanicalBlocker`). Eine `manual`-Zuweisung fragt der Dialog gleich mit ab (Kandidatenliste wie im Picker der Detailseite, aufgelöst gegen einen Stub-Eintrag der Collection — Gruppen-/Rollen-Kriterien exakt, `matches_entry`-Kriterien finden vor dem Anlegen niemanden); die Auswahl wird **vor** dem Anlegen geprüft. Kann sie nicht laufen, wird der Beitrag **trotzdem angelegt** und bleibt im Start-Place, der Toast nennt den Grund. Fehlt der Key, heißt der Button „Anlegen" und legt nur an. Nach dem Anlegen bleibt man in jedem Fall in der Queue (kein Sprung in den Editor). Im CP editierbar (Settings > Workflows > „Workflow-Aktion beim Anlegen"); Umbenennen/Löschen der Transition im Editor pflegt den Verweis mit. |
 | `site_fields: [...]` | Blueprint-Feld-Handles, über die ein Redakteur Sites von Hand wählen könnte (z. B. eine Portal-Taxonomie). Wird validiert und ausgelesen (`WorkflowResolver::siteFields()`), aber **aktuell nicht erzwungen** — siehe § 2 → Lokalisierungs-Workflows. |
@@ -800,11 +800,11 @@ dieselbe Transition, weil er immer an der ersten stand.
 | `plain_language_site` | **Macht den Workflow zum Einfache-Sprache-Manager** und nennt zugleich dessen feste Ziel-Site. Zwei Aussagen in einem Key, absichtlich — ein zusätzlicher `mode:`-Schlüssel könnte ihm widersprechen. Folgen: die Start-Transition fragt **nicht** nach einer Sprache (es gibt nur ein Ziel), die Texte gehen an den Dienst für Einfache Sprache statt an DeepL (`translatorFor()`), und die Site ist für **jeden anderen** Localization-Workflow kein Ziel mehr — weder im Site-Picker noch im „In andere Site überführen"-Dialog noch in deren serverseitigen Prüfungen. Optional, genau **eine** Site; Single-Select im Editor, damit „höchstens eins" strukturell gilt. Muss eine konfigurierte Site sein, sonst lehnt der Writer ab — anders als bei `post_creator_groups`/`site_fields`, weil ein Tippfehler die Funktion sonst still abschalten würde und Sites praktisch statisch sind. |
 | `plain_language_completed_place` | Optional, nur mit `plain_language_site`. Sobald `PollPlainLanguageCommand` einen Auftrag erfolgreich abschließt (Text übernommen, keine `failures`), setzt es den Beitrag **direkt** in diesen Place — per `WorkflowStateStore::set()`, bewusst NICHT über eine Transition (der Scheduler läuft unbeaufsichtigt, es gibt also weder einen Klick, an dem eine `required_group`-Prüfung hängen könnte, noch die Assignee-/Publish-Nebeneffekte, die eine echte Transition mitbringt — das ist der Preis für die Einfachheit, nicht ein Versehen). Fehlt die Einstellung, bleibt es beim heutigen Verhalten: liegen bleiben bis zum manuellen Klick auf `submit_plain_language`. Bei einem fehlgeschlagenen Auftrag greift es nie. Muss ein existierender Place sein, der Writer lehnt sonst ab, wie bei `seed_published_place`. **Der einzige Weg, eine „Einfache Sprache ist fertig"-Mail zu bekommen:** ohne diese Einstellung ändert sich beim Eintreffen des Rewrites kein Status, es kommt also nirgends etwas an und nichts kann melden. Mit ihr trägt der genannte Place eine `mail`-Action (`mail_type: plain_language_ready`), und der Poll-Befehl löst sie beim Setzen aus — siehe Place-Action-Typen oben. |
 | `plain_language_failed_place` | Optional, nur mit `plain_language_site`. Das Gegenstück zum Abschluss-Place: wohin `PollPlainLanguageCommand` eine Fassung setzt, deren Rewrite **endgültig** gescheitert ist — Auftrag vom Dienst abgelehnt, als `failed` gemeldet, unbrauchbares Ergebnis, oder nach dem Abfrage-Budget einer Einreichung nicht fertig geworden (`max_polls`, Default 5, env `PLAIN_LANGUAGE_MAX_POLLS`; ein Poll pro Minute). **Ein einzelner Fehlschlag parkt aber nicht mehr sofort:** der Poll reicht den ganzen Aufruf erneut ein, bis `max_attempts` Einreichungen verbraucht sind (Default 3, env `PLAIN_LANGUAGE_MAX_ATTEMPTS`, `1` schaltet Wiederholungen ab). Die Zählung trägt die Spalte `submission` der Job-Tabelle, die der Retry beim Anlegen der Ersatzzeile weiterschreibt — `attempts` daneben zählt Polls und beginnt pro Einreichung neu. Jeder verbrauchte Versuch schreibt ein `plain_language_retry`-Event (bewusst nicht `plain_language_failed`, sonst würde die Instanzseite bei jedem Zwischenversuch einen Fehler-Toast feuern). Erst der letzte gescheiterte Versuch parkt. Ebenfalls, wenn die **Status-Abfrage** selbst dauerhaft mit einem Fehlercode antwortet — bei einem Fehlercode wird pro Job einzeln nachgefragt, damit eine unbekannte ID nicht die gesunden Aufträge mitreißt; ist der Dienst gar nicht erreichbar, wird gewartet statt eskaliert. **Nicht** für den synchronen Fall: scheitert schon das Einreichen (500 vom Dienst in `applyTransition()`), wird die Lokalisierung wieder gelöscht und es bleibt gar nichts zurück — dort war nie ein Auftrag angenommen, es gibt also nichts zu parken. Ebenfalls per `WorkflowStateStore::set()`, also ohne Transition und ohne `required_group`-Prüfung. **Ohne diese Einstellung wird die unübersetzte Kopie gelöscht** — das ältere Verhalten, das bleibt, damit bestehende Projekte sich nicht ändern. Setzen lohnt: ein Place ist das einzige dauerhafte Signal, das das CP hat (ein Toast ist nach 3,5 s weg, und der Poll läuft ohne Session, in die er einen flashen könnte), er ist im Queue-Listing sichtbar, und eine Transition mit `plain_language_resubmit` aus ihm heraus macht den zweiten Versuch zu einem Klick. Muss ein existierender Place sein, der Writer lehnt sonst ab. |
-| `plain_language_clear_fields` | Optional, nur mit `plain_language_site`, Liste von **Top-Level-Feld-Handles**. Diese Felder werden beim Rückschreiben eines fertigen Rewrites auf der Einfache-Sprache-Fassung **geleert** — gedacht für Inhalte, die eine Vollkopie mitbringt, die aber in Einfacher Sprache nichts zu suchen haben und die der Dienst von sich aus nie entfernt, weil sie gar nicht Teil des Dokuments sind, mit dem er antwortet. Der Anlass in diesem Projekt: der Quellen-Block (`dd_title`/`dd_text`) mit der wissenschaftlichen Referenzliste unter jedem Beitrag. **Geleert heißt beschattet, nicht gelöscht** — warum, siehe „Quellen überleben den Rewrite nicht" unten. Welche Felder das sind, ist eine **Projekt**-Entscheidung: das Addon weiß nicht, dass dieses Projekt seine Quellen `dd_text` nennt, und hardcodet nichts (dieselbe Haltung wie `site_fields`). Nicht gegen ein Blueprint geprüft (ein Workflow kann mehrere Collections mit verschiedenen Blueprints führen; ein unbekannter Handle beschattet ein Feld, das niemand liest, und ist harmlos) — die **Kopplung** an `plain_language_site` prüft der Writer dagegen schon, wie bei den beiden Place-Keys: ohne sie entsteht in diesem Workflow nie ein Rewrite, der Key sähe also wirksam aus und leerte nichts. `WorkflowResolver::plainLanguageClearFields()` gibt für jeden anderen Workflow ohnehin nichts heraus — **der Übersetzungspfad ist nicht betroffen**, eine englische Fassung behält ihre (übersetzten) Quellen. Im Settings-Editor gibt es kein Feld dafür; der Key wird in der YAML gesetzt und überlebt das Speichern im Editor unverändert (`normalize()`/`save()` kopieren `metadata` vollständig). Bestandsfassungen holt `workflows:backfill-plain-language` nach. |
+| `plain_language_clear_fields` | Optional, nur mit `plain_language_site`, Liste von **Top-Level-Feld-Handles**. Diese Felder werden beim Rückschreiben eines fertigen Rewrites auf der Einfache-Sprache-Fassung **geleert** — gedacht für Inhalte, die eine Vollkopie mitbringt, die aber in Einfacher Sprache nichts zu suchen haben und die der Dienst von sich aus nie entfernt, weil sie gar nicht Teil des Dokuments sind, mit dem er antwortet. Der Anlass in diesem Projekt: der Quellen-Block (`dd_title`/`dd_text`) mit der wissenschaftlichen Referenzliste unter jedem Beitrag. **Geleert heißt beschattet, nicht gelöscht** — warum, siehe „Quellen überleben den Rewrite nicht" unten. Welche Felder das sind, ist eine **Projekt**-Entscheidung: das Addon weiß nicht, dass dieses Projekt seine Quellen `dd_text` nennt, und hardcodet nichts (dieselbe Haltung wie `site_fields`). Nicht gegen ein Blueprint geprüft (ein Workflow kann mehrere Collections mit verschiedenen Blueprints führen; ein unbekannter Handle beschattet ein Feld, das niemand liest, und ist harmlos) — die **Kopplung** an `plain_language_site` prüft der Writer dagegen schon, wie bei den beiden Place-Keys: ohne sie entsteht in diesem Workflow nie ein Rewrite, der Key sähe also wirksam aus und leerte nichts. `WorkflowResolver::plainLanguageClearFields()` gibt für jeden anderen Workflow ohnehin nichts heraus — **der Übersetzungspfad ist nicht betroffen**, eine englische Fassung behält ihre (übersetzten) Quellen. Im Graph-Editor gibt es kein Feld dafür; der Key wird in der YAML gesetzt und überlebt das Speichern im Editor unverändert (`normalize()`/`save()` kopieren `metadata` vollständig). Bestandsfassungen holt `workflows:backfill-plain-language` nach. |
 | `translation_source_site` | Die Version, aus der übersetzt wird. Leer/fehlend = die **Main-Site** (Statamics Default-Site), und nur wenn der Beitrag dort keine Version hat, dessen Ursprungsversion — ein Beitrag, der direkt in einer anderen Site angelegt wurde, hat keine andere Quelle. Aufgelöst an genau einer Stelle: `WorkflowResolver::sourceSiteFor()`. Es gibt **eine** Quelle pro Manager: steht hier `simple`, entstehen alle Übersetzungen aus der Einfache-Sprache-Fassung und nicht mehr aus der deutschen. Fehlt einem Beitrag diese Version, ist die Start-Transition gesperrt (Begründung am Button, 422 am Endpoint) — kein stiller Rückfall. |
 | `translation_source_pick: true` | Hebt die Verbindlichkeit auf: der Sprach-Dialog fragt dann zusätzlich nach der Quelle, vorbelegt mit `translation_source_site` (bzw. der Main-Site) und begrenzt auf die Fassungen, die der Beitrag hat. Für Projekte, die pro Übersetzung entscheiden wollen. Standard aus. Nur in einem Lokalisierungs-Workflow **ohne** `plain_language_site` erlaubt — der Einfache-Sprache-Manager fragt nichts, dort wäre das Flag wirkungslos, und der Writer lehnt die Kombination deshalb ab. Bei eingeschaltetem Flag sperrt eine fehlende Quell-Version die Transition nicht mehr: sie ist dann eine Option unter mehreren, und der Dialog bietet nur vorhandene an. Gesetzt z. B. auf `simple`, um jede Übersetzung auf der Einfache-Sprache-Version aufzubauen statt auf dem Original. Wirkt an **einer** Stelle (`sourceEntryFor()`) und damit einheitlich auf Übersetzungslauf, Quell-Panel der Detailansicht und Payload-Vorschau. Fehlt einem Beitrag die gewählte Version, bleibt die Transition gesperrt und nennt den Grund — es wird **nie** stillschweigend auf den Ursprung zurückgefallen, weil das Ergebnis dann falsch wäre und richtig aussähe. Muss eine konfigurierte Site sein und darf nicht gleich `plain_language_site` sein. |
 | `translation_source_view: [...]` | Nur im Lokalisierungs-Workflow: wer die **Quellspalte** der Detailansicht wie sieht. Liste von Regeln, je `mode` (`hidden` = die Quelle wird gar nicht an den Browser geliefert, `collapsed` = die Seite startet einspaltig und ein Button blendet die Quelle ein), `by` (`group`, `role` oder `user`) und `handles` (Gruppen-/Rollen-Handles bzw. Benutzer-IDs). Wen keine Regel trifft, sieht die Gegenüberstellung wie bisher; treffen mehrere, gilt die strengere. **Darstellungsregel, keine Berechtigung** — Super-Admins sind nicht ausgenommen. Im CP editierbar (Übersetzungs-Abschnitt der Workflow-Einstellungen). Ausgewertet in `Workflow\SourceViewRules`, validiert vom Writer (`writer_source_view_*`). |
-| `editor.{places,transitions,…}` | **Nur für den Graph-Editor, ohne Laufzeitwirkung.** Knotenpositionen als `places.<handle>: {x, y}` und `transitions.<handle>: {x, y}`; fehlen sie, legt der Editor automatisch aus. Daneben flache Ansichtswerte wie `viewport: {x, y, zoom}`. Der Writer bereinigt statt zu validieren (`normalizeEditorMeta()`): Positionen unbekannter oder auto-injizierter Handles fliegen raus (so verschwindet die Position eines gelöschten Knotens), `x`/`y` werden zu gerundeten Ganzzahlen in ±100000, nicht-numerische Positionen werden verworfen, andere Unterschlüssel behalten nur Skalare bzw. flache Skalar-Maps; ein leeres `editor` entfällt. Löst nie einen Validierungsfehler aus. Eine Speicherung, die nur `editor` ändert, schreibt **kein** `definition_saved`-Event. |
+| `editor.{places,transitions,…}` | **Nur für den Graph-Editor, ohne Laufzeitwirkung.** Knotenpositionen als `places.<handle>: {x, y}` und `transitions.<handle>: {x, y}`; fehlen sie, legt der Editor automatisch aus. Daneben flache Ansichtswerte wie `viewport: {x, y, zoom}`. Der Writer bereinigt statt zu validieren (`normalizeEditorMeta()`): Positionen unbekannter oder auto-injizierter Handles fliegen raus (so verschwindet die Position eines gelöschten Knotens), `x`/`y` werden zu gerundeten Ganzzahlen in ±100000, nicht-numerische Positionen werden verworfen, andere Unterschlüssel behalten nur Skalare bzw. flache Skalar-Maps; ein leeres `editor` entfällt. Löst nie einen Validierungsfehler aus. Eine Speicherung, die nur `editor` ändert, schreibt **kein** `definition_saved`-Event. Geschrieben vom Graph-Editor bei jedem Speichern (Positionen aller Knoten); „Positionen zurücksetzen“ (Einstellungen › Erweitert) ordnet neu an und speichert beim nächsten Speichern. Ein neu angelegter leerer Workflow bringt Startpositionen mit, eine Kopie die der Quelle. Hand-editierte YAMLs ohne `editor` sind normal. |
 
 #### Der QS-Bericht des Einfache-Sprache-Dienstes
 
@@ -847,7 +847,7 @@ PLAIN_LANGUAGE_URL=…       # config: workflows.translation.plain_language.url
 PLAIN_LANGUAGE_TOKEN=…     # config: workflows.translation.plain_language.token
 ```
 
-Der Settings-Editor bietet dafür **kein Feld**, und genau das ist der Punkt: er schreibt
+Der Graph-Editor bietet dafür **kein Feld**, und genau das ist der Punkt: er schreibt
 `resources/workflows/*.yaml`, und die Datei ist versioniert. Ein dort gespeicherter
 Schlüssel läge in jedem Clone, Backup und CI-Log, alle Umgebungen teilten ihn, und
 Rotation hieße Commit. Der Weg über `config()` statt `env()` sorgt zusätzlich dafür, dass
@@ -879,7 +879,7 @@ wenn er ihn braucht.
 Der Token taucht unter keiner Einstellung auf: er ist ein Header, kein Payload-Feld.
 
 Was der Editor **zeigt**, ist die Sektion „Übersetzungs-APIs": je Variable eine Zeile,
-ob sie gesetzt ist (`WorkflowController::envStatus()` → `EnvStatusLine.vue`) — nur ein
+ob sie gesetzt ist (`WorkflowSettingsController::envStatus()` → `EnvStatusLine.vue`) — nur ein
 Boolean, nie der Wert. Kein Eingabefeld, kein Erklärtext; die Variablennamen sagen selbst,
 zu welchem Dienst eine Zeile gehört. Ohne diese Anzeige fiele ein fehlender `.env`-Eintrag
 erst beim ersten API-Call auf und sähe dort nach einer kaputten Anbindung aus statt nach
@@ -970,7 +970,7 @@ beiden Antworten falsch genug wäre, um sie abzulehnen — das CP würde einfach
 zeichnen, das niemand gewählt hat.
 
 Gesetzt wird das **je Workflow** in `metadata.progress_orientation`, pflegbar im
-Settings-Editor bei den Workflow-Metadaten. Es hängt an der FORM der Definition:
+Graph-Editor bei den Workflow-Metadaten. Es hängt an der FORM der Definition:
 sieben Stufen lesen sich als breites Band über dem Inhalt, vier daneben — und wer die
 Places ordnet, ist die Person, die das beurteilen kann. Vorher war es eine Konstante
 in den beiden Seiten, also für alle Workflows dieselbe Antwort und nur von einem
@@ -997,8 +997,9 @@ Komponente: die Regel ist drei Ebenen tief und zwei davon stehen schon in PHP. E
 Kopie im Client wäre eine zweite Definition derselben Sache, von Hand
 synchronzuhalten.
 
-- **Reihenfolge = YAML-Reihenfolge**, sortierbar über die Pfeile in der Place-Karte
-  des Settings-Editors. Nicht aus dem Transitions-Graphen berechnet: der ist
+- **Reihenfolge = YAML-Reihenfolge**, sortierbar im Abschnitt „Reihenfolge“ der
+  Workflow-Einstellungen des Graph-Editors (unabhängig von der Lage der Knoten
+  auf der Leinwand). Nicht aus dem Transitions-Graphen berechnet: der ist
   zyklisch (jede `reject`-Transition zeigt zurück), eine topologische Ordnung
   bräuchte willkürliche Tie-Breaks und wäre trotzdem nicht „der Happy Path". Die
   Leiste ist damit eine **Annäherung** an das Diagramm, und die YAML-Reihenfolge ist
@@ -1100,11 +1101,11 @@ listen. `WorkflowResolver::forCollection()` liefert den **ersten** Treffer über
 Ein Workflow, der die Collection **nicht** besitzt, greift dort nur auf Einträge
 zu, die einen explizit gespeicherten State haben (`entryRowsFlat()`). Genau so
 läuft `translation` sekundär auf `posts` mit, während `postmanager` (alphabetisch
-davor) es besitzt. Der Settings-Editor zeigt den Owner je gewählter Collection an.
+davor) es besitzt. Der Graph-Editor zeigt den Owner je gewählter Collection an.
 
 **Collection entfernen ist destruktiv.** Die betroffenen Einträge fallen aus dem
 Workflow; ihre States, Zuweisungen, Historie und Kommentare werden gelöscht
-(`purgeWorkflowData()`). `saveSettings()` verweigert das ohne
+(`purgeWorkflowData()`). `saveDefinition()` verweigert das ohne
 `confirm_collection_removal` und antwortet mit 422 +
 `needs_collection_confirmation` und der Anzahl betroffener Einträge, damit der
 Editor vorher nachfragt. Die Einträge selbst bleiben unverändert.
@@ -1174,7 +1175,7 @@ Localization relativ zu ihrer Quelle*. Daraus folgt viererlei:
    dorthin führt über die Detailseite bzw. Queue des Übersetzungsmanagers, die
    `?workflow=` explizit mitschicken.
 
-Im Settings-Editor eines Lokalisierungs-Workflows kommt **eine** zusätzliche
+Im Graph-Editor eines Lokalisierungs-Workflows kommt **eine** zusätzliche
 Sektion dazu, und die zeigt nur, was für **diesen** Manager gilt:
 
 | | Einfache-Sprache-Manager | Übersetzungsmanager |
@@ -1781,7 +1782,7 @@ Was er tut, in der Reihenfolge:
     Collection-eigene Prüfung faltet Pro wieder rein).
   - `bootNav()` — registriert nur noch den Super-Admin-Eintrag „Settings ›
     Workflows" (Index-Seite `workflows.settings.index`), mit einem Kind je
-    Workflow mit `metadata.nav`, das direkt in dessen Settings-Editor führt.
+    Workflow mit `metadata.nav`, das direkt in dessen Graph-Editor führt.
     Die frühere eigene Nav-Sektion mit einem Eintrag pro Workflow (samt
     Anker-Trick für ihre Position über „Inhalt") ist entfernt;
     `config('workflows.nav_section')` wird nicht mehr gelesen. Die Manager
@@ -1899,7 +1900,7 @@ angehängt.
 | `GET /cp/workflows/{slug}/instances/{id}` | `showInWorkflow` | Detailseite (Content, History, Kommentare, Aktionen), kanonische URL (`InstanceUrl`). Der Zurück-Link führt aufs Dashboard. |
 | `GET /cp/workflows/instances/{id}` | `show` | Id-only-Form für Bookmarks/ältere Links; leitet auf die kanonische URL um. |
 | `GET /cp/workflows/settings` | `settingsIndex`* | Super-Admin-Übersicht aller Workflows (auch inaktive), „Settings > Workflows". |
-| `GET /cp/workflows/settings/{workflow}` | `editSettings`* | Settings-Editor, per **Handle** (YAML-Name, `workflows.settings.edit`) — damit sind auch Workflows ohne `metadata.nav` editierbar. Ein Nav-Slug an dieser Stelle wird per 301 auf die Handle-URL umgeleitet; weder Handle noch Slug → 404. |
+| `GET /cp/workflows/settings/{workflow}` | `editSettings`* | Graph-Editor (Inertia-Seite `WorkflowsSettings`, § 11), per **Handle** (YAML-Name, `workflows.settings.edit`) — damit sind auch Workflows ohne `metadata.nav` editierbar. Ein Nav-Slug an dieser Stelle wird per 301 auf die Handle-URL umgeleitet; weder Handle noch Slug → 404. |
 
 **JSON-API** (aufgerufen vom Vue-Frontend)
 
@@ -1920,19 +1921,17 @@ angehängt.
 | `POST workflows/api/stats/retry-failed` | `retryFailedTranslations` | Sammel-Neustart aller geparkten Übersetzungen, die der Betrachter neu starten darf (Dashboard, § 9). |
 | `GET  workflows/api/stats/state-subjects` | `stateSubjects` | Die Beiträge in einem (Workflow, State)-Paar, seitenweise — lazy nachgeladen von der Statusreihe (§ 9). Read-only, `?workflow=&state=&page=`, Antwort `{items, meta, manager_url}`. |
 | `POST workflows/api/settings/create` | `createWorkflow`* | Neuen Workflow anlegen — leer, aus einem Beispiel oder als Kopie (Name `workflows.settings.create`). Body `{handle, label?, from?: blank\|example\|copy, template?, copy_of?, collections?, backfill?}`; 201 `{data: {workflow, slug, active, edit_url, backfill_skipped}}`, 422 im Laravel-Format `{message, errors: {feld: [..]}}`. Siehe „Workflows anlegen“ (§ 5.9). Vor den `{workflow}`-Routen registriert; diese schließen `install`/`create` als ganzes Wort aus. |
-| `POST workflows/api/settings/install` | `installWorkflow` | Mitgelieferten Workflow-Typ ins Projekt kopieren. Nur noch **nicht** installierte Typen. |
-| `POST workflows/api/settings/{workflow}/active` | `setWorkflowActive` | Workflow an-/abschalten (`active` in der YAML). |
-| `POST workflows/api/settings/{workflow}/seed` | `seedWorkflowStates` | Status für bestehende Einträge nachtragen (nur aktive Workflows). |
+| `POST workflows/api/settings/{workflow}/active` | `setWorkflowActive`* | Workflow an-/abschalten (`active` in der YAML). |
+| `POST workflows/api/settings/{workflow}/seed` | `seedWorkflowStates`* | Status für bestehende Einträge nachtragen (nur aktive Workflows). |
 | `POST workflows/api/settings/{workflow}/definition` | `saveDefinition`* | Speichern des Graph-Editors (Name `workflows.settings.save`). Payload `{version, definition: {places, transitions, metadata, collections, initial_place, marking_store, type}, removed_places?, confirm_collection_removal?, force?}`, Antwort `{data: {definition, version, purged, seeded, migrated, state_usage}}`. Siehe „Graph-Editor: Speichern“ unten. |
 | `POST workflows/api/settings/{workflow}/validate` | `validateDefinition`* | Dry-Run desselben Payloads (Name `workflows.settings.validate`), schreibt nie. Antwort immer 200: `{valid, version, errors, warnings, removals}` — siehe Validierung und „Graph-Editor: Speichern“ unten. |
 | `GET  workflows/api/settings/{workflow}/usage` | `usage`* | Einträge je Place + aktuelle Version (Name `workflows.settings.usage`): `{state_usage: {place: count}, version}`. |
-| `DELETE workflows/api/settings/{workflow}` | `destroyWorkflow` | Definition löschen; DB-Daten bleiben. |
-| `POST workflows/api/{workflow}/settings` | `saveSettings`* | Editor-Payload speichern. `{workflow}` = Handle (Slug als Fallback). |
-| `POST workflows/api/{workflow}/places/{place}/delete` | `deletePlace`* | Place löschen, ggf. mit `migrate_to`. `{workflow}` = Handle (Slug als Fallback). |
+| `DELETE workflows/api/settings/{workflow}` | `destroyWorkflow`* | Definition löschen; DB-Daten bleiben. |
 
-\* Die Super-Admin-Settings-Routen (Übersicht, Install, Anlegen, an/aus, Seed, Löschen,
-Editor samt Save/Place-Löschen) laufen über `WorkflowSettingsController`, alles
-andere über `WorkflowController`. Gemeinsame Helfer (`isSuperAdmin`,
+\* Die Super-Admin-Settings-Routen (Übersicht, Anlegen, an/aus, Seed, Löschen,
+Graph-Editor samt Speichern/Validieren/Usage) laufen über
+`WorkflowSettingsController`, alles andere über `WorkflowController`. Jede
+Methode dort beginnt mit `abort_unless($this->isSuperAdmin(), 403)`. Gemeinsame Helfer (`isSuperAdmin`,
 `workflowBySlug`, `siteHandles`, `siteName`, `workflowForCollection`, `t`) liegen
 im Trait `Http/Controllers/Concerns/WorkflowControllerHelpers.php`.
 
@@ -1944,7 +1943,7 @@ dazwischen —, antwortet der Endpoint **409** mit `{message, conflict: true,
 version, definition}` (aktueller Stand) statt zu überschreiben; `force: true`
 überschreibt bewusst. Weitere Antworten: **422** `places_mismatch` (mit
 `missing_places`), wenn ein bestehender Place weder in `definition.places` noch
-in `removed_places` steht — Places werden nie durch Weglassen gelöscht; **422** wie bei `saveSettings` für
+in `removed_places` steht — Places werden nie durch Weglassen gelöscht; **422** für
 unbekannte Collections, die Collection-Entfernungs-Bestätigung und
 Writer-Validierungsfehler — die beiden Fehlerfälle als `{message, errors}`
 (siehe unten).
@@ -1962,8 +1961,7 @@ Pfadsegmenten). `validate()`/`save()` werfen weiterhin beim ersten Fehler —
 `DefinitionValidationException` (erbt `InvalidArgumentException`, gleiche
 Meldung wie bisher) mit allen Fehlern in `errors`; `check()` und `dryRun()`
 (`{definition, errors}`) werfen nicht. `saveDefinition` antwortet bei
-Validierungsfehlern **422** `{message: <erster Fehler>, errors: [...]}`;
-`saveSettings`/`deletePlace` bleiben bei `{message}`.
+Validierungsfehlern **422** `{message: <erster Fehler>, errors: [...]}`.
 
 **Warnungen (`DefinitionLinter`).** Blockieren nie, kommen nur vom
 Validate-Endpoint, gleiche Form wie die Fehler: `place_unreachable` (vom
@@ -1988,8 +1986,10 @@ auch die Kommentare, die der YAML-Dump des Editors verliert.
 
 ### Graph-Editor: Speichern
 
-`saveDefinition` ist der einzige Weg, auf dem der Graph-Editor schreibt
-(`saveSettings`/`deletePlace` bleiben bis zum Cutover für den alten Editor).
+`saveDefinition` ist der einzige Weg, auf dem das CP eine Definition schreibt.
+Die früheren Endpoints des Formular-Editors (`saveSettings`, `deletePlace`) und
+die CP-Installation (`installWorkflow`) sind mit dem Cutover entfallen; an/aus,
+Löschen und Anlegen haben eigene Endpoints (§ 5.9).
 
 **Payload.** `{version, definition: {…}, removed_places: [{place, migrate_to?}],
 confirm_collection_removal?, force?}`. `definition.places` enthält alle Places,
@@ -2271,7 +2271,7 @@ Vier Aufrufer:
    Workflow keinen Fertig-Place hat. Einzige Stelle mit `--redo`.
 2. `workflows:install` bzw. die Backfill-Checkbox im CP-Installer, beide über
    `WorkflowInstaller::backfill()` — nur bei der **Erst**installation.
-3. `saveSettings()` — beim **Hinzufügen** einer Collection; Gegenstück zum Purge
+3. `saveDefinition()` — beim **Hinzufügen** einer Collection; Gegenstück zum Purge
    beim Entfernen. Anzahl steht als `seeded` in der Antwort.
 4. `seedWorkflowStates()` — „Status nachtragen" je Zeile in der
    Settings-Übersicht, für den ganzen Workflow und jederzeit wiederholbar
@@ -2317,7 +2317,7 @@ Vertrauen verdienen:
 | Kategorie | Bedeutung |
 | --- | --- |
 | `deleted` | Der Eintrag existiert nicht mehr. Kein Weg führt zurück, also bedingungslos. |
-| `ungoverned` | Die Collection des Eintrags steht nicht mehr in `collections`. Dasselbe, was `saveSettings()` beim Entfernen einer Collection aufräumt — hier für von Hand editierte YAML. |
+| `ungoverned` | Die Collection des Eintrags steht nicht mehr in `collections`. Dasselbe, was `saveDefinition()` beim Entfernen einer Collection aufräumt — hier für von Hand editierte YAML. |
 | `foreign` | Die Fassung liegt in einer Site, für die dieser Workflow nicht zuständig ist (`WorkflowResolver::managedSites()`). Trifft einen Lokalisierungs-Manager, wenn die Quell-Site wechselt: mit `translation_source_site: simple` ist der Übersetzungs-Status jeder deutschen Fassung ein Rest der vorherigen Einstellung. |
 
 `ungoverned` und `foreign` verschonen jedes Subjekt mit Historie, Zuweisungen oder
@@ -2488,39 +2488,29 @@ Reihenfolge im Server:
 - **`storeComment` / `deleteComment` / `markCommentsRead`** — Kommentar-Layer.
   Löschen nur durch den Autor.
 
-#### Workflows installieren, abschalten, löschen (Settings-Übersicht)
+#### Workflows abschalten, löschen, Status nachtragen (Settings-Übersicht)
 
-Die drei Endpoints gehören zusammen und teilen sich die Regel: **installieren ist
-ein Einmal-Vorgang.** Ab dem Moment, in dem die YAML im Projekt liegt, gehört sie
-dem Projekt — die Collections bearbeitet man im Settings-Editor des Workflows,
-nicht durch ein erneutes Installieren.
+Neue Workflows entstehen im CP über „Workflow anlegen“ (`createWorkflow`, siehe
+unten) — die mitgelieferten Beispiele sind dort Vorlagen. Der frühere
+CP-Endpoint `installWorkflow` samt Modal ist entfallen; **installiert** wird nur
+noch per CLI (`php artisan workflows:install`, `WorkflowInstaller`). Ab dem
+Moment, in dem die YAML im Projekt liegt, gehört sie dem Projekt — Collections,
+Places und Transitions bearbeitet man im Graph-Editor des Workflows.
 
-- **`installWorkflow`** — bietet nur Typen an, die das Projekt **nicht** hat
-  (`WorkflowInstaller::isInstalled()`). Die UI blendet installierte Typen aus, der
-  Endpoint lehnt sie mit 422 ab. Das interaktive CLI (`workflows:install`) darf
-  weiter über einen installierten Typ laufen — es fragt vorher und schreibt auch
-  dort nur `collections:`.
+**Was installierbar ist, ergibt sich aus dem Verzeichnis.** Jede YAML in
+`resources/workflows/examples/` ist ein Typ; heute sind das `postmanager`,
+`translation` und `plainlanguage` (Einfache Sprache). Ein neuer Typ braucht nur
+die Datei — es gibt keine Liste im Addon, die man mitpflegen müsste, und keinen
+Fall im Kommando. Beschriftet werden die Typen aus der Definition selbst
+(`WorkflowInstaller::describedTypes()`, im Kommando wie im Anlegen-Modal): der
+Name über `DefinitionLoader::navLabel()` — dieselbe Regel wie im CP-Menü —, die
+Langform über `workflows::messages.install_description_<type>` mit
+`metadata.label` als Rückfall für Beispiele, die ein Projekt selbst ergänzt. Das
+Kommando installiert **mehrere Typen in einem Lauf** (Multiselect, `postmanager`
+vorausgewählt, sofern noch nicht installiert), fragt Collections und Backfill pro
+Typ ab und darf über einen installierten Typ laufen — es fragt vorher und
+schreibt dort nur `collections:`.
 
-  **Was installierbar ist, ergibt sich aus dem Verzeichnis.** Jede YAML in
-  `resources/workflows/examples/` ist ein Typ; heute sind das `postmanager`,
-  `translation` und `plainlanguage` (Einfache Sprache). Ein neuer Typ braucht nur
-  die Datei — es gibt keine Liste im Addon, die man mitpflegen müsste, und keinen
-  Fall im Kommando.
-
-  Beschriftet werden die Optionen aus der Definition selbst
-  (`WorkflowInstaller::describedTypes()`), beides durch die Übersetzungen: der Name
-  über `DefinitionLoader::navLabel()` — also dieselbe Regel wie im CP-Menü, damit
-  Modal und Sidebar denselben Namen zeigen —, die Langform als Beschreibung über
-  `workflows::messages.install_description_<type>` mit `metadata.label` als
-  Rückfall für Beispiele, die ein Projekt selbst ergänzt. Der Handle steht daneben
-  — er ist der Dateiname und der Schlüssel, den jede Statuszeile trägt. Vorher
-  stand dort nur der rohe Dateiname, was `plainlanguage` zu einer Option ohne
-  Erklärung machte.
-
-  Das Kommando installiert **mehrere Typen in einem Lauf** (Multiselect,
-  `postmanager` vorausgewählt, sofern noch nicht installiert), und fragt Collections
-  und Backfill pro Typ ab. Vorher war es ein Typ pro Lauf — den zweiten Manager
-  bekam man nur, indem man die ganze Installation erneut startete.
 - **`setWorkflowActive`** — schreibt den Top-Level-Key `active: true|false` in die
   YAML. Gefiltert wird an **einer** Stelle: `DefinitionLoader::all()` liefert nur
   aktive Workflows, und weil alles Laufzeitverhalten darüber geht, fällt ein
@@ -2546,8 +2536,8 @@ nicht durch ein erneutes Installieren.
   - *`--redo` bleibt CLI-only.* Bestehende Status neu ableiten ist der
     Reparaturfall; im CP gibt es nur das idempotente Nachtragen.
 
-Automatisch passiert das Seeding außerdem beim Speichern im Settings-Editor, aber
-nur für **neu hinzugefügte** Collections (`saveSettings`). Der Button in der
+Automatisch passiert das Seeding außerdem beim Speichern im Graph-Editor, aber
+nur für **neu hinzugefügte** Collections (`saveDefinition`). Der Button in der
 Übersicht ist der Weg, es für den ganzen Workflow nachzuholen.
 
 Was die Settings-Seite trotzdem sehen muss: `DefinitionLoader::allIncludingInactive()`
@@ -2621,7 +2611,7 @@ Die Settings-Übersicht liefert dafür `create: {submit_url, templates,
 workflows, collections, handle_pattern, handle_max, reserved_handles}` —
 `templates` sind **alle** Beispiele (mit `installed`), denn hier ist ein Beispiel
 eine Vorlage unter neuem Handle; `workflows` (`{handle, label}`) die Quellen für
-„Kopie“. Die `install`-Props bleiben vorerst daneben stehen.
+„Kopie“.
 
 **CLI** — `php artisan workflows:make <handle> [--from=<beispiel>]
 [--collection=posts] [--label=] [--inactive]` nutzt Scaffolder und
@@ -2634,7 +2624,9 @@ Validierungsfehler.
 
 **Routen-Constraints:** Die `{workflow}`-Routen unter
 `workflows/api/settings/` schließen `install` und `create` als **ganzes Wort**
-aus (`(?!(?:install|create)\b)`), die Slug- und Editor-Routen ebenso
+aus (`(?!(?:install|create)\b)`; `install` stammt vom entfallenen
+Install-Endpoint und bleibt reserviert, damit ein Handle nie mit einem
+Verb-Segment kollidiert), die Slug- und Editor-Routen ebenso
 `instances|api|settings`. Vorher war das ein Präfix-Ausschluss — ein Handle wie
 `apiary` oder ein Slug `settingsx` war damit unerreichbar.
 
@@ -3362,7 +3354,7 @@ Bestand tut, nicht was auf dem Schreibtisch des Betrachters liegt.
 Welche Status: was `WorkflowStateStore::statesFor()` tatsächlich enthält — ein
 Status, in dem nichts liegt, bekommt kein Segment; der Ring zeigt, was IST, nicht
 was die Definition erlaubt. Beschriftung und Farbe: `stateLabel()` /
-`stateColor()`, also folgt der Ring dem Settings-Editor.
+`stateColor()`, also folgt der Ring dem Graph-Editor.
 
 **Statusfarben.** Server-seitig reist ein Statamic-Farb**name** (`green`, `blue`,
 …), nie ein Hex. Die Umsetzung in Hex passiert genau einmal, in
@@ -3459,7 +3451,7 @@ nichts, was das Dashboard nicht schon als Zahl zeigt, und jeder Link landet auf
 einer Seite mit eigener Rechteprüfung. Beide Parameter werden gegen
 serverseitige Mengen validiert — der Workflow muss **aktiv** sein, der Status ein
 Place davon **oder** ein Status, den der Store dieses Workflows tatsächlich hält
-(sonst 404). Die zweite Hälfte ist Absicht: ein Place kann im Settings-Editor
+(sonst 404). Die zweite Hälfte ist Absicht: ein Place kann im Graph-Editor
 gelöscht werden, während Einträge noch darin geparkt sind — das Widget zeichnet
 diese Zeilen (es liest den Store, nicht die Definition), und eine Legendenzeile,
 die beim Klick 404 gibt, wäre genau dann kaputt, wenn jemand diese Beiträge
@@ -3905,11 +3897,14 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
   - `WorkflowsSettingsIndex` → `pages/WorkflowsSettingsIndex.vue` — eine Zeile je
     Workflow mit Status-Badge und den Zeilen-Aktionen Einstellungen, Queue,
     „Status nachtragen", Aktivieren/Deaktivieren und Löschen (mit
-    `ConfirmationModal`). Der „Workflow installieren"-Button ist deaktiviert,
-    sobald alle mitgelieferten Typen installiert sind. Alle Aktionen laufen über
+    `ConfirmationModal`). Im Kopf „Workflow anlegen“ (`CreateWorkflowModal.vue`,
+    Prüflogik in `createWorkflowForm.js`): leer, aus Vorlage oder als Kopie,
+    § 5.9. Alle Aktionen laufen über
     zwei kleine Helper (`request()` liefert das `data`-Envelope,
     `errorMessage()` den Fallback-Text), damit der axios/fetch-Split an einer
     Stelle liegt.
+  - `WorkflowsSettings` → `pages/WorkflowEditorPage.vue` — der Graph-Editor
+    eines Workflows; Hülle plus Lazy-Chunk, siehe „Graph-Editor“ unten.
 - Fieldtypes
   - `revision_status-fieldtype-index` → `RevisionStatusIndex.vue`.
   - `revision_status-fieldtype` → `RevisionStatusFieldtype.vue`.
@@ -4035,6 +4030,125 @@ also nach jeder Auswahl offen bleiben. Beide Attribute reisen bei `Select` über
 `useAttrs()` zum darunterliegenden `Combobox` — `Select` deklariert weder
 `multiple` noch `closeOnSelect` selbst.
 
+### Graph-Editor (`resources/js/editor/`)
+
+Der Editor unter `Settings › Workflows › <Workflow>` ist ein n8n-artiger
+Graph: **Knoten sind Places und Transitions**, Linien sind reine Verbindungen
+(`from[i] → Transition`, `Transition → to`). Ein Übergang mit mehreren Quellen
+ist ein Transition-Knoten mit mehreren Eingängen. Er hat den früheren
+Formular-Editor (`pages/WorkflowSettings.vue`) vollständig ersetzt; Server-Seite
+siehe § 4 („Graph-Editor: Speichern“, Validierung, Backups) und § 5.9
+(„Workflows anlegen“). Nur Super-Admins (§ 12).
+
+**Seite und Lazy-Chunk.** `editSettings()` rendert die Inertia-Seite
+`WorkflowsSettings` → `pages/WorkflowEditorPage.vue`. Die Seite ist eine dünne
+Hülle — Brotkrumen „Einstellungen › Workflows › <Name>“ (`indexUrl`), der Link
+zur Warteschlange (`queueUrl`, nur bei aktivem Workflow mit `nav.slug`, sonst
+`null`) — und lädt `editor/components/WorkflowEditor.vue` per
+`defineAsyncComponent`. Vue Flow (`@vue-flow/core`, `background`, `minimap`)
+und dagre landen so in einem eigenen Chunk (`WorkflowEditor-*.js`), das
+Haupt-Bundle `addon-*.js`, das auf jeder CP-Seite lädt, wächst nicht. Alle
+übrigen Props von `editSettings()` reicht die Seite unverändert durch
+(`useAttrs()`); der Editor deklariert, was er liest: `definition`, `version`,
+`workflow`, `slug`, `active`/`activeUrl`, `saveDefinitionUrl`, `validateUrl`,
+`usageUrl`, `injected`, `stateUsage`, die reservierten Handles, Label-Sprachen
+und mitgelieferte Place-Labels sowie die Optionslisten der Panels
+(Farben, Varianten, Collections + Owner, Gruppen, Rollen, User, Sites,
+Zuweisungs-Kriterien, Projekt-Actions, Mail-Typen, Env-/Mailer-Status …).
+`'vue'` mappt `statamicExternals()` auf `window.Vue` — nach jedem Build gilt
+`grep -c 'from"vue"\|from "vue"' resources/dist/build/assets/*.js` = 0.
+
+**Modell (`editor/model/`, framework-frei, vitest).**
+
+| Datei | Aufgabe |
+| --- | --- |
+| `normalize.js` / `serialize.js` | YAML-Definition ↔ handle-basiertes Editor-Modell. Round-Trip-Vertrag: unbekannte Metadaten-Schlüssel und `metadata.editor` gehen unverändert durch (Tests gegen die drei Beispiel-YAMLs). |
+| `graphModel.js` / `editorModel.js` | Stabile Ids: `p:<handle>`/`t:<handle>` für Geladenes, `p~1`/`t~1` … für Neues; alle Verweise (`from`/`to`, `initial_place`, SLA-Stufen, `create_transition`, Actions …) halten Ids statt Handles. Reihenfolge = Array-Reihenfolge (Fortschrittsleiste, Final-Place, Filter), getrennt von den Canvas-Positionen. Gelöschte Places stehen bis zum Speichern in `deletions` (mit `migrate_to`). `payload()` baut den Save-Body inkl. `removed_places`. |
+| `connections.js` / `canvasActions.js` | Was eine gezogene Linie bedeutet (Place → Place erzeugt eine Transition dazwischen, keine Transition → Transition, Start-Kante gesperrt …) und die Einträge des „+“-Menüs. |
+| `refs.js` | Die eine Liste aller Stellen, die einen Place/eine Transition per Handle nennen — Löschen, „was zeigt hierher?“ und der Lösch-Dialog gehen darüber. |
+| `actionRules.js`, `constants.js`, `labels.js`, `nodeInfo.js` | Welche Actions wo erlaubt sind, die Spiegel der Server-Konstanten, Anzeigenamen, Badges/Chips der Knoten. |
+| `layout.js` | Auto-Layout mit dagre (links → rechts); greift, wenn `metadata.editor` keine Position hat, und auf „Automatisch anordnen“. |
+| `rules.js` / `validationPaths.js` | Client-Validierung (die Writer-Regeln, die der Client selbst entscheiden kann) und die Übersetzung der Server-Pfade (`places.draft.metadata.actions.0`) auf Knoten-Ids und Felder. |
+
+**Composables (`editor/composables/`).** `useWorkflowModel` (reaktives Modell
+mit benannten Mutationen, Dirty-State), `useHistory` (Snapshot-Undo/Redo, 100
+Schritte, Feld-Eingaben 400 ms entprellt zu einem Schritt), `useGraph` (Modell →
+Vue-Flow-Store per Diff, ohne Flackern/Viewport-Verlust), `useLayout`,
+`useValidation` (Client-Regeln + Server-Antwort zu einer Problemliste: Ring/Badge
+am Knoten, Markierung am Feld über `data-path`, Zusammenfassung in der
+Toolbar, Zähler je Einstellungs-Abschnitt), `useServerValidation` (800 ms nach
+der letzten Änderung ein Dry-Run gegen `validateUrl`, ältere Anfragen per
+`AbortController` verworfen, nie während eines Saves), `useSaveErrors` (422 des
+Saves auf dieselben Pfade), `useFocusRequest`, `useShortcuts`, `useLeaveGuard`.
+
+**Komponenten (`editor/components/`).** `WorkflowEditor.vue` (Shell: Modell,
+Speichern, Dialoge, `EDITOR_CONTEXT` per `provide`), `Toolbar.vue` (Name +
+Aktiv-Schalter — der postet sofort, unabhängig vom Speichern —, Place/Transition
+hinzufügen, Undo/Redo, Zoom/Einpassen/Anordnen, Minimap, Systemschritte ein/aus,
+Problemliste, Einstellungen, Speichern), `Canvas.vue` mit `PlaceNode`,
+`TransitionNode` und `GhostNode` (die vom Loader injizierte Revisionsstufe
+`pending_revision` samt Systemschritten: read-only, gestrichelt, ausblendbar),
+`AddNodeMenu.vue` („+“ am Ausgang, Linie ins Leere, Tab, Kontextmenü),
+Kontextmenüs für Knoten, Linien, Auswahl und leere Fläche (Doppelklick legt einen
+Place an).
+
+- **Seitenpanel** (`panels/NodePanel.vue`, per Splitter in der Breite
+  verstellbar, einklappbar): `PlacePanel` (Tabs Allgemein / Actions /
+  Verbindungen & Nutzung), `TransitionPanel` (Allgemein / Berechtigung /
+  Actions), mit `PlaceActionList`/`TransitionActionList`, `CriteriaBuilder`,
+  `AudiencePicker`, `CustomActionFields`. Ohne Auswahl zeigt es
+  `OverviewPanel` — Einstieg, Kennzahlen, zum Löschen vorgemerkte Places, Weg
+  zu den Einstellungen und die Problemliste.
+- **Workflow-Einstellungen** (`settings/WorkflowSettingsStack.vue` +
+  `WorkflowSettingsSection.vue`): ein Stack mit Abschnitten Allgemein,
+  Berechtigungen, Lokalisierung *oder* SLA (je nach Workflow-Art),
+  Collections, Reihenfolge (`OrderList`) und Erweitert (Positionen
+  zurücksetzen, Payload-Vorschau). Öffnen per Toolbar, Übersicht oder
+  `Strg/⌘+,`; ein Problem auf Workflow-Ebene öffnet den passenden Abschnitt.
+- **Dialoge** (`shared/`): `DeletePlaceDialog` (Löschen ist **verzögert** — der
+  Place verschwindet von der Leinwand und wird erst beim Speichern als
+  `removed_places` geschickt; hält er Einträge, verlangt der Dialog ein
+  Migrationsziel und erwähnt, dass deren Uhren neu starten),
+  `CollectionRemovalDialog` (422 `needs_collection_confirmation`), dazu im Shell
+  der 409-Konflikt (Neu laden oder bewusst überschreiben, `force`) und „Trotz
+  Fehlern speichern?“, wenn der Client schon Fehler sieht.
+
+**Speichern.** `Strg/⌘+S` oder der Toolbar-Button schicken
+`{version, definition, removed_places}` an `saveDefinitionUrl`. Neue Knoten ohne
+gültigen Handle halten das Speichern vorher an. Die Antwort ersetzt das Modell
+(neue Ids `p~1` → `p:<handle>`, die Auswahl bleibt), setzt `version` und die
+Nutzungszahlen neu; 422-Fehler landen an Knoten und Feldern, `needs_migration`
+öffnet den betroffenen Place. Positionen werden mitgespeichert
+(`metadata.editor`, § 2); reine Layout-Änderungen erzeugen kein
+`definition_saved`-Event.
+
+**Ungespeicherte Änderungen.** `useLeaveGuard` meldet den Dirty-State an
+Statamics `$dirty`-Registry (die fragt bei Inertia-Navigation, gemäß der
+Nutzer-Einstellung) und hält immer ein `beforeunload` bereit; ohne Registry
+fragt der Editor selbst über den Inertia-Router (`editor_leave_unsaved`).
+Ansagen (Speichern, Undo, Problemzahlen) laufen über eine `aria-live`-Region.
+
+**Tastatur** (`useShortcuts.js`; Einzeltasten nie beim Tippen, in Menüs/Dialogen
+oder außerhalb des Editors; bei offenem Einstellungs-Stack nur die
+Strg/⌘-Kürzel und Esc):
+
+| Taste | Wirkung |
+| --- | --- |
+| `Strg/⌘+S` | Speichern (auch beim Tippen) |
+| `Strg/⌘+Z` · `Strg/⌘+⇧+Z` · `Strg+Y` | Rückgängig · Wiederholen (in Textfeldern das native Undo) |
+| `Strg/⌘+,` | Workflow-Einstellungen öffnen/schließen |
+| `Esc` | Einstellungen schließen → Menü schließen → Auswahl aufheben → Panel einklappen |
+| `Entf` / `⌫` | Auswahl löschen (Linien trennen bzw. Knoten über den Lösch-Dialog) |
+| `Tab` | „+“-Menü neben dem gewählten Knoten |
+| `Enter` | Panel des fokussierten Knotens öffnen |
+| Pfeiltasten (`⇧`: weiter) | Knoten um 10 px (50 px) verschieben |
+| `1` · `0` · `+` · `-` | Einpassen · 100 % · Zoom rein · Zoom raus |
+| `⇧+L` | Automatisch anordnen |
+
+**Tests.** `npm test` (vitest) prüft Modell und Composables:
+Round-Trip gegen die Beispiel-YAMLs, Graph-Mapping, Verbinden/Trennen, Regeln
+und Pfad-Mapping, Undo/Redo, Shortcuts, das Anlegen-Formular.
+
 ### Kein Inline-Editor im Stack
 
 Der „Bearbeiten"-Button im Summary-Stack **navigiert** zum Beitrags-Editor
@@ -4074,7 +4188,7 @@ nicht als Konstante im Client.
 | In andere Site überführen | Site-Zugriff **und** (Super, `admins`, oder Mitglied in der `default_assignee_group` des Ziel-Workflows). Ohne diesen Key nur Privileged. |
 | Kommentar schreiben | Site-Zugriff. |
 | Workflow-übergreifende Liste sehen (Widget `workflows_overview`, `listing?all_workflows=1`) | Jeder CP-User, wie die Listen der Manager-Seiten. „Neuer Beitrag"-Buttons darin nur nach der Zeile „Neuen Beitrag anlegen". |
-| Settings › Workflows (Nav-Eintrag + Seiten) | Nur Super-Admins. |
+| Settings › Workflows (Nav-Eintrag, Übersicht, Graph-Editor, Anlegen, Speichern/Validieren/Usage, an/aus, Status nachtragen, Löschen) | Nur Super-Admins — jede Methode des `WorkflowSettingsController` beginnt mit `abort_unless($this->isSuperAdmin(), 403)`; `privileged_groups` und `admins` reichen **nicht**. |
 | Kommentar löschen | Nur der Autor. |
 | „Bearbeiten"-Button im Summary sehen | Wer den Entry bearbeiten darf **und** `access <site> site` für dessen Site hat (`canOpenEntryEditor()`). |
 
@@ -4194,7 +4308,7 @@ Working-Copy publiziert (working-copy weg)
   `lang/{de,en}/messages.php` unter `mail_assigned_*`, Layout in
   `resources/views/mail/notification.blade.php`.
 - **Eine Mail beim ERREICHEN eines Status, ohne Klick** → **dieselbe** `mail`-Action
-  an den **Place** hängen (Place-Karte → Actions), mit dem passenden Mail-Typ. Der
+  an den **Place** hängen (Place-Panel → Actions), mit dem passenden Mail-Typ. Der
   einzige Weg für „die Einfache Sprache ist fertig": diesen Übergang macht der
   Poll-Befehl ohne Transition. Voraussetzung ist, dass der Workflow
   `metadata.plain_language_completed_place` setzt — ohne den bleibt die Fassung
@@ -4209,7 +4323,7 @@ Working-Copy publiziert (working-copy weg)
   trägt man stattdessen in `Mail\MailTypes::BUILT_IN` ein — gleiches Interface.
 - **Erstzuweisung beim Anlegen ändern** → `metadata.default_assignee_group`.
 - **Ersteller soll sein neues Subjekt mit-zugewiesen bekommen** →
-  `metadata.assign_creator: true`, im Settings-Editor als Checkbox. Gilt für den
+  `metadata.assign_creator: true`, im Graph-Editor als Checkbox. Gilt für den
   Beitragsmanager (wer anlegt) und den Übersetzungsmanager (wer die Localization
   auslöst).
 - **Status für Alt-Einträge nachtragen** → in den Settings „Status nachtragen" an
@@ -4221,24 +4335,24 @@ Working-Copy publiziert (working-copy weg)
 - **Workflow ganz entfernen** → in den Settings „Löschen". Entfernt nur die YAML;
   Status, Zuweisungen, History und Kommentare bleiben in der DB und sind nach
   einer Neuinstallation wieder da.
-- **Fortschrittsleiste waagerecht oder senkrecht** → im Settings-Editor bei den
+- **Fortschrittsleiste waagerecht oder senkrecht** → im Graph-Editor bei den
   Workflow-Metadaten das Feld „Fortschrittsleiste"
   (`metadata.progress_orientation`). Entscheidet auch die Position: waagerecht über
   dem Inhalt, senkrecht links daneben.
-- **Reihenfolge der Stufen in der Fortschrittsleiste ändern** → Pfeile an der
-  Place-Karte im Settings-Editor. Die Leiste folgt der YAML-Reihenfolge.
-- **Zustand aus der Fortschrittsleiste heraushalten** → Checkbox „Abzweigung" an
-  der Place-Karte (`metadata.branch`). Der Place erscheint dann nur noch, wenn eine
+- **Reihenfolge der Stufen in der Fortschrittsleiste ändern** → Graph-Editor,
+  Workflow-Einstellungen › „Reihenfolge“. Die Leiste folgt der YAML-Reihenfolge.
+- **Zustand aus der Fortschrittsleiste heraushalten** → Checkbox „Abzweigung" im
+  Place-Panel (`metadata.branch`). Der Place erscheint dann nur noch, wenn eine
   Fassung darin steht, und hängt versetzt an seinem Vorgänger.
 - **Neue Rolle im Workflow-Gate** → `required_group` an Place/Transition.
-- **Zwingende Personenauswahl beim Übergeben** → im Settings-Editor eine
+- **Zwingende Personenauswahl beim Übergeben** → im Graph-Editor eine
   `user_assignment`-Action an der Transition, Modus „Manuell auswählen", mit den
   Bedingungen, die die Auswahl eingrenzen.
 - **Übergabe ohne Rückfrage** → dieselbe Action, Modus „Automatisch zuweisen".
   Mindestens eine Bedingung ist Pflicht, und passt niemand, sperrt die Transition.
 - **Eigenes Zuweisungs-Kriterium** (z. B. Fachgebiet des Nutzers gegen die
   Kategorie des Beitrags) → `config/workflows.php → assignment_criteria`
-  ergänzen; es erscheint danach im Kriterien-Dropdown des Settings-Editors. Siehe
+  ergänzen; es erscheint danach im Kriterien-Dropdown des Graph-Editors. Siehe
   „Zuweisungs-Kriterien" in § 2.
 - **Weitere Sprache/Site** → Statamic-Seite anlegen + Collection dort
   aktivieren. Die Site erscheint im Pivot automatisch.
@@ -4385,7 +4499,7 @@ metadata:
 
 Beide Stufen sind optional, **Tage und Schritt aber nur gemeinsam gültig**: eine
 Frist ohne Ziel könnte nie feuern, ein Ziel ohne Frist nie erreicht werden. Der
-Writer lehnt beides ab, und der Settings-Editor schickt eine halb gefüllte Stufe
+Writer lehnt beides ab, und der Graph-Editor schickt eine halb gefüllte Stufe
 gar nicht mit.
 
 **Der Writer prüft** (nur im Autoren-Workflow, `sla` in einem
