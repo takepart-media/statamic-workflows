@@ -565,30 +565,79 @@ export function removeTransition(model, id) {
     return true;
 }
 
+// Everything in the model that points at place `id`, as a record removePlace()
+// keeps on the deletion so restoreDeletion() can put it back: the transitions it
+// is a source / the target of, other deletions migrating into it, and the
+// workflow-level slots (SLA places, seed place …) by role.
+function placeLinks(model, id) {
+    const shape = { metadata: model.workflow.metadata };
+    const roles = REFERENCES
+        .filter((r) => r.kind === 'place' && !['transition_from', 'transition_to', 'initial_place'].includes(r.role))
+        .filter((r) => r.slots(shape).some((slot) => slot.values().includes(id)))
+        .map((r) => r.role);
+    return {
+        from: model.transitions.filter((t) => t.from.includes(id)).map((t) => ({ transition: t.id, index: t.from.indexOf(id) })),
+        to: model.transitions.filter((t) => t.to === id).map((t) => t.id),
+        migrations: model.deletions.filter((d) => d.migrateTo === id).map((d) => d.id),
+        roles,
+    };
+}
+
 /**
  * Remove a place. The start place can't go (returns false). A place that was
  * saved before is recorded in `deletions` (the server needs it in
  * `removed_places`, with a migration target when entries sit in it); a new one
- * just disappears. Every reference to it is cleared.
+ * just disappears. Every reference to it is cleared — and remembered on the
+ * deletion (`links`), so restoreDeletion() brings them back.
  */
 export function removePlace(model, id, { usage = 0, migrateTo = null } = {}) {
     if (model.workflow.initial_place === id) return false;
     const index = model.places.findIndex((p) => p.id === id);
     if (index < 0) return false;
+    const links = placeLinks(model, id);
     const [entry] = model.places.splice(index, 1);
     if (!entry.isNew) {
-        model.deletions.push({ id, handle: entry.handle, usage: Number(usage) || 0, migrateTo: migrateTo ?? null, entry, index });
+        model.deletions.push({ id, handle: entry.handle, usage: Number(usage) || 0, migrateTo: migrateTo ?? null, entry, index, links });
     }
     clearReferences(model, 'place', id);
     return true;
 }
 
-/** Undo a pending deletion: the place comes back (its references do not). */
+/**
+ * Undo a pending deletion: the place comes back, and so do the references it
+ * lost — as far as their holders still exist and have not been pointed
+ * elsewhere since (a transition's `to` that now leads to another place stays).
+ */
 export function restoreDeletion(model, id) {
     const i = model.deletions.findIndex((d) => d.id === id);
     if (i < 0) return false;
     const [deletion] = model.deletions.splice(i, 1);
     model.places.splice(Math.min(deletion.index, model.places.length), 0, deletion.entry);
+
+    const links = deletion.links ?? {};
+    for (const { transition: tid, index } of links.from ?? []) {
+        const t = findTransition(model, tid);
+        if (!t || t.from.includes(id)) continue;
+        const from = [...t.from];
+        from.splice(Math.min(index, from.length), 0, id);
+        t.from = from;
+    }
+    for (const tid of links.to ?? []) {
+        const t = findTransition(model, tid);
+        if (t && !t.to) t.to = id;
+    }
+    for (const did of links.migrations ?? []) {
+        const d = findDeletion(model, did);
+        if (d && !d.migrateTo) d.migrateTo = id;
+    }
+    const shape = { metadata: model.workflow.metadata };
+    for (const ref of REFERENCES.filter((r) => (links.roles ?? []).includes(r.role))) {
+        for (const slot of ref.slots(shape)) {
+            if (slot.values().length) continue;
+            for (const empty of [null, undefined, '']) slot.replace(empty, id);
+        }
+    }
+    enforceStartCoupling(model);
     return true;
 }
 

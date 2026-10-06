@@ -10,6 +10,28 @@
         />
         <Button variant="ghost" size="sm" icon="plus" :text="__('workflows::messages.add_place')" @click="$emit('add-place')" />
         <Button variant="ghost" size="sm" icon="plus" :text="__('workflows::messages.add_transition')" @click="$emit('add-transition')" />
+        <span class="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700!" aria-hidden="true" />
+        <!-- The kit has no undo/redo icons — arrows as text, like the zoom buttons. -->
+        <Button
+            variant="ghost"
+            size="sm"
+            text="↶"
+            :disabled="!canUndo"
+            :aria-label="undoTitle"
+            :aria-keyshortcuts="isMac ? 'Meta+Z' : 'Control+Z'"
+            :title="undoTitle"
+            @click="$emit('undo')"
+        />
+        <Button
+            variant="ghost"
+            size="sm"
+            text="↷"
+            :disabled="!canRedo"
+            :aria-label="redoTitle"
+            :aria-keyshortcuts="isMac ? 'Meta+Shift+Z' : 'Control+Shift+Z Control+Y'"
+            :title="redoTitle"
+            @click="$emit('redo')"
+        />
 
         <div class="ml-auto flex flex-wrap items-center gap-1">
             <Button
@@ -88,6 +110,8 @@
                 size="sm"
                 icon="save"
                 :text="__('workflows::messages.save')"
+                :title="`${__('workflows::messages.save')} (${shortcut('S')})`"
+                :aria-keyshortcuts="isMac ? 'Meta+S' : 'Control+S'"
                 :loading="saving"
                 :disabled="saving"
                 @click="$emit('save')"
@@ -107,9 +131,10 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { Button, Popover, Switch } from '@statamic/cms/ui';
 
-defineProps({
+const props = defineProps({
     minimap: { type: Boolean, default: false },
     showSystem: { type: Boolean, default: true },
     // Hides the toggle when the workflow has no injected parts to show.
@@ -121,6 +146,32 @@ defineProps({
     // [{path, code, message, node: {kind, handle}|null}] from the last 422.
     errors: { type: Array, default: () => [] },
     panelCollapsed: { type: Boolean, default: false },
+    canUndo: { type: Boolean, default: false },
+    canRedo: { type: Boolean, default: false },
+    // What the next undo / redo would revert (a history step's name), if known.
+    undoAction: { type: String, default: '' },
+    redoAction: { type: String, default: '' },
+});
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+
+// "Strg+Z" / "⌘Z" — how the shortcut reads on this machine.
+function shortcut(key, { shift = false } = {}) {
+    if (isMac) return `${shift ? '⇧' : ''}⌘${key}`;
+    return `${__('workflows::messages.editor_key_ctrl')}+${shift ? `${__('workflows::messages.editor_key_shift')}+` : ''}${key}`;
+}
+
+const undoTitle = computed(() => {
+    const label = props.undoAction
+        ? __('workflows::messages.editor_undo_action', { action: props.undoAction })
+        : __('workflows::messages.editor_undo');
+    return `${label} (${shortcut('Z')})`;
+});
+const redoTitle = computed(() => {
+    const label = props.redoAction
+        ? __('workflows::messages.editor_redo_action', { action: props.redoAction })
+        : __('workflows::messages.editor_redo');
+    return `${label} (${shortcut('Z', { shift: true })}${isMac ? '' : `, ${shortcut('Y')}`})`;
 });
 
 defineEmits([
@@ -136,5 +187,7 @@ defineEmits([
     'add-transition',
     'select-error',
     'expand-panel',
+    'undo',
+    'redo',
 ]);
 </script>

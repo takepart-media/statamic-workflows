@@ -62,7 +62,7 @@ let instances = 0;
 </script>
 
 <script setup>
-import { markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { markRaw, nextTick, ref, watch } from 'vue';
 import { ConnectionMode, VueFlow, useVueFlow } from '@vue-flow/core';
 import { Context, ContextMenu } from '@statamic/cms/ui';
 import { Background } from '@vue-flow/background';
@@ -98,7 +98,8 @@ const props = defineProps({
 });
 
 // select: a node (or, via its edges, a transition) was picked; null = nothing.
-// node-moved: the author dropped a node — {id, position}.
+// nodes-moved: the author dropped nodes — {positions: {id: {x, y}}} (one drag,
+//              one event, however many nodes moved with it).
 // positions: the canvas arranged nodes itself — {positions: {id: {x, y}}, touched}
 //            (touched: the author asked for it, e.g. "Arrange automatically").
 // connect: a line was drawn — {source, target, position} (position: where a
@@ -107,10 +108,10 @@ const props = defineProps({
 // connect-drop: a line from an output was dropped on empty canvas — {source,
 //               client: {x, y}, position} (flow coordinates of the drop point).
 // pane-dblclick: {position} on the empty canvas.
-// delete: Delete/Backspace on the canvas — {nodes: [id], edges: [{transition,
-//         place, direction}]} (edges win when one is selected).
-// add-menu: Tab with a node selected — {id}.
-const emit = defineEmits(['select', 'node-moved', 'positions', 'connect', 'connect-refused', 'connect-drop', 'pane-dblclick', 'delete', 'add-menu']);
+//
+// The keyboard (Delete, Tab, Enter, arrows …) lives in useShortcuts.js; the
+// canvas only answers what is selected / focused (deleteTargets(), focusedNode()).
+const emit = defineEmits(['select', 'nodes-moved', 'positions', 'connect', 'connect-refused', 'connect-drop', 'pane-dblclick']);
 
 // One store per canvas — the id keeps two editors (or a remount) apart. A module
 // counter rather than Vue's useId(): the CP's own Vue decides which APIs exist.
@@ -204,10 +205,12 @@ function onEdgeClick({ edge }) {
 }
 
 function onDragStop({ nodes, node }) {
+    const positions = {};
     for (const moved of nodes?.length ? nodes : [node]) {
         if (!moved || moved.type === 'ghost') continue;
-        emit('node-moved', { id: moved.id, position: { x: Math.round(moved.position.x), y: Math.round(moved.position.y) } });
+        positions[moved.id] = { x: Math.round(moved.position.x), y: Math.round(moved.position.y) };
     }
+    if (Object.keys(positions).length) emit('nodes-moved', { positions });
 }
 
 // Selection from outside (a panel, the order list) shows on the canvas too.
@@ -369,47 +372,34 @@ function onDoubleClick(event) {
     emit('pane-dblclick', { position: flowPoint(event) });
 }
 
-// --- keyboard ---
+// --- keyboard (useShortcuts.js asks) ---
 // Vue Flow's own delete key is off (`delete-key-code` null): removing a node
 // has to go through the model (pending deletions, migration targets).
 
-function isTyping(el) {
-    if (!el || el === document.body) return false;
-    if (el.isContentEditable) return true;
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return true;
-    return ['textbox', 'combobox', 'searchbox', 'listbox', 'option', 'menu', 'menuitem', 'dialog'].includes(el.getAttribute?.('role'));
+/**
+ * What Delete removes: the selected lines, else the selected nodes, else the
+ * node the panel shows — {nodes: [id], edges: [{transition, place, direction}]}.
+ */
+function deleteTargets() {
+    const edges = flow.getSelectedEdges.value.map(edgeEnds).filter(Boolean);
+    if (edges.length) return { nodes: [], edges };
+    const nodes = flow.getSelectedNodes.value.map((n) => n.id).filter(isModelNode);
+    if (!nodes.length && props.selected && isModelNode(props.selected)) nodes.push(props.selected);
+    return { nodes, edges: [] };
 }
 
-function onKeydown(event) {
-    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
-    const el = event.target;
-    // Only on the canvas itself (or with nothing focused) — never while typing
-    // in the panel or in a dialog.
-    if (isTyping(el)) return;
-    if (!(el === document.body || el === document.documentElement || wrapper.value?.contains(el))) return;
-
-    if (event.key === 'Delete' || event.key === 'Backspace') {
-        const edges = flow.getSelectedEdges.value.map(edgeEnds).filter(Boolean);
-        const nodes = flow.getSelectedNodes.value.map((n) => n.id).filter(isModelNode);
-        if (!edges.length && !nodes.length && props.selected && isModelNode(props.selected)) nodes.push(props.selected);
-        if (!edges.length && !nodes.length) return;
-        event.preventDefault();
-        emit('delete', edges.length ? { nodes: [], edges } : { nodes, edges: [] });
-        return;
-    }
-
-    if (event.key === 'Tab' && !event.shiftKey && props.selected && isModelNode(props.selected)) {
-        event.preventDefault();
-        emit('add-menu', { id: props.selected });
-    }
+/** The model node that has the keyboard focus, or null. */
+function focusedNode() {
+    const el = document.activeElement?.closest?.('.vue-flow__node[data-id]');
+    if (!el || !wrapper.value?.contains(el)) return null;
+    const id = el.getAttribute('data-id');
+    return isModelNode(id) ? id : null;
 }
-
-onMounted(() => window.addEventListener('keydown', onKeydown));
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 
 defineExpose({
     zoomIn: () => flow.zoomIn({ duration: 150 }),
     zoomOut: () => flow.zoomOut({ duration: 150 }),
+    resetZoom: () => flow.zoomTo(1, { duration: 150 }),
     fit: () => flow.fitView({ padding: 0.15, duration: 200 }),
     autoLayout() {
         autoLayout({ fit: true });
@@ -417,6 +407,10 @@ defineExpose({
     },
     nodeRect,
     flowToClient,
+    deleteTargets,
+    focusedNode,
+    isModelNode,
+    element: () => wrapper.value,
     // The middle of what the canvas shows, in flow coordinates.
     visibleCenter() {
         const box = flow.vueFlowRef.value?.getBoundingClientRect();

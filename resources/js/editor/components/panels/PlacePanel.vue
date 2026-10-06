@@ -159,23 +159,17 @@
                     <p v-if="isInitial" class="text-sm text-gray-500 dark:text-gray-400">
                         {{ __('workflows::messages.editor_delete_initial_blocked') }}
                     </p>
+                    <!-- The dialog asks, wants a target for entries still in
+                         here and lists what loses its link. -->
                     <template v-else>
-                        <MigrationTarget
-                            v-if="usage > 0"
-                            v-model="migrateTo"
-                            :usage="usage"
-                            :place="key"
-                            :options="migrationOptions(place.id)"
-                        />
-                        <p class="text-xs text-gray-500 dark:text-gray-400">
-                            {{ place.isNew ? '' : __('workflows::messages.editor_delete_on_save') }}
+                        <p v-if="!place.isNew" class="text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('workflows::messages.editor_delete_on_save') }}
                         </p>
                         <Button
                             variant="destructive"
                             icon="trash"
                             :text="__('workflows::messages.delete')"
-                            :disabled="usage > 0 && !migrateTo"
-                            @click="remove"
+                            @click="editor.requestDelete([place.id])"
                         />
                     </template>
                 </div>
@@ -249,22 +243,13 @@ const roles = computed(() => {
         .filter((r) => (seen.has(r.role) ? false : seen.add(r.role)));
 });
 
-const migrateTo = ref(null);
-
 function migrationOptions(exclude) {
     return editor.api.model.places
         .filter((p) => p.id !== exclude)
         .map((p) => ({ value: p.id, label: `${placeDisplayName(editor.api.view.value, keyOf(p), editor.labelCtx)} (${keyOf(p)})` }));
 }
 
-function remove() {
-    if (usage.value === 0 && !window.confirm(__('workflows::messages.confirm_delete_place', { handle: key.value }))) return;
-    const id = props.place.id;
-    if (editor.api.removePlace(id, { usage: usage.value, migrateTo: migrateTo.value })) {
-        editor.select(props.place.isNew ? null : id);
-    }
-}
-
+// Back from the pending deletion, with the links it lost (one undo step).
 function restore() {
     const id = props.deletion.id;
     editor.api.restoreDeletion(id);

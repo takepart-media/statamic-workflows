@@ -221,9 +221,8 @@ function onFrom(value) {
     update({ from, fromList: from.length > 1 ? true : props.transition.fromList && from.length === 1 });
 }
 
+// Through the editor's delete dialog, like the Delete key.
 function remove() {
-    if (!window.confirm(__('workflows::messages.confirm_delete_transition', { handle: key.value }))) return;
-    editor.api.removeTransition(props.transition.id);
-    editor.select(null);
+    editor.requestDelete([props.transition.id]);
 }
 </script>

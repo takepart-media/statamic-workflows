@@ -9,10 +9,16 @@
             :dirty="api.dirty.value"
             :errors="saveErrors.state.errors"
             :panel-collapsed="panelCollapsed"
+            :can-undo="api.history.canUndo.value"
+            :can-redo="api.history.canRedo.value"
+            :undo-action="historyLabel(api.history.undoTag.value)"
+            :redo-action="historyLabel(api.history.redoTag.value)"
+            @undo="undo"
+            @redo="redo"
             @zoom-in="canvas?.zoomIn()"
             @zoom-out="canvas?.zoomOut()"
             @fit="canvas?.fit()"
-            @auto-layout="canvas?.autoLayout()"
+            @auto-layout="autoLayout"
             @form-view="$emit('form-view')"
             @add-place="addPlace"
             @add-transition="addTransition"
@@ -37,14 +43,12 @@
                             :selected="selectedId"
                             :connection-rule="api.canConnect"
                             @select="select"
-                            @node-moved="({ id, position }) => api.setPosition(id, position)"
+                            @nodes-moved="({ positions }) => api.moveNodes(positions)"
                             @positions="({ positions, touched }) => api.setPositions(positions, { touched })"
                             @connect="onConnect"
                             @connect-refused="({ reason }) => refuse(reason)"
                             @connect-drop="onConnectDrop"
                             @pane-dblclick="({ position }) => createAt('place', position)"
-                            @delete="onDelete"
-                            @add-menu="({ id }) => openAddMenuFor(id)"
                         >
                             <template #context-menu="{ target }">
                                 <!-- A place -->
@@ -58,14 +62,14 @@
                                         @select="api.setInitialPlace(target.id)"
                                     />
                                     <ContextSeparator />
-                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes([target.id])" />
+                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes([target.id], { delay: MENU_CLOSE_DELAY })" />
                                 </template>
                                 <!-- A transition -->
                                 <template v-else-if="target.kind === 'node' && target.type === 'transition'">
                                     <ContextItem icon="eye" :text="__('workflows::messages.editor_open')" @select="select(target.id)" />
                                     <ContextItem icon="plus" :text="__('workflows::messages.editor_add_next')" @select="openAddMenuFor(target.id, { delay: MENU_CLOSE_DELAY })" />
                                     <ContextSeparator />
-                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes([target.id])" />
+                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes([target.id], { delay: MENU_CLOSE_DELAY })" />
                                 </template>
                                 <!-- A line -->
                                 <template v-else-if="target.kind === 'edge'">
@@ -75,7 +79,7 @@
                                 </template>
                                 <!-- Several nodes (selection box) -->
                                 <template v-else-if="target.kind === 'selection'">
-                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes(target.ids)" />
+                                    <ContextItem icon="trash" variant="destructive" :text="__('workflows::messages.delete')" @select="deleteNodes(target.ids, { delay: MENU_CLOSE_DELAY })" />
                                 </template>
                                 <!-- The empty canvas -->
                                 <template v-else>
@@ -110,6 +114,15 @@
             @pick="pickAddMenu"
         />
 
+        <DeletePlaceDialog
+            v-model:open="deletion.open"
+            :places="deletion.places"
+            :transitions="deletion.transitions"
+            :refs="deletion.refs"
+            :target-options="deletion.targetOptions"
+            @confirm="confirmDelete"
+        />
+
         <CollectionRemovalDialog
             v-model:open="collectionRemoval.open"
             :collections="collectionRemoval.collections"
@@ -135,6 +148,10 @@
                 <Button icon="sync" :text="__('workflows::messages.editor_conflict_reload')" @click="reloadFromConflict" />
             </div>
         </ConfirmationModal>
+
+        <!-- Screen readers hear what happened without the focus moving: save
+             results, undo/redo, validation counts. -->
+        <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">{{ liveMessage }}</div>
     </div>
 </template>
 
@@ -144,15 +161,19 @@ import { Button, ConfirmationModal, ContextItem, ContextSeparator, SplitterGroup
 import { humanize } from '../../support/states.js';
 import { ACTION_TYPES, PLACE_ACTION_TYPES, SHARED_ACTION_TYPES } from '../model/constants.js';
 import { keyOf, placeIdOf, transitionIdOf } from '../model/editorModel.js';
+import { placeReferences } from '../model/refs.js';
 import { besideAnchor, centredAt } from '../model/canvasActions.js';
 import { placeDisplayName } from '../model/labels.js';
 import { useWorkflowModel } from '../composables/useWorkflowModel.js';
 import { useSaveErrors } from '../composables/useSaveErrors.js';
+import { useShortcuts } from '../composables/useShortcuts.js';
+import { useLeaveGuard } from '../composables/useLeaveGuard.js';
 import AddNodeMenu from './AddNodeMenu.vue';
 import Canvas from './Canvas.vue';
 import Toolbar from './Toolbar.vue';
 import NodePanel from './panels/NodePanel.vue';
 import CollectionRemovalDialog from './shared/CollectionRemovalDialog.vue';
+import DeletePlaceDialog from './shared/DeletePlaceDialog.vue';
 import { EDITOR_CONTEXT } from './context.js';
 
 // The settings page hands over its whole prop set; only what is declared here is
@@ -220,12 +241,52 @@ const modelCtx = {
     get customActions() { return props.customActions; },
 };
 
-const api = useWorkflowModel(props.definition, modelCtx);
+const api = useWorkflowModel(props.definition, modelCtx, {
+    history: { limit: 100, debounce: 400, onRestore: afterRestore },
+});
 const version = ref(props.version);
 const stateUsage = reactive({ ...(props.stateUsage ?? {}) });
 const saveErrors = useSaveErrors();
 
 watch(() => api.dirty.value, (dirty) => emit('dirty-change', dirty), { immediate: true });
+useLeaveGuard(() => api.dirty.value);
+onBeforeUnmount(() => api.history.stop());
+
+// --- announcements (aria-live) ---
+
+const liveMessage = ref('');
+let liveTimer = null;
+// Emptied first, so the same text twice in a row is read twice.
+function announce(text) {
+    liveMessage.value = '';
+    clearTimeout(liveTimer);
+    if (text) liveTimer = setTimeout(() => (liveMessage.value = text), 50);
+}
+onBeforeUnmount(() => clearTimeout(liveTimer));
+
+// --- undo / redo ---
+
+// A history step's name ("Löschen", "Verschieben" …).
+const historyLabel = (tag) => (tag ? __(`workflows::messages.editor_history_${tag}`) : '');
+
+function undo() {
+    const tag = api.undo();
+    if (tag) announce(__('workflows::messages.editor_undo_action', { action: historyLabel(tag) }));
+}
+
+function redo() {
+    const tag = api.redo();
+    if (tag) announce(__('workflows::messages.editor_redo_action', { action: historyLabel(tag) }));
+}
+
+// After a step back/forward the model is another one: a menu built for the old
+// one closes, a selection of something that is gone is dropped.
+function afterRestore() {
+    addMenu.open = false;
+    deletion.open = false;
+    const id = selectedId.value;
+    if (id && !api.findPlace(id) && !api.findTransition(id) && !api.findDeletion(id)) select(null);
+}
 
 // labels.js / nodeInfo.js context.
 const labelCtx = computed(() => ({
@@ -297,6 +358,9 @@ provide(EDITOR_CONTEXT, {
     },
     // The "+" beside a node's output.
     openAddMenu: (id) => openAddMenuFor(id),
+    // Delete nodes the way the canvas does (dialog, migration targets).
+    requestDelete: (ids) => deleteNodes(ids),
+    announce,
 });
 
 const hasSystemSteps = computed(() =>
@@ -420,13 +484,15 @@ function onConnect({ source, target, position }) {
     }
 }
 
-// Remove lines: a `from` entry, or a transition's `to`.
+// Remove lines: a `from` entry, or a transition's `to` — all in one undo step.
 function disconnect(edges) {
     let refused = null;
-    for (const edge of edges) {
-        const result = api.disconnect(edge);
-        if (!result.ok && result.reason !== 'unknown') refused = result.reason;
-    }
+    api.batch('disconnect', () => {
+        for (const edge of edges) {
+            const result = api.disconnect(edge);
+            if (!result.ok && result.reason !== 'unknown') refused = result.reason;
+        }
+    });
     if (refused) refuse(refused);
 }
 
@@ -438,54 +504,79 @@ function createAt(kind, point, { delay = 0 } = {}) {
     select(id, { focus: 'label', delay });
 }
 
-// Delete/Backspace on the canvas.
-function onDelete({ nodes, edges }) {
-    if (edges.length) {
-        disconnect(edges);
-    } else {
-        deleteNodes(nodes);
-    }
-}
-
 const usageOf = (id) => {
     const place = api.findPlace(id);
     return place && !place.isNew ? Number(stateUsage[place.handle] ?? 0) : 0;
 };
 
+// --- deleting ---
+
+const deletion = reactive({ open: false, places: [], transitions: [], refs: [], targetOptions: [] });
+
 /**
- * Delete nodes the way the panel does. Places that still hold entries need a
- * migration target first: their panel opens on the delete section instead
- * (the full dialog is F4). The start place can't go at all.
+ * Delete nodes — from the canvas (Delete key, context menu) and the panels
+ * (EDITOR_CONTEXT.requestDelete).
+ * Always through the dialog: it asks, lists what loses its link and, for places
+ * that still hold entries, wants a target. The start place can't go at all.
  */
-function deleteNodes(ids) {
+function deleteNodes(ids, { delay = 0 } = {}) {
     const transitions = ids.filter((id) => api.findTransition(id));
     const places = ids.filter((id) => api.findPlace(id));
     const initial = places.find((id) => id === api.model.workflow.initial_place) ?? null;
-    const needsTarget = places.find((id) => id !== initial && usageOf(id) > 0) ?? null;
-    const removable = places.filter((id) => id !== initial && id !== needsTarget && usageOf(id) === 0);
+    const removable = places.filter((id) => id !== initial);
 
-    const count = transitions.length + removable.length;
-    if (count > 0) {
-        const message = count > 1
-            ? __('workflows::messages.editor_confirm_delete_nodes', { count })
-            : transitions.length
-                ? __('workflows::messages.confirm_delete_transition', { handle: keyOf(api.findTransition(transitions[0])) })
-                : __('workflows::messages.confirm_delete_place', { handle: keyOf(api.findPlace(removable[0])) });
-        if (!window.confirm(message)) return;
+    if (initial) Statamic.$toast.error(__('workflows::messages.editor_delete_initial_blocked'));
+    if (!transitions.length && !removable.length) return;
 
+    const gone = new Set([...transitions, ...removable]);
+    deletion.places = removable.map((id) => {
+        const place = api.findPlace(id);
+        return { id, name: placeName(id), handle: keyOf(place), usage: usageOf(id), isNew: !!place.isNew };
+    });
+    deletion.transitions = transitions.map((id) => ({ id, name: transitionName(id) }));
+    deletion.refs = removable.flatMap((id) => linksOf(id, gone));
+    deletion.targetOptions = api.model.places
+        .filter((p) => !gone.has(p.id))
+        .map((p) => ({ value: p.id, label: `${placeName(p.id)} (${keyOf(p)})` }));
+    // From a context menu: once it has closed and handed the focus back.
+    if (delay) {
+        setTimeout(() => (deletion.open = true), delay);
+    } else {
+        deletion.open = true;
+    }
+}
+
+// What loses its link when place `id` goes (refs.js), minus what is deleted
+// along with it.
+function linksOf(id, gone) {
+    const place = api.findPlace(id);
+    const name = placeName(id);
+    const transitionByKey = new Map(api.model.transitions.map((t) => [keyOf(t), t.id]));
+    return placeReferences(api.view.value, keyOf(place)).flatMap((ref, i) => {
+        const key = `${id}:${ref.role}:${i}`;
+        if (ref.owner?.kind === 'transition') {
+            const tid = transitionByKey.get(ref.owner.handle);
+            if (!tid || gone.has(tid)) return [];
+            if (ref.role === 'transition_from') return [{ key, icon: 'arrow-right', text: `${name} → ${transitionName(tid)}` }];
+            if (ref.role === 'transition_to') return [{ key, icon: 'arrow-right', text: `${transitionName(tid)} → ${name}` }];
+        }
+        return [{ key, icon: 'link', text: `${__(ref.label)}: ${name}` }];
+    });
+}
+
+// The dialog said yes: everything in ONE undo step.
+function confirmDelete({ targets = {} } = {}) {
+    const transitions = deletion.transitions.map((t) => t.id);
+    const places = deletion.places.map((p) => p.id);
+    deletion.open = false;
+    api.batch('delete', () => {
         transitions.forEach((id) => api.removeTransition(id));
-        const savedPlaces = removable.filter((id) => !api.findPlace(id)?.isNew);
-        removable.forEach((id) => api.removePlace(id, { usage: 0 }));
-        // One saved place: show its pending deletion (with "restore"), like the panel.
-        select(count === 1 && savedPlaces.length === 1 ? savedPlaces[0] : null);
-    }
-
-    if (needsTarget) {
-        select(needsTarget, { tab: 'connections' });
-        Statamic.$toast.error(__('workflows::messages.editor_delete_needs_target', { place: placeName(needsTarget) }));
-    } else if (initial) {
-        Statamic.$toast.error(__('workflows::messages.editor_delete_initial_blocked'));
-    }
+        places.forEach((id) => api.removePlace(id, { usage: usageOf(id), migrateTo: targets[id] ?? null }));
+    });
+    // One saved place: show its pending deletion (target, restore), like before.
+    const saved = places.filter((id) => api.findDeletion(id));
+    select(transitions.length + places.length === 1 && saved.length === 1 ? saved[0] : null);
+    announce(__('workflows::messages.editor_deleted', { count: transitions.length + places.length }));
 }
 
 // --- the add menu ---
@@ -588,10 +679,105 @@ function pickAddMenu(item) {
     select(result.select, { focus: result.created.length ? 'label' : null, delay: MENU_CLOSE_DELAY });
 }
 
-function resetPositions() {
-    api.resetPositions();
+// "Arrange automatically" — one undo step (setPositions touched).
+function autoLayout() {
     canvas.value?.autoLayout();
 }
+
+// Forget the stored positions and arrange anew — together one undo step.
+function resetPositions() {
+    api.batch('layout', () => {
+        api.resetPositions();
+        canvas.value?.autoLayout();
+    });
+}
+
+// --- keyboard ---
+
+// Delete on the canvas: the selected lines, else the selected nodes.
+function deleteSelection() {
+    const targets = canvas.value?.deleteTargets();
+    if (!targets || (!targets.nodes.length && !targets.edges.length)) return false;
+    if (targets.edges.length) {
+        disconnect(targets.edges);
+    } else {
+        deleteNodes(targets.nodes);
+    }
+}
+
+// The node arrow keys / Enter act on: the focused one, else the selected one
+// (focus on the empty canvas or nowhere).
+function keyboardNode() {
+    const focused = canvas.value?.focusedNode();
+    if (focused) return focused;
+    const el = document.activeElement;
+    const free = !el || el === document.body || canvas.value?.element()?.contains(el);
+    return free && selectedId.value && canvas.value?.isModelNode(selectedId.value) ? selectedId.value : null;
+}
+
+useShortcuts({
+    root: () => root.value,
+    canvas: () => canvas.value?.element() ?? null,
+    // The dialogs handle their own keys.
+    enabled: () => !deletion.open && !conflict.open && !collectionRemoval.open,
+    handlers: {
+        save: () => {
+            save();
+        },
+        undo: () => {
+            undo();
+        },
+        redo: () => {
+            redo();
+        },
+        settings: () => {
+            select(null);
+            panelCollapsed.value = false;
+        },
+        escape: () => {
+            if (addMenu.open) {
+                addMenu.open = false;
+            } else if (selectedId.value) {
+                select(null);
+            } else if (!panelCollapsed.value) {
+                panelCollapsed.value = true;
+            } else {
+                return false;
+            }
+        },
+        delete: () => deleteSelection(),
+        'add-menu': () => {
+            const id = selectedId.value;
+            if (!id || !canvas.value?.isModelNode(id)) return false;
+            openAddMenuFor(id);
+        },
+        open: () => {
+            const id = canvas.value?.focusedNode();
+            if (!id) return false;
+            select(id);
+        },
+        nudge: ({ dx, dy }) => {
+            const id = keyboardNode();
+            if (!id) return false;
+            api.nudge(id, dx, dy);
+        },
+        fit: () => {
+            canvas.value?.fit();
+        },
+        'reset-zoom': () => {
+            canvas.value?.resetZoom();
+        },
+        'zoom-in': () => {
+            canvas.value?.zoomIn();
+        },
+        'zoom-out': () => {
+            canvas.value?.zoomOut();
+        },
+        'auto-layout': () => {
+            autoLayout();
+        },
+    },
+});
 
 function selectError(error) {
     const handle = error?.node?.handle;
@@ -632,7 +818,7 @@ async function save({ confirmCollectionRemoval = false, force = false } = {}) {
     // A new node without a usable handle can't be written — stop and show it.
     const problems = api.handleProblems();
     if (problems.length) {
-        Statamic.$toast.error(problems.some((p) => p.problem === 'missing')
+        saveFailed(problems.some((p) => p.problem === 'missing')
             ? __('workflows::messages.settings_dangling_handles')
             : __(`workflows::messages.editor_handle_${problems[0].problem}`));
         select(problems[0].id);
@@ -657,6 +843,7 @@ async function save({ confirmCollectionRemoval = false, force = false } = {}) {
         collectionRemoval.open = false;
 
         Statamic.$toast.success(__('workflows::messages.settings_saved'));
+        announce(__('workflows::messages.settings_saved'));
         if (result.seeded > 0) {
             Statamic.$toast.success(__('workflows::messages.states_seeded', { count: result.seeded }));
         }
@@ -672,6 +859,12 @@ async function save({ confirmCollectionRemoval = false, force = false } = {}) {
     }
 }
 
+// A failed save: toast for the eyes, the live region for screen readers.
+function saveFailed(message) {
+    Statamic.$toast.error(message);
+    announce(message);
+}
+
 function handleSaveError(e) {
     const status = e?.response?.status;
     const data = e?.response?.data ?? {};
@@ -681,7 +874,7 @@ function handleSaveError(e) {
         conflict.definition = data.definition ?? null;
         conflict.version = data.version ?? null;
         conflict.open = true;
-        Statamic.$toast.error(data.message || __('workflows::messages.settings_version_conflict'));
+        saveFailed(data.message || __('workflows::messages.settings_version_conflict'));
         return;
     }
 
@@ -702,22 +895,22 @@ function handleSaveError(e) {
         saveErrors.set(data.message, removals
             .filter((r) => r.error || r.target_error)
             .map((r) => ({ path: `removed_places.${r.place}`, code: 'needs_migration', message: r.error || r.target_error, node: { kind: 'place', handle: r.place } })));
-        Statamic.$toast.error(data.message || __('workflows::messages.settings_save_error'));
-        const deletion = problem ? api.model.deletions.find((d) => d.handle === problem.place) : null;
-        const target = deletion?.id ?? (problem ? placeIdOf(api.model, problem.place) : null);
+        saveFailed(data.message || __('workflows::messages.settings_save_error'));
+        const pending = problem ? api.model.deletions.find((d) => d.handle === problem.place) : null;
+        const target = pending?.id ?? (problem ? placeIdOf(api.model, problem.place) : null);
         if (target) select(target, { tab: 'connections' });
         return;
     }
 
     if (status === 422) {
         saveErrors.set(data.message, data.errors);
-        Statamic.$toast.error(data.message || data.errors?.[0]?.message || __('workflows::messages.settings_save_error'));
+        saveFailed(data.message || data.errors?.[0]?.message || __('workflows::messages.settings_save_error'));
         return;
     }
 
     // Loud console output so the concrete failure can go into a bug report.
     console.error('[workflows] graph editor save failed', { status, body: data, err: e });
-    Statamic.$toast.error(
+    saveFailed(
         data.message
         || (status ? `${status} ${e.response.statusText || ''}`.trim() : null)
         || __('workflows::messages.settings_save_error'),
