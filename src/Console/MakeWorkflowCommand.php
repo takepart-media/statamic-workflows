@@ -71,7 +71,7 @@ class MakeWorkflowCommand extends Command
         $this->line('Next steps:');
         $this->line(" • Open resources/workflows/{$name}.yaml and define your places + transitions.");
         $this->line(' • Ensure the user groups you reference (metadata.required_group) exist in resources/users/groups.yaml.');
-        $this->line(" • Reload the CP; the workflow appears in the 'Workflows' nav section (config workflows.nav_section) when metadata.nav is set.");
+        $this->line(" • Reload the CP dashboard; the workflow appears in the 'workflows_overview' widget (config/statamic/cp.php → widgets).");
 
         return self::SUCCESS;
     }

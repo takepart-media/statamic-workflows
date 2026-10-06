@@ -26,11 +26,12 @@ Das Addon macht im Kern vier Dinge:
    Lokalisierungs-Workflow hat keinen Publish-Place und mischt sich deshalb nicht
    ein — dort bleibt Statamics Knopf stehen, sonst käme eine fertige Übersetzung
    überhaupt nicht live (`syncPublishedFlag()` setzt das Flag dort ebenfalls nie).
-3. **CP-Manager (Inertia-Vue).** Pro Workflow gibt es einen eigenen Manager in
-   der CP-Nav-Sektion „Workflows" — direkt unter „Übersicht", über „Inhalt"
-   (z. B. „Beitragsmanager", „Übersetzungsmanager") mit Queue,
-   Filtern, „Meine Warteschlange", Detailseite (Content-Preview, Verlauf, Diff,
-   Kommentare, Aktionen).
+3. **CP-Manager (Inertia-Vue).** Pro Workflow gibt es einen eigenen Manager
+   unter `/cp/workflows/<slug>` (z. B. „Beitragsmanager", „Übersetzungsmanager")
+   mit Queue, Filtern, „Meine Warteschlange", Detailseite (Content-Preview,
+   Verlauf, Diff, Kommentare, Aktionen). Einen eigenen Nav-Eintrag haben die
+   Manager nicht mehr: Einstieg ist das Dashboard-Widget `workflows_overview`
+   (§ 9), dessen Workflow-Spalte auf die Manager verlinkt.
 4. **Revision-Loop.** Für Collections mit Statamic-Revisions bewegt sich der
    Entry automatisch zwischen dem Publish-Place und einem injizierten
    `pending_revision`-Place — genau passend zu Statamics Working-Copy-Lebenszyklus.
@@ -77,7 +78,7 @@ metadata:
   sla:                            # Alterung: nach X Tagen in welchen eigenen Schritt
     needs_update_days: 365
     needs_update_place: needs_update
-  nav:                            # Eintrag in der CP-Nav-Sektion „Workflows"
+  nav:                            # Manager-Seite + Eintrag unter Settings › Workflows
     label: 'Beitragsmanager'      # optionaler Override; leer lassen, damit
                                   # workflows::messages.nav.<slug> greift und der
                                   # Titel der CP-Sprache folgt (so machen es die
@@ -784,7 +785,7 @@ dieselbe Transition, weil er immer an der ersten stand.
 
 | Key | Wirkung |
 | --- | --- |
-| `nav.{label,slug,icon,order}` | Erzeugt einen flachen Eintrag in der eigenen CP-Nav-Sektion (`nav_section`, Default „Workflows"). Ohne `nav` → keine Menü-Anzeige. **`label` gewinnt über die Übersetzung** und gilt dann in jeder CP-Sprache — das ist das Feld „Nav-Titel" im Settings-Editor. Leer lassen, damit `workflows::messages.nav.<slug>` greift und der Titel der CP-Sprache folgt; ohne beides erscheint kein Eintrag. |
+| `nav.{label,slug,icon,order}` | Gibt dem Workflow seine Manager-Seite unter `/cp/workflows/<slug>` (verlinkt aus der Workflow-Spalte von `workflows_overview`, § 9) und einen Unterpunkt unter „Settings › Workflows" (nur Super-Admins), sortiert nach `order`. Eine eigene Nav-Sektion pro Workflow gibt es nicht mehr; `config('workflows.nav_section')` ist deprecated und wird nicht mehr gelesen. Ohne `nav` → keine Manager-Seite, kein Settings-Unterpunkt. **`label` gewinnt über die Übersetzung** und gilt dann in jeder CP-Sprache — das ist das Feld „Nav-Titel" im Settings-Editor. Leer lassen, damit `workflows::messages.nav.<slug>` greift und der Titel der CP-Sprache folgt; ohne beides erscheint kein Eintrag. |
 | `default_assignee_group` | Auto-Assignment, wenn ein Subjekt entsteht („Neuer Beitrag" bzw. eine neue Localization). Gated außerdem, wer einen Entry in eine andere Site überführen darf (`canTransfer()`) — ein früherer separater `transfer_group`-Key ist darin aufgegangen. |
 | `assign_creator: true` | Weist beim Entstehen eines Subjekts **zusätzlich** zu `default_assignee_group` dessen Ersteller zu. Wichtig, wenn der Ersteller nicht in dieser Gruppe ist (z. B. Super-Admin) — nur Assignees dürfen eine Transition ausführen. Gilt für **beide** Workflow-Arten: „Ersteller" ist beim Beitragsmanager wer den Beitrag anlegt (`storePost`), beim Übersetzungsmanager wer die Localization auslöst (`transfer` bzw. eine `site_modal`-Transition). Die Zuweisung endet mit der ersten Transition; ein reines „Speichern" des aktuellen Schritts ändert sie nicht. |
 | `history_fields: [...]` | Whitelist von **Inhalts**-Feld-Handles für den Diff-View des Verlaufs. Sidebar-Felder (Taxonomien, sticky …) und die Meta-Attribute Slug, Datum, Veröffentlichung erscheinen immer, auch wenn sie hier nicht stehen (§ 5.10). Leer/fehlend = alle geänderten. |
@@ -1777,55 +1778,27 @@ Was er tut, in der Reihenfolge:
     zur Laufzeit `revisionsEnabled(true)` an (nicht persistent in der Collection-YAML —
     das läuft per Request). Ohne Pro-Lizenz bleibt es effektiv aus (die
     Collection-eigene Prüfung faltet Pro wieder rein).
-  - `bootNav()` — die eigene CP-Nav-Sektion (`nav_section`, Default „Workflows"),
-    direkt unter Statamics „Top Level" und damit über „Inhalt", mit einem
-    **flachen** Eintrag pro Workflow mit `metadata.nav`.
+  - `bootNav()` — registriert nur noch den Super-Admin-Eintrag „Settings ›
+    Workflows" (Index-Seite `workflows.settings.index`), mit einem Kind je
+    Workflow mit `metadata.nav`, das direkt in dessen Settings-Editor führt.
+    Die frühere eigene Nav-Sektion mit einem Eintrag pro Workflow (samt
+    Anker-Trick für ihre Position über „Inhalt") ist entfernt;
+    `config('workflows.nav_section')` wird nicht mehr gelesen. Die Manager
+    bleiben unter `/cp/workflows/{slug}` erreichbar, Einstieg ist das
+    Dashboard-Widget `workflows_overview` (§ 9).
 
-    Die Section-Reihenfolge ist die Reihenfolge, in der Sektionen erstmals in
-    `Nav::$items` auftauchen; eine API dafür gibt es nicht (`NavItem::order()`
-    sortiert Items innerhalb einer Sektion, nie Sektionen). Und
-    `Nav::makeBaseItems()` sichert die schon registrierten Items, *bevor* es
-    `CoreNav::make()` aufruft und die `Nav::extend`-Callbacks erst danach
-    ausführt. Alles aus `Nav::extend` landet deshalb zwingend **unter** den
-    Core-Sektionen.
-
-    Daher die Zweiteilung: eager registriert wird nur ein **Anker**, dessen
-    einzige Aufgabe es ist, den Platz der Sektion zu belegen — und weil nur das
-    *erste* Auftreten eines Section-Namens die Position festlegt, dürfen die
-    echten Items später in `Nav::extend` entstehen und erben den Platz. Der
-    Anker wird von `NavBuilder::authorizeItems()` wieder herausgefiltert (läuft
-    *nach* `trackCoreSections()`), und zwar über eine absichtlich nirgends
-    registrierte Ability: Statamics Super-Admin-Bypass greift nur für echte
-    registrierte Permissions, die erfundene ist also für jeden `false`.
-    Deswegen lässt sich „nur Super Admin" auch **nicht** als `can()` ausdrücken —
-    das `isSuper()`-Gate für „Settings > Workflows" muss in `Nav::extend`
-    bleiben. `hidden(true)` allein hätte nicht gereicht, weil der Nav-Customiser
-    mit `withHidden` baut.
-
-    Die echten Items eager zu registrieren wäre dreifach falsch: `cp_route()`
-    wirft zur Boot-Zeit (Statamic lädt seine Routen in der Zeile *nach*
+    Registriert wird in `Nav::extend`, nicht eager: `cp_route()` wirft zur
+    Boot-Zeit (Statamic lädt seine Routen in der Zeile *nach*
     `Statamic::runBootedCallbacks()`, Addon-Routen noch später), die CP-Locale
     steht erst ab der `statamic.cp.authenticated`-Middleware, und `NavBuilder`
-    verändert die übergebenen `NavItem`-Objekte **in place** (`@hide`,
-    `@modify`) — Objekte, die den Build überleben und in den nächsten der ≥3
-    Builds pro CP-Request auslaufen würden, die nicht alle dieselben
-    Preferences benutzen. Genau deshalb setzt der Callback den Anker bei jedem
-    Build neu: `NavBuilder::renameSection()` schreibt einen umbenannten
-    Section-Namen direkt auf ihn, was ihn sonst in der umbenannten Sektion
-    stranden lässt und unsere beim nächsten Build nach unten sinken lässt.
+    verändert die übergebenen `NavItem`-Objekte **in place** — deshalb frische
+    Objekte bei jedem Build. Das `isSuper()`-Gate steht ebenfalls im Callback:
+    `User::current()` gibt es zur Boot-Zeit nicht, und „nur Super Admin" lässt
+    sich nicht als `can()` ausdrücken, weil Statamics Super-Admin-Bypass nur für
+    registrierte Permissions greift.
 
     Nebeneffekt: die Workflow-YAMLs werden weiter nur bei `Nav::build()`
     gelesen, ein Frontend-Request liest also keine.
-
-    Sichtbare Folge fürs Breadcrumb: `Breadcrumbs::build()` nimmt die erste
-    Sektion mit einem aktiven Top-Level-Item — statt „Übersicht › Beitragsmanager"
-    jetzt ein einzelner Krümel „Beitragsmanager", dessen Dropdown direkt die
-    Geschwister-Manager listet.
-
-    Der Section-Titel läuft durch den JS-`__()`, der nackte Strings nur aus einer
-    projektseitigen `lang/<locale>.json` auflöst — ein Addon kann das nicht
-    liefern (`bootTranslations()` ruft nie `loadJsonTranslationsFrom()`). „Workflows"
-    steht im Deutschen also wörtlich da, wie „Settings > Workflows" auch.
 - **`$listen`** (Event-Handler)
   - `EntrySaved` → `SyncWorkflowOnUnpublish`, `LogDraftSave` (§ 6).
   - `RevisionSaved` + `RevisionDeleted` → `SyncWorkflowOnRevision` (§ 6).
@@ -1920,15 +1893,16 @@ angehängt.
 
 | Pfad | Handler | Zweck |
 | --- | --- | --- |
-| `GET /cp/workflows` | `queue` | „Meine Warteschlange" + „Alle Beiträge" workflow-agnostisch. |
-| `GET /cp/workflows/{slug}` | `workflow` | Manager für einen bestimmten Workflow (per `nav.slug`) — Ziel der Einträge in der „Workflows"-Nav-Sektion. |
-| `GET /cp/workflows/instances/{id}` | `show` | Detailseite (Content, History, Kommentare, Aktionen). |
+| `GET /cp/workflows` | `queue` | Leitet aufs Dashboard um (`workflows.queue` bleibt für Bookmarks und alte Links). Die workflow-übergreifende Liste ist jetzt das Widget `workflows_overview` (§ 9). |
+| `GET /cp/workflows/{slug}` | `workflow` | Manager für einen bestimmten Workflow (per `nav.slug`). Kein Nav-Eintrag mehr — erreichbar per URL und über die Workflow-Spalte von `workflows_overview`. |
+| `GET /cp/workflows/{slug}/instances/{id}` | `showInWorkflow` | Detailseite (Content, History, Kommentare, Aktionen), kanonische URL (`InstanceUrl`). Der Zurück-Link führt aufs Dashboard. |
+| `GET /cp/workflows/instances/{id}` | `show` | Id-only-Form für Bookmarks/ältere Links; leitet auf die kanonische URL um. |
 
 **JSON-API** (aufgerufen vom Vue-Frontend)
 
 | Pfad | Handler | Beschreibung |
 | --- | --- | --- |
-| `GET  workflows/api/listing` | `listing` | Tabellendaten für die Queue (Suche, Filter, Sortierung, Pagination). |
+| `GET  workflows/api/listing` | `listing` | Tabellendaten für die Queue (Suche, Filter, Sortierung, Pagination). `workflow=<name>` für einen Manager; `all_workflows=1` für die workflow-übergreifende Liste des Widgets `workflows_overview`, optional eingeengt per `workflows=a,b` (unbekannte/inaktive Namen fallen still weg). |
 | `GET  workflows/api/instances/{id}/actions` | `actionsJson` | Verfügbare Transitions ab dem aktuellen State. |
 | `GET  workflows/api/instances/{id}/history/{event}/diff` | `historyDiff` | Diff eines History-Events vs. voriger/erster Snapshot. |
 | `POST workflows/api/instances/{id}/transitions/{name}` | `applyTransition` | Transition anwenden. |
@@ -2013,6 +1987,18 @@ Fixture-ID einen echten Entry überdecken, weil `findInstance()` **vor**
     die Collection *besitzt*.
 - `rowsFor($workflow, $collection = null)` — dispatcht zwischen den drei je nach
   Kontext.
+- `overviewRows($workflows)` — die Pivot-Zeilen **mehrerer** Workflows in einer
+  Liste, für `listing?all_workflows=1` (Widget `workflows_overview`, § 9). Der
+  Scope kommt aus `overviewWorkflows()`: alle aktiven Entry-Workflows aus
+  `DefinitionLoader::all()` in Definitionsreihenfolge, optional eingeengt per
+  `workflows=a,b` bzw. Widget-Config. Ein Post, den zwei Workflows steuern,
+  erscheint **einmal je Workflow** — sein Stand in jedem ist eine andere Frage.
+  Die Zeilen-ID wird deshalb zu `"{workflow}:{rootId}"`; verlinkt wird nicht über
+  sie, sondern über `url`/`urls`. Jede Zeile trägt zusätzlich `workflow`,
+  `workflow_label`, `workflow_color` (derselbe Punkt wie in den anderen Karten),
+  `manager_url` (null ohne `metadata.nav`) und `sites` — die Sites, die IHR
+  Workflow listet, damit die Tabelle „nicht die Spalte dieses Workflows" von
+  „keine Fassung in dieser Site" unterscheiden kann.
 
 ### 5.3 Site-Handling (Multi-Site)
 
@@ -2036,8 +2022,20 @@ Fixture-ID einen echten Entry überdecken, weil `findInstance()` **vor**
   Collections hinweg gemerged bleibt.
 - `applyColumnVisibility($columns, $param)` — der CP-Column-Customizer sendet
   die sichtbaren Spalten als CSV. Titel bleibt immer sichtbar.
-- `filters($rows, $workflow)` — baut je nach Kontext `SiteFilter`, `StateFilter`,
-  `AssigneeFilter`. Pivot-View hat nur den State-Filter (Site ist ja die Spalte).
+- `filters($rows, $workflow, $scope = null)` — baut je nach Kontext `SiteFilter`,
+  `StateFilter`, `AssigneeFilter`. Pivot-View hat nur den State-Filter (Site ist
+  ja die Spalte). Mit `$scope` (Übersicht) kommen `WorkflowNameFilter` (Handle
+  `workflow`, „Alle Workflows"), `StateFilter` mit der **Vereinigung** der Places
+  aller Workflows im Scope (geteilte Places einmal) und `StaleFilter`.
+- `overviewColumns($workflows)` — Spalten der Übersicht: Titel, `workflow_label`
+  (Typ `workflow`), eine State-Spalte je Site, die mindestens ein Workflow im
+  Scope listet (`overviewSites()`, in sites.yaml-Reihenfolge), und
+  `content_updated_at` (sichtbar, sobald ein Nicht-Lokalisierungs-Workflow im
+  Scope ist).
+- `overviewProps($only)` — Startprops des Widgets `workflows_overview`: Spalten,
+  Filter, State-Farben/-Labels und `creates` (je Workflow, in dem der User
+  anlegen darf, dieselben Create-Props wie die Manager-Seite, aus
+  `createOptions()`). Null bei leerem Scope.
 - `filterOptions()` / `filterBadges()` — Options + Aktive-Filter-Anzeige.
 - `decodeFilters()` — dekodiert die base64/JSON-`filters`-Query.
 
@@ -2402,7 +2400,7 @@ nicht durch ein erneutes Installieren.
 - **`setWorkflowActive`** — schreibt den Top-Level-Key `active: true|false` in die
   YAML. Gefiltert wird an **einer** Stelle: `DefinitionLoader::all()` liefert nur
   aktive Workflows, und weil alles Laufzeitverhalten darüber geht, fällt ein
-  abgeschalteter Workflow in einem Zug aus CP-Nav, Manager-Routen,
+  abgeschalteter Workflow in einem Zug aus Dashboard-Widgets, Settings-Nav, Manager-Routen,
   `workflow_actions`-Panel im Beitrags-Editor, `WorkflowResolver` und den
   Console-Commands. Definition und Verlauf bleiben unangetastet.
 - **`destroyWorkflow`** — löscht nur die YAML. Status, Assignees, History und
@@ -2840,7 +2838,7 @@ Vue beim Wechsel neu rendert.
 
 ## 9. Dashboard-Widgets
 
-Sechs Widgets, alle im ServiceProvider registriert (`$widgets`); das Host-Projekt
+Acht Widgets, alle im ServiceProvider registriert (`$widgets`); das Host-Projekt
 schaltet sie in `config/statamic/cp.php → widgets` frei:
 
 ```php
@@ -2850,11 +2848,16 @@ schaltet sie in `config/statamic/cp.php → widgets` frei:
     ['type' => 'workflows_status', 'width' => 100],
     ['type' => 'workflows_my_queue', 'width' => 50, 'limit' => 7],
     ['type' => 'workflows_created_by_me', 'width' => 50, 'limit' => 5],
+    ['type' => 'workflows_overview', 'width' => 100, 'per_page' => 25],
 ],
 ```
 
 Die Reihenfolge ist die Leserichtung des Dashboards: wer bin ich → wie viel liegt
-an → wie verteilt sich der Bestand → welche Beiträge konkret.
+an → wie verteilt sich der Bestand → welche Beiträge konkret → alle Beiträge.
+
+`workflows_overview` ist zugleich der Einstieg in die Manager-Seiten: die
+Workflows haben keinen eigenen Nav-Eintrag mehr (§ 3), `/cp/workflows` leitet
+aufs Dashboard um.
 
 ### `QueueStats` (`workflows_queue_stats`)
 
@@ -3514,6 +3517,50 @@ sie gesetzt: `postmanager: emerald`, `plainlanguage: indigo`,
 erscheinen (Owning- + Lokalisierungs-Workflow) — Dot und Workflow-Label
 disambiguieren, wie in den Managern.
 
+### `Watched` (`workflows_watched`)
+
+`src/Widgets/Watched.php` — die Beiträge, die der aktuelle User über den
+Merken-Button der Detailseiten beobachtet, über alle aktiven Workflows. Gebaut
+wie `CreatedByMe` (dieselbe Zeilen-Komponente, sortiert nach `last_modified`);
+jede Zeile trägt zusätzlich die URL zum Nicht-mehr-Beobachten. Config: `limit`
+(Default 5) und `workflows`.
+
+### `WorkflowsOverview` (`workflows_overview`)
+
+`src/Widgets/WorkflowsOverview.php` — „Alle Beiträge": die Pivot-Liste der
+Manager-Seiten über **alle** aktiven Workflows in einer Tabelle. Die Workflows
+kommen aus `DefinitionLoader::all()`; ein neu installierter oder aktivierter
+Workflow taucht also ohne Config-Änderung auf. Config: `workflows` (Teilmenge
+aktiver Workflow-Namen, Default alle, über `PresentsPersonalEntries`) und
+`per_page` (Zeilen je Seite, Default 15). Ist der Scope leer, liefert
+`component()` null und die Karte entfällt.
+
+**Komponenten-Widget**: `['name' => 'workflows-overview-widget', 'props' => …]`
+→ `resources/js/components/WorkflowsOverviewWidget.vue`. Die Karte IST das
+Listing: dieselbe `WorkflowListing` wie auf den Manager-Seiten (`bare`, also ohne
+eigene Panel-Hülle in der `Widget`-Shell), die gegen `workflows.listing` mit
+`all_workflows=1` (und ggf. `workflows=a,b`) pagt, sucht und filtert. Die
+Startprops kommen aus `WorkflowController::overviewProps()` — Spalten, Filter und
+Create-Buttons können so nicht von dem abweichen, was der Endpoint antwortet
+(§ 5.2, § 5.4).
+
+- **Spalten:** Titel, Workflow (farbiger Punkt + Label, verlinkt auf die
+  Manager-Seite, wo es eine gibt), eine State-Spalte je Site aus der Vereinigung
+  der Sites aller Workflows im Scope, „Inhaltlich aktualisiert". Eine Zelle in
+  einer Site, die der Workflow der Zeile nicht verwaltet, bleibt **leer** — nicht
+  der „nicht begonnen"-Strich.
+- **Filter:** Workflow (`WorkflowNameFilter`), Status (Vereinigung der Places),
+  veraltet (`StaleFilter`). Die Suche trifft auch den Workflow-Namen.
+- **Mehrfach-Zeilen:** Ein Post, den zwei Workflows steuern (z. B.
+  Beitragsmanager + Übersetzungsmanager), steht einmal je Workflow da; Zeilen-ID
+  `"{workflow}:{rootId}"`.
+- **„Neuer Beitrag":** im Kopf je ein Button (`CreatePostButton.vue`) für jeden
+  Workflow, in dem der User anlegen darf — dieselben Regeln wie auf der
+  Manager-Seite (`createOptions()`: Collection-Owner, kein
+  Lokalisierungs-Workflow, `post_creator_groups`). Ab zwei Buttons tragen sie den
+  Workflow im Text (`new_post_in`, „Beitragsmanager: neuer Beitrag").
+- **Sichtbarkeit:** für alle CP-User, wie das Listing selbst (§ 12).
+
 ### `UserHeader` (`workflows_user_header`)
 
 `src/Widgets/UserHeader.php` — persönlicher Kopfbereich: Name des Users als
@@ -3613,9 +3660,10 @@ SVGs unter `docs/workflows/*.svg`.
 Datei `resources/js/addon.js` registriert per `Statamic.booting`:
 
 - Inertia-Pages
-  - `WorkflowsQueue` → `pages/WorkflowQueue.vue` — Meine Warteschlange + Alle
-    Beiträge, plus „Neuer Beitrag"-Button. Der legt direkt an; ein Dropdown mit
-    den Collections gibt es nur, wenn der Workflow mehr als eine besitzt.
+  - `WorkflowsQueue` → `pages/WorkflowQueue.vue` — die Manager-Seite eines
+    Workflows: Meine Warteschlange + Alle Beiträge, plus „Neuer Beitrag"-Button
+    (`CreatePostButton.vue`). Der legt direkt an; eine Collection-Auswahl gibt es
+    nur, wenn der Workflow mehr als eine besitzt.
   - `WorkflowsInstance` → `pages/WorkflowInstanceDetail.vue` — 949 Zeilen große
     Detail-Ansicht: Header (Titel, State-Badge, Assignees), Versionen,
     Content-Preview, Aktionen, Assignee-Drawer, History mit Diff-Toggle,
@@ -3636,9 +3684,22 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
   - `workflow_actions-fieldtype` → `WorkflowActionsFieldtype.vue`.
 - Komponenten
   - `WorkflowListing.vue` — dünner Wrapper über Statamics `Listing` mit
-    passenden Slots, verwendet:
+    passenden Slots. Props u. a. `perPage` (an `Listing` durchgereicht, sonst
+    dessen Default) und `bare` (ohne `Panel`/`PanelFooter`-Hülle, für einen Host,
+    der selbst eine Karte ist). Zelltyp `workflow`: Workflow-Punkt + Label, als
+    Link auf `manager_url`. State-Zellen einer Site, die nicht in `row.sites`
+    steht, bleiben leer. Verwendet:
     - `GroupedListingTable.vue` — Zwei-Zeilen-Header (Site-Gruppe + Sprach-Flag)
       für den Pivot-View.
+  - `CreatePostButton.vue` — „Neuer Beitrag"-Button samt Modal (Titel,
+    Collection-Auswahl, gekoppelte Transition mit Assignee-Picker), aus
+    `WorkflowQueue.vue` herausgelöst. Props `createUrl`, `createCollections`,
+    `createCta`, `workflowName`, optional `text`/`size`. Die Form-ID ist pro
+    Instanz, weil das Dashboard-Widget mehrere Buttons (und Modals) rendert.
+  - `workflows-overview-widget` → `WorkflowsOverviewWidget.vue` — das
+    Dashboard-Widget `workflows_overview` (§ 9): `Widget`-Shell, im
+    `#actions`-Slot ein `CreatePostButton` je `creates`-Eintrag, darunter
+    `WorkflowListing` mit `bare` und `perPage`.
   - `WorkflowHistory.vue` — History-Liste samt Diff-Panel und dem LCS-Wort-Diff.
     Von **beiden** Detailansichten benutzt (§ 5.10).
   - `workflows-queue-stats-widget` → `QueueStatsWidget.vue` — die Kennzahlreihe
@@ -3760,6 +3821,8 @@ nicht als Konstante im Client.
 | State manuell setzen | Super, `admins` — plus Site-Zugriff. |
 | In andere Site überführen | Site-Zugriff **und** (Super, `admins`, oder Mitglied in der `default_assignee_group` des Ziel-Workflows). Ohne diesen Key nur Privileged. |
 | Kommentar schreiben | Site-Zugriff. |
+| Workflow-übergreifende Liste sehen (Widget `workflows_overview`, `listing?all_workflows=1`) | Jeder CP-User, wie die Listen der Manager-Seiten. „Neuer Beitrag"-Buttons darin nur nach der Zeile „Neuen Beitrag anlegen". |
+| Settings › Workflows (Nav-Eintrag + Seiten) | Nur Super-Admins. |
 | Kommentar löschen | Nur der Autor. |
 | „Bearbeiten"-Button im Summary sehen | Wer den Entry bearbeiten darf **und** `access <site> site` für dessen Site hat (`canOpenEntryEditor()`). |
 
@@ -3856,9 +3919,12 @@ Working-Copy publiziert (working-copy weg)
 
 ## 14. Wo drehe ich woran?
 
-- **Neuen Workflow hinzufügen** → YAML in `resources/workflows/<name>.yaml`;
-  falls im Menü, `metadata.nav` setzen — der Eintrag erscheint in der
-  „Workflows"-Nav-Sektion.
+- **Neuen Workflow hinzufügen** → YAML in `resources/workflows/<name>.yaml`.
+  Er erscheint automatisch im Dashboard-Widget `workflows_overview` (sofern
+  dessen `workflows`-Config ihn nicht ausschließt); für eine eigene Manager-Seite
+  und den Unterpunkt unter Settings › Workflows `metadata.nav` setzen.
+- **Workflow-Übersicht aufs Dashboard** → `['type' => 'workflows_overview',
+  'width' => 100]` in `config/statamic/cp.php → widgets` (§ 9).
 - **Collections eines Workflows ändern** → Settings → Workflows → `<Workflow>` →
   „Collections". Achtung beim Entfernen: die Workflow-Daten der betroffenen
   Einträge werden gelöscht (§ 2 → Governed Collections).
@@ -3898,7 +3964,7 @@ Working-Copy publiziert (working-copy weg)
   der Zeile (oder `php artisan workflows:seed-states`, dort zusätzlich mit
   `--redo`). Idempotent, beliebig oft wiederholbar.
 - **Workflow vorübergehend stilllegen** → in den Settings die Zeile auf
-  „Deaktivieren" (schreibt `active: false`). Nimmt ihn aus Nav, Manager-Seiten,
+  „Deaktivieren" (schreibt `active: false`). Nimmt ihn aus Dashboard-Widgets, Settings-Nav, Manager-Seiten,
   Beitrags-Editor und Commands; Definition und Verlauf bleiben.
 - **Workflow ganz entfernen** → in den Settings „Löschen". Entfernt nur die YAML;
   Status, Zuweisungen, History und Kommentare bleiben in der DB und sind nach

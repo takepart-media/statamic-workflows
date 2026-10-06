@@ -7,12 +7,10 @@ namespace TakepartMedia\Workflows\Workflow;
  * need it and the shape is not obvious.
  *
  * The canonical form nests the instance under its manager's nav slug
- * (`workflows/<slug>/instances/<id>`), and that nesting does real work: Statamic
- * derives a nav item's active state from its URL alone
- * (NavItem::generateActivePatternForCpUrl builds `<slug>(/(.*)?|$)`) and exposes
- * no way to set the pattern by hand. Passing the workflow as `?workflow=`
- * instead left no nav child matching on a detail page, so the section collapsed
- * and the manager links vanished from the sidebar.
+ * (`workflows/<slug>/instances/<id>`), so an instance URL reads as part of its
+ * workflow. This used to drive CP nav highlighting too; with the per-workflow
+ * nav items gone it is purely URL structure. The id-only route stays for
+ * bookmarks and older links and redirects to this form.
  *
  * A workflow without `metadata.nav` has no manager page to nest under and falls
  * back to the id-only route.

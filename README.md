@@ -173,7 +173,7 @@ Publish with `php artisan vendor:publish --tag=workflows-config`, then tune:
 | `revisions`            | `true`               | Whether the engine writes Statamic revisions on transitions (needs Statamic Pro)                                                                                   |
 | `privileged_groups`    | `['admins']`         | Groups that bypass every workflow gate                                                                                                                              |
 | `post_creator_groups`  | `['admins']`         | Fallback group for the "New post" button when a workflow does not set `metadata.post_creator_groups`                                                                |
-| `nav_section`          | `'Workflows'`        | Title of the addon's own CP nav section; the per-workflow managers are listed flat inside it, directly below Statamic's top level                                   |
+| `nav_section`          | `'Workflows'`        | **Deprecated, unused.** The addon no longer has its own nav section; the managers are reached from the `workflows_overview` dashboard widget                      |
 | `header_responsibles`  | both `null`          | The "Responsible" row of the user-header dashboard card: `group` plus the `user_field` read on both sides. A member of the group counts as responsible when their values in that field overlap the current user's. Both `null` → no row |
 | `translation.plain_language.max_polls` | `5` | Polls one submission is waited out before it counts as dead. One poll is one minute at the scheduled tick. Env: `PLAIN_LANGUAGE_MAX_POLLS` |
 | `translation.plain_language.max_attempts` | `3` | Submissions a rewrite gets in total, the first included. A failed submission is sent to the service again; only after the last one does the version move to the workflow's failure place. `1` disables retries. Env: `PLAIN_LANGUAGE_MAX_ATTEMPTS` |
@@ -228,7 +228,7 @@ transitions:
 Key metadata fields the addon reads:
 
 - `metadata.label`, `metadata.description` — human-readable workflow name
-- `metadata.nav.{label,slug,icon,order}` — adds this workflow as a flat item in the addon's own nav section. `label` wins over the `nav.<slug>` translation and then applies in every CP language; leave it empty to let the translation supply a language-following title
+- `metadata.nav.{label,slug,icon,order}` — gives this workflow its manager page at `/cp/workflows/<slug>` (linked from the `workflows_overview` widget) and a child under the super-admin "Settings > Workflows" nav entry. `label` wins over the `nav.<slug>` translation and then applies in every CP language; leave it empty to let the translation supply a language-following title
 - `metadata.detail: translation` — activates the site-by-site translation UI
 - `metadata.default_assignee_group` — group used for auto-assignments and
   cross-site distribution
@@ -305,8 +305,27 @@ the `{base}_{lang}` convention (e.g. `main` + `main_en`). Override
 
 **Widgets**:
 
-- `AssignedPosts` — CP dashboard card listing the current user's assigned
-  posts. Register it in `resources/blueprints/dashboard/*.yaml`.
+Enable them in `config/statamic/cp.php → widgets` (details in DOCS.md § 9):
+
+```php
+'widgets' => [
+    ['type' => 'workflows_user_header', 'width' => 100],
+    ['type' => 'workflows_queue_stats', 'width' => 100],
+    ['type' => 'workflows_status', 'width' => 100],
+    ['type' => 'workflows_my_queue', 'width' => 50, 'limit' => 7],
+    ['type' => 'workflows_created_by_me', 'width' => 50, 'limit' => 5],
+    ['type' => 'workflows_overview', 'width' => 100, 'per_page' => 25],
+],
+```
+
+- `workflows_user_header` — the current user's name, groups and responsibles.
+- `workflows_queue_stats` — four key figures (my queue, project-wide counts, failed translations with a retry button).
+- `workflows_status` — one doughnut per workflow with its state distribution.
+- `workflows_my_queue` — posts assigned to the current user, across all workflows (`limit`, `workflows`).
+- `workflows_created_by_me` — posts the current user created (`limit`, `workflows`).
+- `workflows_watched` — posts the current user watches (`limit`, `workflows`).
+- `workflows_overview` — "All posts": one table across every active workflow (new workflows appear automatically), with a workflow column linking to each manager, one state column per site, workflow/state/stale filters and "new post" buttons. Config: `workflows` (restrict), `per_page` (default 15). This is the entry point to the per-workflow managers, which have no nav entry.
+- `workflows_assigned_posts` — posts assigned to the current user in ONE workflow, resolved from `collection` (`limit`).
 
 ---
 

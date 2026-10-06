@@ -72,7 +72,7 @@ Der Befehl ist idempotent: wenn `resources/workflows/<type>.yaml` schon existier
 
 Login ins CP:
 
-- In der eigenen Nav-Sektion (`nav_section`, Default: **Workflows**) — direkt unter „Übersicht", über „Inhalt" — sollte ein Menüpunkt für deinen Workflow auftauchen (z.B. „Beitragsmanager" oder „Übersetzungsmanager").
+- Auf dem Dashboard sollte das Widget **Alle Beiträge** (`workflows_overview`, siehe [Dashboard-Widget](#dashboard-widget)) die Beiträge deines Workflows listen. Die Workflow-Spalte verlinkt auf den Manager (z.B. „Beitragsmanager" unter `/cp/workflows/post-manager`); einen eigenen Nav-Eintrag haben die Manager nicht.
 - Als Super-Admin siehst du zusätzlich unter **Settings > Workflows** die Editor-UI für die YAML.
 - Öffne einen Entry der gebackfillten Collection: im Editor-Header solltest du die Workflow-Aktionsbuttons sehen (statt oder neben Statamics Publish-Button).
 
@@ -92,7 +92,16 @@ Damit die Workflows greifen, müssen ein paar projekt-seitige Dinge stimmen:
 
 **Super-Admins.** Mindestens ein User mit `super: true` in `users/*.yaml` — Super-Admins umgehen alle Workflow-Gates und können die Settings-UI benutzen.
 
-**Nav-Sektion.** Standardmäßig „Workflows". Wenn die Manager unter einer anderen Überschrift stehen sollen, siehe [Konfiguration](#konfiguration). Der Titel wird über den JS-Übersetzer des CP gerendert, der nackte Strings nur aus einer projektseitigen `lang/<locale>.json` auflöst — ohne Eintrag dort steht er wörtlich da, genau wie „Settings > Workflows".
+<a id="dashboard-widget"></a>**Dashboard-Widget.** Einstieg in die Workflows ist das Dashboard, nicht die Nav. Das Widget in `config/statamic/cp.php` eintragen:
+
+```php
+'widgets' => [
+    // …
+    ['type' => 'workflows_overview', 'width' => 100, 'per_page' => 25],
+],
+```
+
+Es listet alle Beiträge aller aktiven Workflows in einer Tabelle (neue Workflows erscheinen automatisch), mit Workflow-, Status- und Veraltet-Filter und „Neuer Beitrag"-Buttons. Optional `workflows: [...]` zum Einschränken; `per_page` Default 15. Die übrigen Widgets: siehe DOCS.md § 9.
 
 ---
 
@@ -112,15 +121,14 @@ Kopiert `config/workflows.php` ins Projekt. Wichtigste Keys:
 | `revisions`            | `true`           | Statamic-Revisions bei Transitions schreiben (braucht Statamic Pro)   |
 | `privileged_groups`    | `['admins']`     | Groups, die alle Workflow-Gates umgehen                                |
 | `post_creator_groups`  | `['admins']`     | Fallback wenn Workflow keinen eigenen setzt                            |
-| `nav_section`          | `'Workflows'`    | Titel der eigenen CP-Nav-Sektion                                       |
+| `nav_section`          | `'Workflows'`    | **Deprecated, ungenutzt** — es gibt keine eigene Nav-Sektion mehr      |
 | `sla_scheduler`        | `true`           | Stündlichen SLA-Alterungs-Tick registrieren                           |
 
-> **Umbenannt:** `nav_parent` (Default `'Dashboard'`) heißt jetzt `nav_section`
-> (Default `'Workflows'`). Die Manager hängen nicht mehr als Unterpunkte an einem
-> bestehenden Top-Level-Item, sondern stehen flach in einer eigenen Sektion. Hast
-> du `config/workflows.php` publiziert, wird dein altes `nav_parent` ignoriert und
-> `nav_section` kommt aus den Addon-Defaults — kein Fehler, aber die Überschrift
-> heißt dann „Workflows", bis du sie selbst setzt.
+> **Entfallen:** Die eigene Nav-Sektion mit einem Eintrag pro Workflow gibt es
+> nicht mehr, `nav_section` (früher `nav_parent`) wird nicht mehr gelesen. Ein
+> publiziertes `config/workflows.php`, das den Key noch setzt, lädt weiter ohne
+> Fehler. Die Manager bleiben unter `/cp/workflows/<slug>` erreichbar; im CP
+> gibt es nur noch „Settings > Workflows" für Super-Admins.
 
 ---
 
@@ -249,7 +257,7 @@ Optional zusätzlich `lang/vendor/workflows/`, `config/workflows.php` falls publ
 
 **Assets werden nicht geladen / alter Bundle-Hash** — `php artisan vendor:publish --tag=workflows --force` ausführen und im Browser Cmd+Shift+R.
 
-**Empty CP nav / Workflow-Manager fehlt** — prüfen dass die Workflow-YAML unter `resources/workflows/<name>.yaml` liegt und `metadata.nav.slug` gesetzt ist. `nav_section` ist frei wählbar und muss zu keinem existierenden Nav-Item passen; hat kein Workflow ein `metadata.nav`, wird die Sektion gar nicht gerendert.
+**Keine Workflows im CP / Workflow-Manager fehlt** — die Manager haben keinen Nav-Eintrag mehr. Prüfen, dass `workflows_overview` in `config/statamic/cp.php → widgets` steht (siehe [Dashboard-Widget](#dashboard-widget)) und die Workflow-YAML unter `resources/workflows/<name>.yaml` liegt und aktiv ist. Fehlt nur der Link auf die Manager-Seite (`/cp/workflows/<slug>`), ist `metadata.nav.slug` nicht gesetzt. `/cp/workflows` selbst leitet aufs Dashboard um.
 
 **„group [foo] not found"** — der referenzierte Group-Handle steht in der Workflow-YAML aber nicht in `resources/users/groups.yaml`. Anlegen und Cache leeren (`php artisan cache:clear`).
 

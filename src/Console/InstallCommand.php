@@ -100,7 +100,7 @@ class InstallCommand extends Command
         $this->line('Next steps:');
         $this->line(' • Edit resources/workflows/*.yaml to fine-tune places, transitions and collections.');
         $this->line(' • Ensure the user groups referenced by your workflow(s) exist in resources/users/groups.yaml.');
-        $this->line(" • Open the CP; the 'Workflows' nav section (config workflows.nav_section) lists every workflow with metadata.nav.");
+        $this->line(" • Open the CP dashboard; the 'workflows_overview' widget (config/statamic/cp.php → widgets) lists the posts of every active workflow.");
 
         return self::SUCCESS;
     }
