@@ -377,8 +377,9 @@ class WorkflowDefinitionWriter
      * Merge editor payload over the current definition:
      * - `places` is treated ADDITIVELY: the editor's payload can add new
      *   handles or replace the config of existing ones, but never removes
-     *   places implicitly. Deleting a place requires the dedicated
-     *   `deletePlace` endpoint because affected entries need migration.
+     *   places implicitly. Deleting a place means naming it in
+     *   `$removePlaces` — the editor's save does that for its
+     *   `removed_places`, after migrating their entries.
      * - `transitions` is a WHOLESALE REPLACEMENT: transitions have no data
      *   hanging off them, so add/remove/rename via save is safe.
      * - Other top-level keys are replaced when present, kept otherwise.
@@ -620,10 +621,12 @@ class WorkflowDefinitionWriter
     /**
      * Raise a validation failure with a translated message.
      *
-     * These are NOT developer-only exceptions: WorkflowController catches them
-     * around save()/deletePlace() and hands `getMessage()` straight back as the
-     * 422 body, which the settings editor shows as a toast (the response message
-     * wins over the generic `settings_save_error` fallback). So they resolve in
+     * These are NOT developer-only exceptions: the graph editor's save and
+     * validate endpoints (WorkflowSettingsController, via dryRun()/
+     * collectErrors()) hand the messages straight back in the 422 / `errors`
+     * body, which the editor shows at the node, the field and as a toast (the
+     * response message wins over the generic `settings_save_error` fallback),
+     * and `workflows:make` prints them. So they resolve in
      * the admin's CP locale. YAML keys, handles and action types inside the text
      * stay verbatim in every language -- they are identifiers the author has to
      * type back into the editor, not prose.

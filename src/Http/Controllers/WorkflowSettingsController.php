@@ -33,9 +33,9 @@ use TakepartMedia\Workflows\Workflow\WorkflowStateSeeder;
 use TakepartMedia\Workflows\Workflow\WorkflowStateStore;
 
 /**
- * Super-admin-only workflow administration: the settings index (install,
- * on/off, delete, seed states) and the per-workflow settings editor with its
- * save/delete-place endpoints. Split out of WorkflowController, which serves
+ * Super-admin-only workflow administration: the settings index (create,
+ * on/off, delete, seed states) and the per-workflow graph editor with its
+ * save/validate/usage endpoints. Split out of WorkflowController, which serves
  * the editorial side (queues, instance summary, transitions); the helpers both
  * need live in WorkflowControllerHelpers.
  */
@@ -106,35 +106,14 @@ class WorkflowSettingsController extends CpController
             ->values()
             ->all();
 
-        // Installer state — powers the "Install workflow" modal in the CP. Only
-        // types the project does NOT have yet: an installed workflow is managed
-        // from its own row (settings, on/off, delete), never by re-running the
-        // installer over it.
         $installer = app(WorkflowInstaller::class);
-        // Labelled from the example's own metadata (WorkflowInstaller::describedTypes),
-        // so the modal offers "Einfache Sprache" rather than the file name — and says
-        // in one line what the flow is for.
-        $installTypes = collect($installer->describedTypes())
-            ->reject(fn (array $type) => $type['installed'])
-            ->map(fn (array $type) => [
-                'value' => $type['value'],
-                'label' => $type['label'],
-                'description' => $type['description'],
-            ])
-            ->values()
-            ->all();
 
         return Inertia::render('WorkflowsSettingsIndex', [
             'workflows' => $workflows,
             'initialColumns' => $columns,
-            'install' => [
-                'types' => $installTypes,
-                'collections' => $installer->projectCollections(),
-                'submit_url' => cp_route('workflows.settings.install'),
-            ],
-            // The "create workflow" modal. Unlike the installer it offers EVERY
-            // shipped type: an example is a template here, created under a new
-            // handle, so having one installed already is no reason to hide it.
+            // The "create workflow" modal. It offers EVERY shipped type: an
+            // example is a template here, created under a new handle, so having
+            // one installed already is no reason to hide it.
             'create' => [
                 'submit_url' => cp_route('workflows.settings.create'),
                 'templates' => collect($installer->describedTypes())
@@ -319,67 +298,6 @@ class WorkflowSettingsController extends CpController
     }
 
     /**
-     * CP-side counterpart of `php artisan workflows:install`: given a picked
-     * workflow type, a chosen collection list, and an optional backfill
-     * flag, run the same primitive steps the CLI does (copy example, rewrite
-     * collections, optionally seed states) via the shared `WorkflowInstaller`
-     * service. Super-admin-only.
-     *
-     * Installing over an existing workflow is rejected. The definition is the
-     * project's own from the moment it lands — its collections are edited in the
-     * settings editor, and switching it off or removing it happens from its row
-     * in the settings index. The UI hides installed types; this is the gate.
-     */
-    public function installWorkflow(Request $request)
-    {
-        abort_unless($this->isSuperAdmin(), 403);
-
-        $installer = app(WorkflowInstaller::class);
-        $availableTypes = $installer->availableTypes();
-
-        if ($availableTypes === []) {
-            return response()->json([
-                'error' => __('workflows::messages.install_no_types'),
-            ], 422);
-        }
-
-        $data = $request->validate([
-            'type' => 'required|string',
-            'collections' => 'array',
-            'collections.*' => 'string',
-            'backfill' => 'boolean',
-        ]);
-
-        if (! in_array($data['type'], $availableTypes, true)) {
-            return response()->json([
-                'error' => __('workflows::messages.install_unknown_type', ['type' => $data['type']]),
-            ], 422);
-        }
-
-        if ($installer->isInstalled($data['type'])) {
-            return response()->json([
-                'error' => __('workflows::messages.install_already_installed', ['type' => $data['type']]),
-            ], 422);
-        }
-
-        $installer->copyExampleIfMissing($data['type']);
-        $collections = $installer->rewriteCollections($data['type'], $data['collections'] ?? []);
-
-        // Backfill only makes sense with something to attach the workflow to.
-        $seeded = ($data['backfill'] ?? false) && $collections !== []
-            ? $installer->backfill($data['type'])
-            : 0;
-
-        return response()->json([
-            'data' => [
-                'type' => $data['type'],
-                'collections' => $collections,
-                'seeded' => $seeded,
-            ],
-        ]);
-    }
-
-    /**
      * Switch an installed workflow on or off. Off means `active: false` in its
      * YAML, which `DefinitionLoader::all()` filters out — the workflow keeps its
      * definition and its recorded history but disappears from the nav, the
@@ -460,10 +378,12 @@ class WorkflowSettingsController extends CpController
     }
 
     /**
-     * Super-admin-only workflow settings editor. Renders the definition of a
-     * workflow (places, transitions, metadata) for editing and reports how many
-     * entries currently sit in each place — the migration prompt uses that
-     * count when a place is about to be deleted.
+     * Super-admin-only graph editor for one workflow. Hands it the stored
+     * definition (places, transitions, metadata — without what the loader
+     * injects, which comes separately as `injected`), its version for the
+     * optimistic lock, the save/validate/usage endpoints, how many entries sit
+     * in each place (usage badges, the delete dialog's migration prompt) and
+     * every option list the panels pick from.
      */
     public function editSettings(string $workflow)
     {
@@ -492,9 +412,11 @@ class WorkflowSettingsController extends CpController
             ->countBy()
             ->all();
 
+        // The graph editor (WorkflowEditorPage → lazy WorkflowEditor chunk).
         return Inertia::render('WorkflowsSettings', [
             'workflow' => $name,
-            'handle' => $name,
+            // Settings › Workflows — the page's breadcrumb.
+            'indexUrl' => cp_route('workflows.settings.index'),
             // Sent back with every save: a mismatch means the file changed under
             // the editor and the save answers 409 instead of overwriting it.
             'version' => app(WorkflowDefinitionWriter::class)->fingerprint($name),
@@ -514,13 +436,11 @@ class WorkflowSettingsController extends CpController
             'slug' => (string) ($slug ?? ''),
             'definition' => $editable,
             'stateUsage' => $usage,
-            'saveUrl' => cp_route('workflows.api.settings.save', ['workflow' => $name]),
-            'deletePlaceUrlTemplate' => cp_route('workflows.api.settings.place.delete', ['workflow' => $name, 'place' => '__PLACE__']),
             // Without a slug (or while inactive) there is no manager page of its
-            // own — the button falls back to the general queue instead of a 404.
+            // own — null, and the page shows no queue link rather than a 404.
             'queueUrl' => $slug && $loader->isActive($name)
                 ? cp_route('workflows.workflow', ['slug' => $slug])
-                : cp_route('workflows.queue'),
+                : null,
             'reservedPlaces' => WorkflowDefinitionWriter::RESERVED_PLACE_HANDLES,
             'reservedTransitions' => WorkflowDefinitionWriter::RESERVED_TRANSITION_HANDLES,
             // One name field per language. The shipped wording per place and
@@ -766,70 +686,10 @@ class WorkflowSettingsController extends CpController
     }
 
     /**
-     * Persist an editor payload. `places` is merged additively (deletions run
-     * through deletePlace); `transitions`, `metadata`, and the other top-level
-     * keys are wholesale-replaced by whatever the editor sends. The writer
-     * validates the merged result and refuses to save a broken workflow.
-     *
-     * Removing a collection is destructive: its entries leave the workflow and
-     * their states, assignments, history and comments are purged. That needs
-     * `confirm_collection_removal` — without it the endpoint answers 422 with
-     * the affected count so the editor can prompt first (same shape as
-     * deletePlace's migration prompt).
-     */
-    public function saveSettings(Request $request, string $workflow)
-    {
-        abort_unless($this->isSuperAdmin(), 403);
-
-        $loader = app(DefinitionLoader::class);
-        $name = $this->workflowByHandleOrSlug($workflow, $loader);
-        abort_if($name === null, 404);
-
-        $payload = $request->only(self::DEFINITION_KEYS);
-        $collections = $request->has('collections') ? (array) $request->input('collections', []) : null;
-
-        if ($response = $this->unknownCollectionResponse((array) $collections)) {
-            return $response;
-        }
-
-        $change = $this->collectionChange($name, $collections, $loader);
-
-        if ($response = $this->collectionRemovalResponse($change, $request->boolean('confirm_collection_removal'))) {
-            return $response;
-        }
-
-        try {
-            app(WorkflowDefinitionWriter::class)->save($name, $payload);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-
-        $seeded = $this->applyCollectionChange($name, $change);
-
-        app(WorkflowEventStore::class)->log(
-            'workflow:'.$name,
-            $name,
-            'definition_saved',
-            ['note' => __('workflows::messages.event_note_definition_saved')]
-        );
-
-        $raw = $loader->raw($name);
-
-        return response()->json([
-            'data' => [
-                'definition' => $this->stripAutoInjected($raw),
-                'purged' => count($change['orphaned']),
-                'seeded' => $seeded,
-                // Recomputed because a purge changes the per-place counts the
-                // editor uses for its "place still holds entries" prompt.
-                'state_usage' => $this->stateUsage($name),
-            ],
-        ]);
-    }
-
-    /**
-     * The graph editor's save. Same writer, same collection gate as
-     * saveSettings(), plus:
+     * The graph editor's save — the only way the CP writes a definition. The
+     * writer validates the merged result (WorkflowDefinitionWriter) and the
+     * collection gate guards destructive collection removals
+     * (`confirm_collection_removal`, see collectionRemovalResponse()). On top:
      *
      * - optimistic locking: `version` must be the fingerprint the editor was
      *   loaded with (WorkflowDefinitionWriter::fingerprint()). Anything else
@@ -1259,27 +1119,6 @@ class WorkflowSettingsController extends CpController
     }
 
     /**
-     * The data side of a collection change, run only after the YAML is safely
-     * written — a validation failure leaves both the definition and the
-     * workflow data untouched. Purges the orphaned subjects (and logs it), then
-     * seeds state rows for entries of freshly added collections, so they take
-     * part in SLA aging and show up in personal queues instead of only existing
-     * via the derived display default. Returns the number of rows seeded.
-     *
-     * @param  array{removed: array<int, string>, added: array<int, string>, orphaned: array<int, string>}  $change
-     */
-    private function applyCollectionChange(string $name, array $change): int
-    {
-        if ($change['orphaned'] !== []) {
-            $this->purgeWorkflowData($name, $change['orphaned']);
-        }
-
-        $this->logCollectionsRemoved($name, $change);
-
-        return $this->seedAddedCollections($name, $change);
-    }
-
-    /**
      * The `collections_removed` history line, once the purge went through.
      *
      * @param  array{removed: array<int, string>, added: array<int, string>, orphaned: array<int, string>}  $change
@@ -1351,101 +1190,6 @@ class WorkflowSettingsController extends CpController
             'places' => (object) array_diff_key((array) ($raw['places'] ?? []), (array) ($editable['places'] ?? [])),
             'transitions' => (object) array_diff_key((array) ($raw['transitions'] ?? []), (array) ($editable['transitions'] ?? [])),
         ];
-    }
-
-    /**
-     * Delete a place from a workflow. When the place still holds entries the
-     * caller MUST supply `migrate_to` — every affected entry is bulk-moved to
-     * that place, then the place (and any transition that references it) is
-     * removed from the YAML. Without `migrate_to` on a non-empty place the
-     * endpoint returns 422 with the affected count so the client can open the
-     * migration modal.
-     */
-    public function deletePlace(Request $request, string $workflow, string $place)
-    {
-        abort_unless($this->isSuperAdmin(), 403);
-
-        $loader = app(DefinitionLoader::class);
-        $name = $this->workflowByHandleOrSlug($workflow, $loader);
-        abort_if($name === null, 404);
-
-        $raw = $loader->raw($name);
-        $editable = $this->stripAutoInjected($raw);
-
-        if (! array_key_exists($place, $editable['places'] ?? [])) {
-            return response()->json(['message' => $this->t('place_not_found')], 404);
-        }
-
-        if (($editable['initial_place'] ?? null) === $place) {
-            return response()->json(['message' => $this->t('place_delete_initial')], 422);
-        }
-
-        $store = app(WorkflowStateStore::class);
-        $affected = $store->subjectsInState($name, $place);
-        $migrateTo = (string) $request->input('migrate_to', '');
-
-        if (count($affected) > 0) {
-            if ($migrateTo === '') {
-                return response()->json([
-                    'message' => __('workflows::messages.place_delete_needs_migration'),
-                    'affected_count' => count($affected),
-                    'affected_ids' => $affected,
-                ], 422);
-            }
-
-            if ($migrateTo === $place || ! array_key_exists($migrateTo, $editable['places'] ?? [])) {
-                return response()->json(['message' => $this->t('migrate_target_invalid')], 422);
-            }
-
-            $store->migrateState($name, $place, $migrateTo);
-        }
-
-        // Drop the place + any transition that references it.
-        unset($editable['places'][$place]);
-        foreach ($editable['transitions'] ?? [] as $handle => $transition) {
-            $froms = (array) ($transition['from'] ?? []);
-            $touches = in_array($place, $froms, true) || ($transition['to'] ?? null) === $place;
-            if ($touches) {
-                unset($editable['transitions'][$handle]);
-            }
-        }
-
-        try {
-            // The handle has to be named explicitly: merge() is additive for
-            // places, so omitting it from the payload alone would restore it.
-            app(WorkflowDefinitionWriter::class)->save($name, $editable, [$place]);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-
-        app(WorkflowEventStore::class)->log(
-            'workflow:'.$name,
-            $name,
-            'place_deleted',
-            $this->placeDeletedEvent($place, count($affected) > 0 ? $migrateTo : null, count($affected))
-        );
-
-        $freshRaw = $loader->raw($name);
-
-        return response()->json([
-            'data' => [
-                'definition' => $this->stripAutoInjected($freshRaw),
-                'affected' => count($affected),
-            ],
-        ]);
-    }
-
-    /**
-     * Resolve the `{workflow}` segment of the save/delete-place API routes. The
-     * editor builds those URLs from the HANDLE (a workflow without `metadata.nav`
-     * has no slug); the slug is still accepted as a fallback, since these routes
-     * used to be keyed by it.
-     */
-    private function workflowByHandleOrSlug(string $key, DefinitionLoader $loader): ?string
-    {
-        return in_array($key, $loader->allIncludingInactive(), true)
-            ? $key
-            : $this->workflowBySlug($key, $loader);
     }
 
     /**

@@ -8,11 +8,11 @@ use Statamic\Facades\Collection;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * Shared install helpers so both the interactive `workflows:install` command
- * and the CP-side installer modal call the exact same code path — the CLI
- * owns the prompting, the controller owns the HTTP form, but the four
- * primitive steps (list types, copy example, rewrite collections, backfill)
- * live here.
+ * Install helpers behind the interactive `workflows:install` command — the CLI
+ * owns the prompting, the four primitive steps (list types, copy example,
+ * rewrite collections, backfill) live here. The CP's "create workflow" modal
+ * reads the type list from here too (describedTypes(), projectCollections());
+ * creating from an example goes through WorkflowScaffolder.
  */
 class WorkflowInstaller
 {
@@ -112,11 +112,10 @@ class WorkflowInstaller
      * True when the project already has a definition file for this type at
      * `resources/workflows/<type>.yaml`.
      *
-     * The CP installer uses this to hide the type entirely (and its endpoint
-     * rejects it): once installed, the definition is the project's own and is
-     * edited, switched off or removed from its row in the settings index. The
-     * interactive CLI still re-runs over an installed type — it only touches
-     * the `collections:` key and optionally seeds, and it asks first.
+     * The create modal marks such a type as installed (it can still be used
+     * as a template under a new handle). The interactive CLI re-runs over an
+     * installed type — it only touches the `collections:` key and optionally
+     * seeds, and it asks first.
      */
     public function isInstalled(string $type): bool
     {
@@ -126,8 +125,7 @@ class WorkflowInstaller
     /**
      * Current `collections:` value for an installed type, or an empty list if
      * the type is not installed yet. Read by the CLI installer to name the
-     * collections it is about to backfill. The CP installer never sees an
-     * installed type — those are managed from their row in the settings index.
+     * collections it is about to backfill.
      *
      * @return array<int, string>
      */

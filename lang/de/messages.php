@@ -462,11 +462,8 @@ return [
     'handle' => 'Handle',
     'settings_index_intro' => 'Alle in diesem Projekt definierten Workflows. Klick einen an, um seine Places, Transitions und Metadaten zu bearbeiten.',
     'settings_index_empty' => 'Noch keine Workflows angelegt. Lege eine YAML unter resources/workflows/ an oder starte mit php artisan workflows:install.',
-    'install_workflow' => 'Workflow installieren',
-    'install_intro' => 'Fügt einen der mitgelieferten Workflow-Typen dem Projekt hinzu. Danach gehört die YAML dem Projekt — Collections, Places und Transitions bearbeitest du in den Einstellungen des Workflows.',
-    'install_type_label' => 'Workflow-Typ',
     
-    // Langbeschreibung der mitgelieferten Beispiele im Install-Modal, je Type-Handle.
+    // Langbeschreibung der mitgelieferten Beispiele im Anlegen-Modal, je Type-Handle.
     // Fällt auf `metadata.label` aus der YAML zurück, wenn ein Projekt ein eigenes
     // Beispiel ergänzt, für das es hier keinen Schlüssel gibt.
     'install_description_postmanager' => 'Beitrags-Aktualisierung mit fachlicher Freigabe',
@@ -475,15 +472,8 @@ return [
     'install_collections_label' => 'Collections',
     'install_no_collections' => 'Keine Auswahl',
     'install_no_project_collections' => 'Dieses Projekt hat keine Statamic-Collections. Lege welche an und komm dann hierher zurück.',
-    'install_backfill_label' => 'Bestehende Einträge einbeziehen',
-    'install_backfill_hint' => 'Trägt alle vorhandenen Einträge der ausgewählten Collections in den Initial- bzw. Fertig-Zustand des Workflows ein. Optional — kann später über workflows:seed-states nachgeholt werden.',
-    'install_run' => 'Installieren',
-    'install_success' => 'Workflow installiert.',
-    'install_error' => 'Workflow konnte nicht installiert werden.',
     'install_no_types' => 'Kein Workflow-Typ im Addon verfügbar.',
     'install_unknown_type' => 'Workflow-Typ [:type] ist nicht verfügbar.',
-    'install_already_installed' => 'Workflow-Typ [:type] ist bereits installiert. Bearbeite ihn in seinen Einstellungen.',
-    'install_all_installed' => 'Alle mitgelieferten Workflow-Typen sind schon installiert.',
 
     // Create a workflow (settings index, workflows:make — WorkflowScaffolder)
     'create_workflow' => 'Workflow anlegen',
@@ -524,14 +514,10 @@ return [
     'workflow_delete_confirm' => 'Die Definition von „:workflow" wird aus resources/workflows/ entfernt. Status, Zuweisungen, Verlauf und Kommentare bleiben in der Datenbank — bei einer erneuten Installation sind sie wieder da.',
     'workflow_deleted' => 'Workflow gelöscht.',
     'workflow_delete_error' => 'Workflow konnte nicht gelöscht werden.',
-    'settings_intro' => 'Places, Transitions und Metadaten bearbeiten. Änderungen werden nach resources/workflows/.yaml geschrieben.',
     'settings_saved' => 'Workflow gespeichert.',
     'settings_dangling_handles' => 'Bitte gib für jede neue Place/Transition einen Handle oder ein Label an, bevor du speicherst.',
     'settings_save_error' => 'Workflow konnte nicht gespeichert werden.',
     'settings_version_conflict' => 'Der Workflow wurde inzwischen geändert – von jemand anderem oder direkt in der Datei. Neu laden, um die aktuelle Fassung zu sehen, oder bewusst überschreiben.',
-    'settings_label_hint_intro' => 'Ein eigener Name pro Sprache hat Vorrang. Ein leeres Feld zeigt grau, wie der Place ohne ihn heißt: die Übersetzung des Addons, anpassbar in',
-    'settings_label_hint_with_key' => 'unter dem Schlüssel',
-    'back_to_queue' => 'Zurück zur Queue',
     'metadata' => 'Metadaten',
     'nav_label' => 'Nav-Titel',
     'nav_label_hint' => 'Gilt so, wie es hier steht — in jeder CP-Sprache. Leer lassen, damit der Titel aus den Übersetzungen kommt (Schlüssel: nav.<slug>) und der CP-Sprache folgt.',
@@ -575,12 +561,10 @@ return [
     'handle_placeholder' => 'z. B. draft, review',
     'label_placeholder' => 'Anzeigename',
     'transitions' => 'Transitions',
-    'no_transitions' => 'Keine Transitions definiert.',
 
     // Actions einer Transition: Schritte zwischen Klick und Anwenden. Zwei Typen
     // öffnen einen Dialog, und davon passt nur einer hinein — „target_missing" ist
     // kein Dialog, sondern eine stille Sperre und zählt nicht gegen dieses Limit.
-    'transition_actions' => 'Aktionen',
     'action_add' => 'Action hinzufügen',
     'from_follows_initial_place' => 'Folgt dem Start-Place — die erste Transition führt aus ihm heraus.',
     'action_type_user_assignment' => 'Benutzerzuweisung',
@@ -597,7 +581,7 @@ return [
     // Einfache-Sprache-Manager wählbar, siehe canResubmitPlainLanguage().
     'action_type_plain_language_resubmit' => 'Einfache Sprache neu erzeugen',
     // EINE Action, beide Scopes, ein Label — deshalb liest die Place-Karte
-    // denselben Key (siehe SHARED_ACTION_TYPES in WorkflowSettings.vue). Anders
+    // denselben Key (siehe SHARED_ACTION_TYPES in editor/model/constants.js). Anders
     // als die drei Markierungen darüber TUT sie etwas: sie verschickt eine Mail.
     // Höchstens einmal je Transition und je Place (der Writer lehnt eine zweite
     // ab). Siehe Workflow\MailAction.
@@ -646,17 +630,11 @@ return [
     'actions' => 'Aktionen',
     'confirm_delete_place' => 'Place [:handle] löschen?',
     'confirm_delete_transition' => 'Transition [:handle] löschen?',
-    'migrate_place_title' => 'Place löschen — Beiträge umziehen',
     'migrate_place_prompt' => ':count Beiträge sind aktuell im Place :place. Wähle einen Ziel-Place, in den sie vor dem Löschen migriert werden.',
     'migrate_target' => 'Verschieben nach',
     'select_place' => 'Place wählen…',
     'confirm_delete' => 'Löschen',
     'place_deleted' => 'Place [:place] gelöscht.',
-    'place_delete_error' => 'Place konnte nicht gelöscht werden.',
-    'place_not_found' => 'Place nicht gefunden.',
-    'place_delete_initial' => 'Das initial_place kann nicht gelöscht werden. Ändere zuerst initial_place.',
-    'migrate_target_invalid' => 'Ungültiges Migrationsziel.',
-    'place_delete_needs_migration' => 'Es gibt noch Beiträge in diesem Place. Bitte migrate_to setzen.',
     'event_note_definition_saved' => 'Workflow-Definition über die Einstellungen bearbeitet.',
     'event_note_place_deleted' => 'Place [:place] über die Einstellungen entfernt.',
     'event_note_place_migrated' => 'Place [:place] über die Einstellungen entfernt — :count Beiträge nach [:target] verschoben.',
@@ -745,7 +723,6 @@ return [
     // den Transition-Typen, weil es dieselbe Action ist.
     // — kein Klick-Moment wie bei Transitions, deshalb eine eigene, kleinere
     // Typ-Menge (siehe Workflow\PlaceActions).
-    'place_actions' => 'Aktionen',
     'place_action_type_pending_rewrite_spinner' => 'Ladeanzeige während Umschreibung',
     'place_action_type_refresh_interval' => 'Aktualisieren nach X Minuten (mit Modal)',
     'action_refresh_interval_minutes_placeholder' => 'Minuten',
@@ -974,11 +951,9 @@ return [
     'progress_off_track' => 'Abzweigung',
     'progress_unknown_place' => 'Dieser Zustand steht in keinem Place des Workflows.',
     // Graph-Editor (Settings › Workflows).
-    'editor_graph_view' => 'Graph-Ansicht (Beta)',
-    'editor_form_view' => 'Formularansicht',
     'editor_loading' => 'Graph-Editor wird geladen …',
+    'editor_breadcrumb_label' => 'Brotkrumen',
     'editor_load_failed' => 'Der Graph-Editor konnte nicht geladen werden.',
-    'editor_read_only' => 'Nur Ansicht – bearbeitet wird vorerst im Formular.',
     'editor_toolbar_label' => 'Graph-Werkzeuge',
     'editor_canvas_label' => 'Workflow-Graph',
     'editor_zoom_in' => 'Vergrößern',
@@ -1096,7 +1071,7 @@ return [
     'editor_conflict_body' => 'Neu laden verwirft deine Änderungen; Überschreiben ersetzt die andere Fassung.',
     'editor_conflict_reload' => 'Neu laden',
     'editor_conflict_overwrite' => 'Trotzdem überschreiben',
-    'editor_discard_on_switch' => 'Ungespeicherte Änderungen in dieser Ansicht verwerfen?',
+    'editor_leave_unsaved' => 'Ungespeicherte Änderungen verwerfen und die Seite verlassen?',
 
     // Graph-Editor: Canvas.
     'editor_add_next' => 'Nächsten Schritt hinzufügen (Tab)',
@@ -1111,7 +1086,6 @@ return [
     'editor_add_transition_here' => 'Neuer Übergang hier',
     'editor_disconnect' => 'Verbindung trennen',
     'editor_confirm_delete_nodes' => ':count Elemente löschen?',
-    'editor_delete_needs_target' => 'In [:place] liegen noch Beiträge – wähle unter „Verbindungen & Nutzung“ ein Ziel für sie und lösche dort.',
     'editor_connect_unknown' => 'Systemschritte lassen sich nicht verbinden.',
     'editor_connect_self' => 'Ein Status lässt sich nicht direkt mit sich selbst verbinden – eine Schleife führt über einen Übergang.',
     'editor_connect_transition_to_transition' => 'Ein Übergang führt immer in einen Status.',

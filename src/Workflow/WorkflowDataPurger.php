@@ -12,7 +12,7 @@ use TakepartMedia\Workflows\Translation\PlainLanguageJobStore;
  *
  * Irreversible, and deliberately dumb: it deletes what it is handed. Deciding WHICH
  * subjects deserve that is the caller's job — removing a collection from a workflow
- * (WorkflowSettingsController::saveSettings, behind a confirmation), pruning rows nothing
+ * (WorkflowSettingsController::saveDefinition, behind a confirmation), pruning rows nothing
  * points at any more (PruneStatesCommand), or an entry being deleted outright
  * (PurgeWorkflowDataOnEntryDeleted).
  *

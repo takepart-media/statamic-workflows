@@ -1,7 +1,7 @@
 import WorkflowQueue from './pages/WorkflowQueue.vue'
 import WorkflowInstanceDetail from './pages/WorkflowInstanceDetail.vue'
 import TranslationInstanceDetail from './pages/TranslationInstanceDetail.vue'
-import WorkflowSettings from './pages/WorkflowSettings.vue'
+import WorkflowEditorPage from './pages/WorkflowEditorPage.vue'
 import WorkflowsSettingsIndex from './pages/WorkflowsSettingsIndex.vue'
 import RevisionStatusIndex from './fieldtypes/RevisionStatusIndex.vue'
 import RevisionStatusFieldtype from './fieldtypes/RevisionStatusFieldtype.vue'
@@ -18,7 +18,9 @@ Statamic.booting(() => {
     Statamic.$inertia.register('WorkflowsQueue', WorkflowQueue)
     Statamic.$inertia.register('WorkflowsInstance', WorkflowInstanceDetail)
     Statamic.$inertia.register('WorkflowsTranslationInstance', TranslationInstanceDetail)
-    Statamic.$inertia.register('WorkflowsSettings', WorkflowSettings)
+    // The graph editor. The page is a thin shell; the editor itself (Vue Flow,
+    // dagre) is a lazy chunk it imports on mount.
+    Statamic.$inertia.register('WorkflowsSettings', WorkflowEditorPage)
     Statamic.$inertia.register('WorkflowsSettingsIndex', WorkflowsSettingsIndex)
 
     // `revision_status` fieldtype: listing-column cell + read-only editor display.

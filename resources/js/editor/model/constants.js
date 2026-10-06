@@ -1,5 +1,5 @@
 // Shared constants of the workflow-definition model. Framework-free: imported by
-// the settings page today and by the graph editor later, and by the vitest suite.
+// the graph editor and by the vitest suite.
 // Every list here mirrors a constant on the server — keep the two in step.
 
 // Mirrors Workflow\TransitionActions::MODES / MATCHES.

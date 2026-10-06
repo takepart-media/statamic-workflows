@@ -5,7 +5,6 @@
             v-model:minimap="minimap"
             v-model:show-system="showSystem"
             :has-system-steps="hasSystemSteps"
-            :form-view-label="formViewLabel"
             :saving="saving"
             :dirty="api.dirty.value"
             :problems="problems"
@@ -30,7 +29,6 @@
             @zoom-out="canvas?.zoomOut()"
             @fit="canvas?.fit()"
             @auto-layout="autoLayout"
-            @form-view="$emit('form-view')"
             @add-place="addPlace"
             @add-transition="addTransition"
             @save="save()"
@@ -218,8 +216,9 @@ import CollectionRemovalDialog from './shared/CollectionRemovalDialog.vue';
 import DeletePlaceDialog from './shared/DeletePlaceDialog.vue';
 import { EDITOR_CONTEXT } from './context.js';
 
-// The settings page hands over its whole prop set; only what is declared here is
-// used, the rest must not end up as attributes on the root element.
+// The page (WorkflowEditorPage.vue) hands over editSettings()'s whole prop set;
+// only what is declared here is used, the rest must not end up as attributes on
+// the root element.
 defineOptions({ inheritAttrs: false });
 
 const props = defineProps({
@@ -260,16 +259,16 @@ const props = defineProps({
     mailStatus: { type: Object, default: null },
     reminderTime: { type: String, default: null },
     mailTypes: { type: Array, default: () => [] },
-    // Text of the toolbar's "back to the form" button; empty → no button.
-    formViewLabel: { type: String, default: '' },
     // Space kept free below the editor (the host page's bottom padding), px.
     bottomGap: { type: Number, default: 24 },
 });
 
 // saved: {definition, version, stateUsage} after a save (or a reload after a
-//        conflict) — the host keeps its copy of the stored definition current.
+//        conflict).
 // dirty-change: whether there are unsaved changes.
-const emit = defineEmits(['form-view', 'saved', 'dirty-change']);
+// Neither is needed by the page today (the editor owns its state and guards
+// leaving on its own); they are there for a host that wants to know.
+const emit = defineEmits(['saved', 'dirty-change']);
 
 // Statamic CP exposes axios via Vue's global properties, not as a bare import.
 const axios = getCurrentInstance()?.appContext?.config?.globalProperties?.$axios;

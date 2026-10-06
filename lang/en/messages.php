@@ -457,11 +457,8 @@ return [
     'handle' => 'Handle',
     'settings_index_intro' => 'Every workflow defined in this project. Click one to edit its places, transitions, and metadata.',
     'settings_index_empty' => 'No workflows yet. Add a YAML under resources/workflows/ or run php artisan workflows:install to start.',
-    'install_workflow' => 'Install workflow',
-    'install_intro' => 'Adds one of the shipped workflow types to the project. From then on the YAML belongs to the project — edit its collections, places and transitions in the workflow\'s own settings.',
-    'install_type_label' => 'Workflow type',
     
-    // Long-form description of the shipped examples in the install modal, keyed by
+    // Long-form description of the shipped examples in the create modal, keyed by
     // type handle. Falls back to the YAML's `metadata.label` for examples a project
     // adds itself, which have no key here.
     'install_description_postmanager' => 'Post update with expert sign-off',
@@ -470,15 +467,8 @@ return [
     'install_collections_label' => 'Collections',
     'install_no_collections' => 'None selected',
     'install_no_project_collections' => 'This project has no Statamic collections yet. Create some and come back here.',
-    'install_backfill_label' => 'Include existing entries',
-    'install_backfill_hint' => 'Assigns every existing entry of the chosen collections into the workflow\'s initial or finished state. Optional — can be done later via workflows:seed-states.',
-    'install_run' => 'Install',
-    'install_success' => 'Workflow installed.',
-    'install_error' => 'Could not install workflow.',
     'install_no_types' => 'No workflow type shipped in the addon.',
     'install_unknown_type' => 'Workflow type [:type] is not available.',
-    'install_already_installed' => 'Workflow type [:type] is already installed. Edit it in its own settings.',
-    'install_all_installed' => 'Every shipped workflow type is already installed.',
 
     // Create a workflow (settings index, workflows:make — WorkflowScaffolder)
     'create_workflow' => 'Create workflow',
@@ -519,14 +509,10 @@ return [
     'workflow_delete_confirm' => 'The definition of “:workflow” will be removed from resources/workflows/. States, assignees, history and comments stay in the database — reinstalling brings them back.',
     'workflow_deleted' => 'Workflow deleted.',
     'workflow_delete_error' => 'Could not delete workflow.',
-    'settings_intro' => 'Edit places, transitions, and metadata. Changes save into resources/workflows/.yaml',
     'settings_saved' => 'Workflow saved.',
     'settings_dangling_handles' => 'Please give each new place/transition either a handle or a label before saving.',
     'settings_save_error' => 'Could not save workflow.',
     'settings_version_conflict' => 'The workflow has changed in the meantime – by someone else or directly in its file. Reload to see the current version, or overwrite it deliberately.',
-    'settings_label_hint_intro' => 'An own name per language takes precedence. An empty field shows in grey what the place is called without it: the addon’s translation, adjustable in',
-    'settings_label_hint_with_key' => 'under the key',
-    'back_to_queue' => 'Back to queue',
     'metadata' => 'Metadata',
     'nav_label' => 'Nav label',
     'nav_label_hint' => 'Used exactly as entered, in every CP language. Leave empty to take the title from the translations (key: nav.<slug>) and follow the CP language.',
@@ -570,12 +556,10 @@ return [
     'handle_placeholder' => 'e.g. draft, review',
     'label_placeholder' => 'Display name',
     'transitions' => 'Transitions',
-    'no_transitions' => 'No transitions defined.',
 
     // A transition's actions: steps between the click and applying it. Two known
     // types open a dialog, and only one of those fits in that moment —
     // `target_missing` opens nothing, it's a silent gate, and does not count.
-    'transition_actions' => 'Actions',
     'action_add' => 'Add action',
     'from_follows_initial_place' => 'Follows the start place — the first transition is the one leading out of it.',
     'action_type_user_assignment' => 'User assignment',
@@ -592,7 +576,7 @@ return [
     // the plain-language manager, see canResubmitPlainLanguage().
     'action_type_plain_language_resubmit' => 'Rewrite plain language',
     // ONE action, both scopes, one label — which is why the place card reads this
-    // same key (see SHARED_ACTION_TYPES in WorkflowSettings.vue). Unlike the three
+    // same key (see SHARED_ACTION_TYPES in editor/model/constants.js). Unlike the three
     // markers above it DOES something: it sends a mail. At most one per transition
     // and per place; the writer rejects a second. See Workflow\MailAction.
     'action_type_mail' => 'Send mail',
@@ -638,17 +622,11 @@ return [
     'actions' => 'Actions',
     'confirm_delete_place' => 'Delete place [:handle]?',
     'confirm_delete_transition' => 'Delete transition [:handle]?',
-    'migrate_place_title' => 'Delete place — reassign entries',
     'migrate_place_prompt' => ':count entries are currently in place :place. Pick a target place to move them to before deleting.',
     'migrate_target' => 'Move to',
     'select_place' => 'Select a place…',
     'confirm_delete' => 'Delete',
     'place_deleted' => 'Place [:place] deleted.',
-    'place_delete_error' => 'Could not delete place.',
-    'place_not_found' => 'Place not found.',
-    'place_delete_initial' => 'Cannot delete the initial place. Change initial_place first.',
-    'migrate_target_invalid' => 'Invalid migration target.',
-    'place_delete_needs_migration' => 'Entries still exist in this place. Provide migrate_to to move them.',
     'event_note_definition_saved' => 'Workflow definition edited via settings.',
     'event_note_place_deleted' => 'Place [:place] removed via settings.',
     'event_note_place_migrated' => 'Place [:place] removed via settings — :count entries moved to [:target].',
@@ -738,7 +716,6 @@ return [
     // above, because it is the same action. No
     // click moment like transitions have, hence its own, smaller type set (see
     // Workflow\PlaceActions).
-    'place_actions' => 'Actions',
     'place_action_type_pending_rewrite_spinner' => 'Loading spinner during rewrite',
     'place_action_type_refresh_interval' => 'Refresh after X minutes (with modal)',
     'action_refresh_interval_minutes_placeholder' => 'Minutes',
@@ -965,11 +942,9 @@ return [
     'progress_off_track' => 'Side branch',
     'progress_unknown_place' => 'This state is not a place in the workflow.',
     // Graph editor (Settings › Workflows).
-    'editor_graph_view' => 'Graph view (beta)',
-    'editor_form_view' => 'Form view',
     'editor_loading' => 'Loading graph editor …',
+    'editor_breadcrumb_label' => 'Breadcrumb',
     'editor_load_failed' => 'The graph editor could not be loaded.',
-    'editor_read_only' => 'View only – edit in the form for now.',
     'editor_toolbar_label' => 'Graph tools',
     'editor_canvas_label' => 'Workflow graph',
     'editor_zoom_in' => 'Zoom in',
@@ -1087,7 +1062,7 @@ return [
     'editor_conflict_body' => 'Reloading discards your changes; overwriting replaces the other version.',
     'editor_conflict_reload' => 'Reload',
     'editor_conflict_overwrite' => 'Overwrite anyway',
-    'editor_discard_on_switch' => 'Discard unsaved changes in this view?',
+    'editor_leave_unsaved' => 'Discard unsaved changes and leave this page?',
 
     // Graph editor: canvas.
     'editor_add_next' => 'Add next step (Tab)',
@@ -1102,7 +1077,6 @@ return [
     'editor_add_transition_here' => 'New transition here',
     'editor_disconnect' => 'Remove connection',
     'editor_confirm_delete_nodes' => 'Delete :count items?',
-    'editor_delete_needs_target' => '[:place] still holds entries – pick a target for them under “Connections & usage” and delete it there.',
     'editor_connect_unknown' => 'System steps can\'t be connected.',
     'editor_connect_self' => 'A status can\'t connect to itself directly – a loop goes through a transition.',
     'editor_connect_transition_to_transition' => 'A transition always leads into a status.',

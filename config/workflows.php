@@ -133,7 +133,7 @@ return [
     |
     | What a `user_assignment` action on a transition may filter candidates by,
     | beyond the two the addon ships with (`group` and `role`). Everything
-    | declared here shows up in the settings editor as another option in the
+    | declared here shows up in the graph editor as another option in the
     | criterion dropdown, usable in both modes — to narrow the picker in the
     | manual mode, and to decide the assignees outright in the automatic one.
     |
@@ -271,7 +271,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Action types this project adds to the ones the addon ships. They appear in
-    | the settings editor like any built-in, are stored in the workflow YAML, and
+    | the graph editor like any built-in, are stored in the workflow YAML, and
     | — if they name a handler — run when the transition does.
     |
     | This is the addon's ONLY outward-facing hook. Nothing else here fires an
@@ -304,7 +304,7 @@ return [
     |                       place carrying it. For "however it got here, do this".
     |
     | Several actions on one transition run in the order the YAML lists them, which
-    | is the order the settings editor shows and lets you drag.
+    | is the order the graph editor lists them in.
     |
     | Two things a handler CANNOT do, both worth knowing before you write one:
     |
@@ -436,15 +436,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Settings editor backups
+    | Graph editor backups
     |--------------------------------------------------------------------------
     |
-    | Before the settings editor (or the installer, or the on/off switch, or
-    | deleting a workflow) rewrites a workflow YAML, the current file is copied
-    | to storage/app/workflows/backups/<handle>/<timestamp>.yaml. This is how
-    | many copies are kept per workflow; older ones are pruned. The editor's
-    | YAML dump drops comments, so a hand-annotated file survives here. 0
-    | switches backups off.
+    | Before the graph editor saves (or `workflows:install` rewrites the
+    | collections, the on/off switch flips `active`, a workflow is deleted or
+    | reset to its example) a workflow YAML is rewritten, the current file is
+    | copied to storage/app/workflows/backups/<handle>/<timestamp>.yaml — no
+    | new copy when it equals the newest one. This is how many copies are kept
+    | per workflow; older ones are pruned. The editor's YAML dump drops
+    | comments, so a hand-annotated file survives here, and a save whose entry
+    | migration fails is rolled back from it. 0 switches backups off.
     |
     */
 
@@ -533,7 +535,7 @@ return [
     |
     | Credentials for the machine-translation services a localization workflow
     | can use. They live here and nowhere else — deliberately NOT in the
-    | workflow YAML the CP settings editor writes: `resources/workflows/*.yaml`
+    | workflow YAML the CP graph editor writes: `resources/workflows/*.yaml`
     | is committed, so a key stored there would land in every clone, backup and
     | CI log, every environment would share it, and rotating it would mean a
     | commit. Reading them through config() rather than env() also keeps them

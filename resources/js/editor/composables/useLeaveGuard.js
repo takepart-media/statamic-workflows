@@ -9,9 +9,6 @@
 // itself. The browser's own beforeunload prompt is always armed while dirty:
 // losing a graph to an accidental reload is the one case worth being stubborn
 // about.
-//
-// The settings page's "Formularansicht" toggle asks with the same message
-// (`editor_discard_on_switch`) and unmounts the editor, which unregisters here.
 
 import { getCurrentInstance, onBeforeUnmount, onMounted, watch } from 'vue';
 import { router } from '@statamic/cms/inertia';
@@ -24,7 +21,7 @@ import { router } from '@statamic/cms/inertia';
  */
 export function useLeaveGuard(isDirty, {
     name = 'workflows-graph-editor',
-    message = () => __('workflows::messages.editor_discard_on_switch'),
+    message = () => __('workflows::messages.editor_leave_unsaved'),
 } = {}) {
     const globals = getCurrentInstance()?.appContext?.config?.globalProperties;
     const registry = globals?.$dirty ?? globalThis.Statamic?.$dirty ?? null;

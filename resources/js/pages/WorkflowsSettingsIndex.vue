@@ -119,10 +119,6 @@ const props = defineProps({
     workflows: { type: Array, required: true },
     initialColumns: { type: Array, required: true },
     create: { type: Object, required: true },
-    // Still sent by settingsIndex for the install endpoint; the page no longer
-    // uses it (examples are templates in the create modal). Declared so it
-    // does not fall through as an attribute onto the root element.
-    install: { type: Object, default: null },
 });
 
 // Statamic exposes axios via Vue's global properties, not as an importable module.

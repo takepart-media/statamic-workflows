@@ -1,13 +1,5 @@
 <template>
     <div class="wf-editor-toolbar" role="toolbar" :aria-label="__('workflows::messages.editor_toolbar_label')">
-        <Button
-            v-if="formViewLabel"
-            variant="ghost"
-            size="sm"
-            icon="arrow-left"
-            :text="formViewLabel"
-            @click="$emit('form-view')"
-        />
         <!-- Which workflow, and whether it runs. Active is not part of the
              definition: the switch posts right away, independent of saving. -->
         <div class="flex min-w-0 items-center gap-3 px-1">
@@ -170,8 +162,6 @@ const props = defineProps({
     showSystem: { type: Boolean, default: true },
     // Hides the toggle when the workflow has no injected parts to show.
     hasSystemSteps: { type: Boolean, default: false },
-    // Text of the "back to the form" button; none → no button.
-    formViewLabel: { type: String, default: '' },
     saving: { type: Boolean, default: false },
     dirty: { type: Boolean, default: false },
     // The merged problem list (useValidation.js) — see ProblemsList.vue.
@@ -222,7 +212,6 @@ defineEmits([
     'zoom-out',
     'fit',
     'auto-layout',
-    'form-view',
     'update:minimap',
     'update:showSystem',
     'save',

@@ -804,3 +804,27 @@
 .wf-ghost--transition {
     border-radius: 9999px;
 }
+
+/* The transition panel's variant Select carries the chosen button variant
+ * (`.wf-variant-<variant>` from TransitionPanel.vue). Statamic's Select forwards
+ * `class` to its root; the palette is pushed into whichever inner element
+ * renders the visible trigger (button-styled, combobox, or plain input) via a
+ * broad descendant selector, so it holds regardless of the CP version's
+ * internals. Unlayered and `!important`: the CP's own input styles load after
+ * the addon stylesheet. Same colours as the transition nodes above. */
+.wf-variant-select > button,
+.wf-variant-select [role="combobox"],
+.wf-variant-select [data-ui-select-trigger],
+.wf-variant-select input {
+    background-color: var(--wf-variant-bg, transparent) !important;
+    border-color: var(--wf-variant-border, currentColor) !important;
+    color: var(--wf-variant-fg, inherit) !important;
+}
+.wf-variant-default { --wf-variant-bg: rgb(243 244 246); --wf-variant-border: rgb(209 213 219); --wf-variant-fg: rgb(31 41 55); }
+.wf-variant-primary { --wf-variant-bg: #eff6ff; --wf-variant-border: #93c5fd; --wf-variant-fg: #1e40af; }
+.wf-variant-danger  { --wf-variant-bg: #fef2f2; --wf-variant-border: #fca5a5; --wf-variant-fg: #991b1b; }
+.wf-variant-filled  { --wf-variant-bg: #1f2937; --wf-variant-border: #111827; --wf-variant-fg: #f9fafb; }
+.wf-variant-default:where(.dark, .dark *) { --wf-variant-bg: rgb(31 41 55); --wf-variant-border: rgb(75 85 99); --wf-variant-fg: rgb(243 244 246); }
+.wf-variant-primary:where(.dark, .dark *) { --wf-variant-bg: #172554; --wf-variant-border: #1d4ed8; --wf-variant-fg: #bfdbfe; }
+.wf-variant-danger:where(.dark, .dark *)  { --wf-variant-bg: #450a0a; --wf-variant-border: #b91c1c; --wf-variant-fg: #fecaca; }
+.wf-variant-filled:where(.dark, .dark *)  { --wf-variant-bg: #f3f4f6; --wf-variant-border: #d1d5db; --wf-variant-fg: #111827; }

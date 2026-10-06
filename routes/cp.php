@@ -38,18 +38,13 @@ Route::get('workflows/{slug}', [WorkflowController::class, 'workflow'])
 Route::get('workflows/settings', [WorkflowSettingsController::class, 'settingsIndex'])
     ->name('workflows.settings.index');
 
-// CP-side "workflows:install" — copy a shipped workflow example into the
-// project, set its collections, optionally seed states. Same primitives the
-// CLI command uses (see WorkflowInstaller). Only types the project does not
-// have yet; an installed workflow is managed through the two routes below.
-Route::post('workflows/api/settings/install', [WorkflowSettingsController::class, 'installWorkflow'])
-    ->name('workflows.settings.install');
-
 // Create a new workflow: blank, from a shipped example, or as a copy of an
 // existing one (WorkflowScaffolder — the same code `workflows:make` uses). The
 // new workflow starts inactive. Registered before the `{workflow}` routes, and
 // those exclude `create`/`install` anyway, so the verb can never be read as a
-// workflow handle (the scaffolder reserves both as handles, too).
+// workflow handle (the scaffolder reserves both as handles, too — `install`
+// from the CP install endpoint this modal replaced, kept so a handle never
+// collides should a verb route come back).
 Route::post('workflows/api/settings/create', [WorkflowSettingsController::class, 'createWorkflow'])
     ->name('workflows.settings.create');
 
@@ -84,8 +79,8 @@ Route::delete('workflows/api/settings/{workflow}', [WorkflowSettingsController::
     ->where('workflow', '(?!(?:install|create)\b)[A-Za-z0-9_-]+')
     ->name('workflows.settings.destroy');
 
-// Super-admin-only settings editor for a workflow's places, transitions and
-// metadata. Nested under `workflows/settings`, NOT under `workflows/{slug}` —
+// Super-admin-only graph editor for a workflow's places, transitions and
+// metadata (saves through `workflows.settings.save` above). Nested under `workflows/settings`, NOT under `workflows/{slug}` —
 // the queue route above shares that nesting trick for its own nav item (see the
 // comment there), and Statamic derives active state purely from a nav item's
 // URL prefix. Nesting the editor under the queue's own slug would make the
@@ -99,11 +94,6 @@ Route::delete('workflows/api/settings/{workflow}', [WorkflowSettingsController::
 Route::get('workflows/settings/{workflow}', [WorkflowSettingsController::class, 'editSettings'])
     ->where('workflow', '(?!(?:instances|api|settings)\b)[a-z0-9_-]+')
     ->name('workflows.settings.edit');
-// Built by the editor from the handle; the slug is still accepted as a fallback.
-Route::post('workflows/api/{workflow}/settings', [WorkflowSettingsController::class, 'saveSettings'])
-    ->name('workflows.api.settings.save');
-Route::post('workflows/api/{workflow}/places/{place}/delete', [WorkflowSettingsController::class, 'deletePlace'])
-    ->name('workflows.api.settings.place.delete');
 
 // JSON API.
 Route::get('workflows/api/listing', [WorkflowController::class, 'listing'])->name('workflows.listing');

@@ -166,7 +166,7 @@ export function buildElements(model, graph, { showSystem = true, ctx = {} } = {}
         });
     }
 
-    // The default first step stays tied to the initial place (the form locks its
+    // The default first step stays tied to the initial place (the panel locks its
     // `from`); its edge says so.
     // Looked up by handle rather than built with placeId(): a node created in the
     // editor has an id (`p~1`) that is not derived from its handle.

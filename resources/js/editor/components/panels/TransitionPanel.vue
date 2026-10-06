@@ -222,8 +222,7 @@ const handleError = computed(() => {
 
 const variant = computed(() => props.transition.metadata.variant || defaultVariant(key.value));
 
-// Same tint classes the form uses (`.wf-variant-*`), so the Select carries the
-// chosen button colour.
+// `.wf-variant-*` (addon.css), so the Select carries the chosen button colour.
 const variantTint = computed(() => ({
     primary: 'wf-variant-primary',
     danger: 'wf-variant-danger',
