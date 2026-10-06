@@ -10,7 +10,7 @@ use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
 /**
  * CP dashboard card listing the posts the current user watches — the bookmark
  * button on the detail pages — across ALL active workflows. Widget config:
- * `limit` (rows shown, default 5) and `workflows` (restrict to a subset of
+ * `limit` (rows per page, default 5) and `workflows` (restrict to a subset of
  * workflow names, default all active).
  *
  * Built like CreatedByMe and sharing its row component, because it answers the
@@ -43,14 +43,16 @@ class Watched extends Widget
 
         return [
             'name' => 'workflows-watched-widget',
+            // Every row, not a top-`limit`: the card pages client-side (see
+            // MyQueue::payload() for why) and `limit` is the page size.
             'props' => [
-                'rows' => $rows->take($limit)
+                'rows' => $rows
                     ->map(fn (array $row) => $row + [
                         'unwatch_url' => cp_route('workflows.api.unwatch', ['id' => $row['id'], 'workflow' => $row['workflow']]),
                     ])
                     ->values()
                     ->all(),
-                'more' => $this->overflow($rows, $limit)->all(),
+                'limit' => $limit,
             ],
         ];
     }

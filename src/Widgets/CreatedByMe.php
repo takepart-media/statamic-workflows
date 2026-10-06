@@ -12,14 +12,15 @@ use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
  * across ALL active workflows — the cross-workflow counterpart of the managers'
  * "Created by me" sections, with identical semantics (oldest created/localized
  * event, see WorkflowEventStore::creatorsByWorkflow). Widget config: `limit`
- * (rows shown, default 5) and `workflows` (restrict to a subset of workflow
+ * (rows per page, default 5) and `workflows` (restrict to a subset of workflow
  * names, default all active).
  *
  * A component widget like MyQueue, and for the same reason of consistency
  * rather than interactivity: the two cards sit side by side on the dashboard
  * and share their row markup (`PersonalWidgetRow.vue`), so they have to be
  * built the same way. This one has no tabs — `component()` hands
- * `workflows-created-by-me-widget` a finished, pre-sorted list.
+ * `workflows-created-by-me-widget` the whole pre-sorted list, which the card
+ * pages client-side with `limit` as the page size.
  *
  * Sorted by the entry's last-modified rather than by urgency: the question this
  * card answers is "what did I touch, and where has it got to", so recency is
@@ -55,8 +56,8 @@ class CreatedByMe extends Widget
         return [
             'name' => 'workflows-created-by-me-widget',
             'props' => [
-                'rows' => $rows->take($limit)->values()->all(),
-                'more' => $this->overflow($rows, $limit)->all(),
+                'rows' => $rows->all(),
+                'limit' => $limit,
             ],
         ];
     }

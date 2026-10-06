@@ -3025,10 +3025,9 @@ sind bereits aufgelöste Einträge und tragen `title`, `url` und `site_code`
 schon — sie erneut über `Entry::find()` zu holen wären dieselben Lookups für
 dieselbe Antwort, und die Konventionen des Row-Builders (der Site-Chip ist das
 großgeschriebene **Handle**, nicht das Locale) bekämen eine zweite, leicht
-abweichende Implementierung. Der Rest kommt aus `overflow()` des Traits — genau
-der Gruppierung, die auch die Footer von „Meine Warteschlange" und „Von mir
-erstellt" benutzen; nur der zusätzliche Schlüssel `color` fällt weg, damit
-`more` auf allen vier Karten dieselbe Form hat.
+abweichende Implementierung. Der Rest kommt aus `overflow()` des Traits
+(gruppiert je Workflow, mit Manager-URL); nur der zusätzliche Schlüssel `color`
+fällt weg, damit `more` auf allen vier Karten dieselbe Form hat.
 
 **Karte 4 braucht IDs statt einer Summe.** Dafür gibt es
 `WorkflowEventStore::subjectIdsEnteringStates(array $states, Carbon $from, Carbon
@@ -3359,7 +3358,7 @@ Beiträge, denen der aktuelle User als Assignee eingetragen ist, über sämtlich
 aktiven Workflows. Die Semantik ist absichtlich identisch zum `mine=1`-Filter
 der Manager-Listen — nur direkte Zuweisungen, keine Gruppen-Expansion — damit
 Widget und Manager nie verschiedene Antworten geben. Config: `limit` (Zeilen je
-Ansicht, Default 7) und `workflows` (Array von Workflow-Namen zur
+Seite, Default 7) und `workflows` (Array von Workflow-Namen zur
 Einschränkung; Default alle aktiven, unbekannte Namen werden still
 übersprungen).
 
@@ -3370,18 +3369,32 @@ aufgelöst über die in `resources/js/addon.js` registrierte Komponente
 Karte filtert nach Workflow, und das muss ohne Dashboard-Reload gehen.
 
 - `tabs` — je Workflow, DER ZEILEN HAT, in Workflow-(= Nav-)Reihenfolge:
-  `['key' => <workflow>, 'label', 'color', 'count' => <Gesamtzahl>]`. `count` ist
-  die VOLLE Zeilenzahl, nicht die gelieferte; sie steht im Zähler-`Badge` des
-  Tabs und ist die Basis, von der der Footer abzieht. Der Tab „Alle"
-  (`widget_tab_all`) wird clientseitig vorangestellt, seine Zahl ist die Summe.
-- `rows` — je Workflow dessen `limit` dringendste Zeilen, gemergt und
-  serverseitig nach (`urgency`, Titel natürlich) sortiert
-  (`MyQueue::payload()`). Damit sortiert der Client nie: „Alle" sind die ersten
-  `limit` dieser Liste, ein Workflow-Tab ist ein Filter darüber. Pro Workflow
-  zuerst zu kürzen ist nötig, damit ein ruhiger Workflow im eigenen Tab nicht
-  leer bleibt — und es ist eine sichere Obermenge des globalen Top-`limit`. Der
-  Rattenschwanz (ein User mit 274 Zuweisungen) bleibt auf dem Server; nur die
-  Zahlen reisen, in `tabs`.
+  `['key' => <workflow>, 'label', 'color', 'count' => <Gesamtzahl>]`. `count`
+  steht im Zähler-`Badge` des Tabs. Der Tab „Alle" (`widget_tab_all`) wird
+  clientseitig vorangestellt, seine Zahl ist die Summe.
+- `rows` — ALLE Zeilen, serverseitig nach (`urgency`, Titel natürlich) sortiert
+  (`MyQueue::payload()`). Damit sortiert der Client nie: „Alle" blättert durch
+  diese Liste, ein Workflow-Tab durch einen Filter darüber.
+- `limit` — die Seitengröße.
+
+**Paginierung clientseitig** (gilt für alle drei persönlichen Karten — MyQueue,
+`CreatedByMe`, `Watched`): `PersonalWorkItems` baut die Liste ohnehin vollständig
+(es kürzt nicht, das taten bisher erst die Widgets), also reist sie ganz mit und
+der Client blättert `limit` Zeilen je Seite. Kein Endpoint, kein Round-Trip;
+der Preis ist die Payload — im Referenzprojekt ~144 KB für einen User mit 283
+Zuweisungen, eingebettet ins Dashboard-HTML. Wird das je zu viel, wäre ein
+Listing-Endpoint der Schritt, nicht ein Cap (der würde Seiten unerreichbar
+machen). Der Pager ist `resources/js/components/WidgetPagination.vue`: die
+Kit-`Pagination`, die auch `ListingPagination` der „Alle Beiträge"-Karte rendert,
+mit deren Defaults (Summenzeile „1–7 von 283" plus Seitenzahl-Buttons) im selben
+`px-4 py-2`-Rahmen wie die `bare`-Listing — nur der Per-Page-Selector ist aus
+(seine Optionen sind die globalen Listing-Größen des CP, `limit` gehört nicht
+dazu; die Seitengröße ist die Widget-Config) und `scroll-to-top` auch (scrollt
+das Fenster, also das ganze Dashboard). Passt alles auf eine Seite, rendert er
+nichts. Die Seiten-Logik (`page`, Slice, `meta` im Laravel-Resource-Format für
+`resourceMeta`, Klemmen beim Schrumpfen der Liste) ist das Composable
+`useClientPagination()` in `resources/js/support/pagination.js`. In MyQueue
+blättert der Pager den aktiven Tab; ein Tab-Wechsel springt auf Seite 1.
 
 **Zeilen-Sortierung = Dringlichkeit**, abgeleitet aus der STATE-FARBE, nicht aus
 dem Place-Handle: `PersonalWorkItems::URGENCY` bildet Farbnamen auf einen Rang ab
@@ -3413,13 +3426,14 @@ Relativ-Keys (`day_ago` = „:count Tagen", das nackte `day` = „:count Tage") 
 Ersteller-Semantik identisch zu `created_by_me=1` der Manager: ältestes
 `created`/`localized`-Event, geliefert von
 `WorkflowEventStore::creatorsByWorkflow()` (die Auswahllogik lebt dort und
-wird nicht dupliziert). Config wie `MyQueue` (`limit`, Default 5, und
-`workflows`).
+wird nicht dupliziert). Config wie `MyQueue` (`limit` = Seitengröße, Default 5,
+und `workflows`).
 
 Ebenfalls Komponenten-Widget:
-`['name' => 'workflows-created-by-me-widget', 'props' => ['rows' => …, 'more' => …]]`
-→ `resources/js/components/CreatedByMeWidget.vue`. Hier nicht wegen
-Interaktivität — die Karte hat keinerlei Client-State —, sondern wegen der
+`['name' => 'workflows-created-by-me-widget', 'props' => ['rows' => …, 'limit' => …]]`
+→ `resources/js/components/CreatedByMeWidget.vue`, `rows` vollständig (siehe
+Paginierung oben). Hier nicht wegen Interaktivität — einziger Client-State ist
+die Seite —, sondern wegen der
 geteilten Zeilen-Komponente: beide Karten liegen nebeneinander und müssen unter
 dem Header pixelgleich sein. Sortiert nach `last_modified` DESC (Header-Subline
 `widget_created_subline`, „Zuletzt bearbeitet"), nicht nach Dringlichkeit: die
@@ -3429,7 +3443,6 @@ Meta-Text** — die Rail kodiert Dringlichkeit und würde eine Reihenfolge
 versprechen, der die Liste nicht folgt; der Meta-Text würde den Sortierschlüssel
 je Zeile wiederholen. Weil nur `assignedTo()` die Meta-Zeile anfordert
 (`rows(..., withMeta: true)`), zahlt `createdBy()` den Event-Lookup gar nicht.
-`more` ist das fertige Aggregat aus `PresentsPersonalEntries::overflow()`.
 
 Beide Listen-Widgets teilen sich den Row-Builder
 `src/Workflow/PersonalWorkItems.php` (`assignedTo()` / `createdBy()`; die
@@ -3500,24 +3513,13 @@ Dot, und die Rail fasst Töne zusammen, die der Dot auseinanderhält. Namen, die
 geht diesen Weg NICHT — er landet ungefiltert in `Badge`, wie überall sonst im
 Addon.
 
-Der **Footer** (`resources/js/components/PersonalWidgetFooter.vue`, von beiden
-Karten geteilt, im `footer`-Slot des `Widget`) erscheint nur, wenn `limit` etwas
-verdeckt, ist nach Workflow aufgeschlüsselt („● +3 Beiträge  ● +1 Übersetzungen")
-— ein nacktes „+N" hätte nirgendwo hin, weil die Liste Workflows mischt — und
-**verlinkt je Workflow auf dessen Manager-Seite**, wo „Meine
-Warteschlange"/„Von mir erstellt" als volle Sektionen stehen; genau dort liegen
-die verdeckten Zeilen. Je Eintrag derselbe 6px-Dot wie in den Zeilen plus „+N
-Label" als reiner Text — das ist es, was den Footer als Fortsetzung der Liste
-lesen lässt statt als zweite, konkurrierende Legende. Der Link trägt
-`widget_more_in` als `title`. Workflows ohne `metadata.nav` haben keine solche
-Seite: `url` ist dort `null` und der Teil rendert als `<span>` statt als toter
-Link.
-
-Die URL reist deshalb in BEIDEN Payloads mit: in `more` je Eintrag
-(`PresentsPersonalEntries::overflow()`) und in `tabs` je Workflow — MyQueues
-Footer folgt dem aktiven Tab und rechnet daher clientseitig
-(`count − aktuell sichtbar` je Workflow, siehe `MyQueueWidget.vue → hidden`),
-CreatedByMe bekommt sein Aggregat serverseitig.
+Im **Footer**-Slot des `Widget` steht nur noch der Pager (siehe Paginierung
+oben). Die frühere „● +3 Beiträge ● +1 Übersetzungen"-Leiste
+(`PersonalWidgetFooter.vue`, je Workflow auf die Manager-Seite verlinkt) ist
+entfallen: sie zählte und verlinkte, was `limit` verdeckte — mit Paginierung ist
+nichts mehr verdeckt, und die Manager-Seiten erreicht man über die Nav. Nur die
+Kennzahlreihe (`QueueStats`) kappt noch und nutzt dafür weiter
+`PresentsPersonalEntries::overflow()`.
 
 Die Workflow-Farbe (Dot) kommt aus `metadata.color` im Workflow-YAML (jeder
 Statamic-Badge-Farbname); ohne Deklaration vergibt
@@ -3535,7 +3537,10 @@ disambiguieren, wie in den Managern.
 Merken-Button der Detailseiten beobachtet, über alle aktiven Workflows. Gebaut
 wie `CreatedByMe` (dieselbe Zeilen-Komponente, sortiert nach `last_modified`);
 jede Zeile trägt zusätzlich die URL zum Nicht-mehr-Beobachten. Config: `limit`
-(Default 5) und `workflows`.
+(Seitengröße, Default 5) und `workflows`. Props `rows` (vollständig) und
+`limit`; paginiert wie oben. Nicht-mehr-Beobachten entfernt die Zeile
+clientseitig, die Paginierung läuft über den Rest: die nächste Zeile rückt in
+die Seite nach, und wird die letzte Seite leer, springt der Pager eine zurück.
 
 ### `WorkflowsOverview` (`workflows_overview`)
 
@@ -3771,21 +3776,30 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
     Dashboard-Widget `workflows_user_header` (§ 9).
   - `workflows-my-queue-widget` → `MyQueueWidget.vue` — das Dashboard-Widget
     `workflows_my_queue` (§ 9): `Widget`-Shell, `Tabs`/`TabList`/`TabTrigger`/
-    `TabContent` als Filter (Optik über `wf-widget-tabs` in `addon.css`) und
-    clientseitig gerechneter Footer.
+    `TabContent` als Filter (Optik über `wf-widget-tabs` in `addon.css`),
+    paginiert je Tab.
   - `workflows-created-by-me-widget` → `CreatedByMeWidget.vue` — das
     Dashboard-Widget `workflows_created_by_me` (§ 9); dieselbe `Widget`-Shell,
-    ohne Client-State.
-    Beide verwenden:
+    einziger Client-State ist die Seite.
+  - `workflows-watched-widget` → `WatchedWidget.vue` — das Dashboard-Widget
+    `workflows_watched` (§ 9); wie CreatedByMe plus Nicht-mehr-Beobachten je
+    Zeile.
+    Alle drei verwenden:
     - `PersonalWidgetRow.vue` — die gemeinsame Zeile der zwei Karten: Rail,
       Site-Chip, Dot + Label und Meta-Text im Spec-Markup, der State als
       Kit-`Badge` wie in den Manager-Listen (§ 9); `with-rail` / `with-meta` sind
       der einzige Unterschied zwischen den Karten.
-    - `PersonalWidgetFooter.vue` — die gemeinsame „+N je Workflow"-Leiste im
-      `footer`-Slot des `Widget`, je Eintrag Dot + Text, als `<a>` wo der
-      Workflow eine Manager-Seite hat, sonst als `<span>`.
+    - `WidgetPagination.vue` — der Pager im `footer`-Slot des `Widget`: die
+      Kit-`Pagination` wie in `ListingPagination` (Summen + Seitenzahlen, ohne
+      Per-Page-Selector und `scroll-to-top`), unsichtbar bei nur einer Seite;
+      gefüttert von `useClientPagination()` (§ 9).
 - Support
   - `support/states.js` — zentrale `stateColor()` und `humanize()`.
+  - `support/pagination.js` — `useClientPagination(items, perPage)`:
+    clientseitiges Blättern über eine vollständig geladene Liste (`page`,
+    `pageItems`, `meta` als Laravel-Resource-`meta` für die Kit-`Pagination`,
+    `setPage()`); klemmt die Seite, wenn die Liste schrumpft. Für die drei
+    persönlichen Karten (§ 9).
   - `support/widgetColors.js` — Farbname → `.wf-rail--` / `.wf-dot--`-Klasse für
     die zwei Dashboard-Karten, mit Whitelist und `default`-Fallback. Der State
     steht NICHT darin, der ist ein Kit-`Badge` (§ 9). Dazu `colorHex()`: Farbname

@@ -11,17 +11,16 @@
             {{ __('workflows::messages.widget_created_subline') }}
         </Description>
 
-        <div v-if="rows.length" class="flex-1">
-            <PersonalWidgetRow v-for="row in rows" :key="row.url" :row="row" />
+        <div v-if="pageItems.length" class="flex-1">
+            <PersonalWidgetRow v-for="row in pageItems" :key="row.url" :row="row" />
         </div>
         <Description v-else class="flex-1 py-6 text-center">
             {{ __('workflows::messages.widget_no_created') }}
         </Description>
 
-        <!-- Per workflow, what the limit cut — already aggregated server-side,
-             unlike the queue's, whose footer has to follow the active tab. -->
+        <!-- Hides itself while everything fits on one page. -->
         <template #footer>
-            <PersonalWidgetFooter v-if="more.length" :entries="more" />
+            <WidgetPagination :meta="meta" @page-selected="setPage" />
         </template>
     </Widget>
 </template>
@@ -29,24 +28,26 @@
 <script setup>
 import { Description, Widget } from '@statamic/cms/ui';
 import PersonalWidgetRow from './PersonalWidgetRow.vue';
-import PersonalWidgetFooter from './PersonalWidgetFooter.vue';
+import WidgetPagination from './WidgetPagination.vue';
+import { useClientPagination } from '../support/pagination';
 
 /**
  * Dashboard widget `workflows_created_by_me`. A component widget for symmetry
- * rather than for interactivity — it has no client state at all: the rows arrive
- * sorted and trimmed, the footer aggregate arrives computed
- * (PresentsPersonalEntries::overflow()). What it buys is the shared row
+ * rather than for interactivity — its only client state is the current page: the
+ * rows arrive complete and sorted, `limit` rows per page. What it buys is the
+ * shared row
  * component: this card and the queue sit next to each other, and their rows have
  * to be pixel-identical.
  *
  * The meta line is not rendered here. It would restate the sort key ("last
  * edited") once per row.
  */
-defineProps({
-    // Rows from PersonalWorkItems, newest edit first, already cut to `limit`.
+const props = defineProps({
+    // Rows from PersonalWorkItems, newest edit first — all of them.
     rows: { type: Array, default: () => [] },
-    // [{count, label, color, url}] per workflow with hidden rows; `url` is that
-    // workflow's manager page, null where it has none.
-    more: { type: Array, default: () => [] },
+    // Rows per page. The widget's `limit` config.
+    limit: { type: Number, default: 5 },
 });
+
+const { pageItems, meta, setPage } = useClientPagination(() => props.rows, () => props.limit);
 </script>

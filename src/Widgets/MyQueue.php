@@ -12,14 +12,14 @@ use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
  * CP dashboard card listing the posts assigned to the current user across ALL
  * active workflows — the cross-workflow counterpart of the managers' "My
  * Queue" sections, with identical semantics (direct assignee only, no group
- * expansion). Widget config: `limit` (rows shown per view, default 7) and
+ * expansion). Widget config: `limit` (rows per page, default 7) and
  * `workflows` (restrict to a subset of workflow names, default all active).
  *
  * A component widget, not a Blade one: the card carries a workflow filter as a
  * tab row, and switching tabs must not reload the dashboard. `component()`
  * hands the dashboard the Vue component `workflows-my-queue-widget` (registered
  * in `resources/js/addon.js`) together with everything it needs to answer every
- * tab without a round trip.
+ * tab and every page without a round trip.
  */
 class MyQueue extends Widget
 {
@@ -50,7 +50,7 @@ class MyQueue extends Widget
             'name' => 'workflows-my-queue-widget',
             'props' => [
                 'tabs' => $this->tabs($perWorkflow)->all(),
-                'rows' => $this->payload($perWorkflow, $limit)->all(),
+                'rows' => $this->payload($perWorkflow)->all(),
                 'limit' => $limit,
             ],
         ];
@@ -59,16 +59,11 @@ class MyQueue extends Widget
     /**
      * One tab per workflow that actually has rows — an empty tab would only
      * offer the user a way to reach an empty list. `count` is the FULL number
-     * of rows in that workflow, not the number shipped: it is what the tab's
-     * counter pill shows and what the footer subtracts from to say "+N".
-     *
-     * `url` is that workflow's manager page, and it is here rather than only on
-     * the rows because the FOOTER needs it: it links each "+N" to the listing
-     * where the hidden rows actually are. Null for a workflow without
-     * `metadata.nav` (no manager page), which the footer renders unlinked.
+     * of rows in that workflow — the same number the tab's pager pages through,
+     * since every row is shipped — and it is what the tab's counter pill shows.
      *
      * @param  \Illuminate\Support\Collection<string, \Illuminate\Support\Collection<int, array<string, mixed>>>  $perWorkflow
-     * @return \Illuminate\Support\Collection<int, array{key: string, label: string, color: string, count: int, url: string|null}>
+     * @return \Illuminate\Support\Collection<int, array{key: string, label: string, color: string, count: int}>
      */
     private function tabs(Collection $perWorkflow): Collection
     {
@@ -78,49 +73,30 @@ class MyQueue extends Widget
                 'label' => $rows->first()['workflow_label'],
                 'color' => $rows->first()['workflow_color'],
                 'count' => $rows->count(),
-                'url' => $rows->first()['manager_url'],
             ])
             ->values();
     }
 
     /**
-     * The rows shipped to the client: per workflow its `limit` most urgent
-     * ones, merged and sorted by (urgency, title) so the "Alle" tab is the
-     * first `limit` of this list and every single-workflow tab is a filter over
-     * it — the client slices and filters, it never sorts.
+     * The rows shipped to the client: ALL of them, sorted by (urgency, title),
+     * so the "Alle" tab pages through this list as it is and every
+     * single-workflow tab pages through a filter over it — the client slices
+     * and filters, it never sorts.
      *
-     * Per workflow first, then merge, because the payload has to answer BOTH
-     * kinds of tab: a global top-`limit` alone would leave a quiet workflow's
-     * own tab empty. And it is a safe superset of that global top-`limit` —
-     * whichever rows of a workflow rank highest globally are a prefix of that
-     * workflow's own (urgency, title) order, so nothing the "Alle" tab needs
-     * gets trimmed away here.
-     *
-     * The tail (a user with 274 assigned posts) stays on the server: only the
-     * counts travel, in `tabs`.
+     * All rather than a top-`limit`, because the card pages client-side and
+     * PersonalWorkItems has already built the full list anyway (it does not
+     * truncate); a personal queue is small enough that shipping it whole is
+     * cheaper than a paging endpoint. `limit` is only the page size.
      *
      * @param  \Illuminate\Support\Collection<string, \Illuminate\Support\Collection<int, array<string, mixed>>>  $perWorkflow
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
-    private function payload(Collection $perWorkflow, int $limit): Collection
+    private function payload(Collection $perWorkflow): Collection
     {
         return $perWorkflow
-            ->flatMap(fn (Collection $rows) => $this->byUrgency($rows)->take($limit))
+            ->flatten(1)
             ->sort($this->byUrgencyThenTitle())
             ->values();
-    }
-
-    /**
-     * Rows of one workflow, most urgent first. `sortBy` on its own is enough
-     * for the title tie-break: PHP's sorts are stable since 8.0 and the rows
-     * come in already sorted by title, so equal urgencies keep that order.
-     *
-     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
-     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
-     */
-    private function byUrgency(Collection $rows): Collection
-    {
-        return $rows->sortBy('urgency')->values();
     }
 
     /**

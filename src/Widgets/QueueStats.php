@@ -209,8 +209,8 @@ class QueueStats extends Widget
             // decides whether the value is a trigger at all — there is no second
             // "has a stack" flag to keep in step with the list.
             'items' => $items,
-            // What the cap is hiding, per workflow, in the same shape the list
-            // widgets' footer already speaks (PresentsPersonalEntries::overflow()).
+            // What the cap is hiding, per workflow
+            // (PresentsPersonalEntries::overflow()).
             'more' => $more,
             // The one interactive thing in the row, and it stays a plain
             // {url, label}: the client posts, reads the counts back and
@@ -247,11 +247,9 @@ class QueueStats extends Widget
      * the uppercased HANDLE, not the locale) would get a second, subtly
      * different implementation here.
      *
-     * The remainder likewise comes from the trait's overflow(), the very
-     * grouping the "My queue" and "Created by me" footers use — so the "+3
-     * Beiträge" in this stack and the one under the card below it are the same
-     * number produced by the same code. Only its extra `color` key is dropped,
-     * to keep every card's `more` the same shape.
+     * The remainder likewise comes from the trait's overflow(), grouped per
+     * workflow so each "+3 Beiträge" can link to its manager page. Only its
+     * extra `color` key is dropped, to keep every card's `more` the same shape.
      *
      * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
      * @return array{items: array<int, array{title: string, url: string, site_code: string|null}>, more: array<int, array{count: int, label: string, url: string|null}>}

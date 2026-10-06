@@ -7,8 +7,8 @@
             {{ __('workflows::messages.widget_watched_subline') }}
         </Description>
 
-        <div v-if="visible.length" class="flex-1">
-            <PersonalWidgetRow v-for="row in visible" :key="row.unwatch_url" :row="row">
+        <div v-if="pageItems.length" class="flex-1">
+            <PersonalWidgetRow v-for="row in pageItems" :key="row.unwatch_url" :row="row">
                 <template #actions>
                     <Button
                         icon="bookmark"
@@ -28,8 +28,9 @@
             {{ __('workflows::messages.widget_no_watched') }}
         </Description>
 
+        <!-- Hides itself while everything fits on one page. -->
         <template #footer>
-            <PersonalWidgetFooter v-if="more.length" :entries="more" />
+            <WidgetPagination :meta="meta" @page-selected="setPage" />
         </template>
     </Widget>
 </template>
@@ -38,21 +39,23 @@
 import { computed, getCurrentInstance, reactive, ref } from 'vue';
 import { Button, Description, Widget } from '@statamic/cms/ui';
 import PersonalWidgetRow from './PersonalWidgetRow.vue';
-import PersonalWidgetFooter from './PersonalWidgetFooter.vue';
+import WidgetPagination from './WidgetPagination.vue';
+import { useClientPagination } from '../support/pagination';
 
 /**
- * Dashboard widget `workflows_watched`. The rows arrive sorted, trimmed and with
- * their own `unwatch_url` (Watched::component()); the only client state is which
- * rows were removed here, so they disappear without reloading the dashboard.
- * The footer aggregate is left as it came — a removed row does not pull a hidden
- * one up, that happens on the next load.
+ * Dashboard widget `workflows_watched`. The rows arrive complete, sorted and with
+ * their own `unwatch_url` (Watched::component()); the client state is which rows
+ * were removed here, so they disappear without reloading the dashboard, and the
+ * current page. Paging runs over what is left: a removed row pulls the next one
+ * up into the page, and emptying the last page steps back to the one before
+ * (useClientPagination clamps).
  */
 const props = defineProps({
-    // Rows from PersonalWorkItems, newest edit first, cut to `limit`, each with
+    // Rows from PersonalWorkItems, newest edit first — all of them — each with
     // `unwatch_url`.
     rows: { type: Array, default: () => [] },
-    // [{count, label, color, url}] per workflow with hidden rows.
-    more: { type: Array, default: () => [] },
+    // Rows per page. The widget's `limit` config.
+    limit: { type: Number, default: 5 },
 });
 
 const axios = getCurrentInstance()?.appContext?.config?.globalProperties?.$axios;
@@ -61,6 +64,8 @@ const removed = ref(new Set());
 const busy = reactive({});
 
 const visible = computed(() => props.rows.filter((row) => !removed.value.has(row.unwatch_url)));
+
+const { pageItems, meta, setPage } = useClientPagination(visible, () => props.limit);
 
 async function unwatch(row) {
     const url = row.unwatch_url;

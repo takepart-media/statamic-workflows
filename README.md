@@ -322,9 +322,9 @@ Enable them in `config/statamic/cp.php → widgets` (details in DOCS.md § 9):
 - `workflows_user_header` — the current user's name, groups and responsibles.
 - `workflows_queue_stats` — four key figures (my queue, project-wide counts, failed translations with a retry button).
 - `workflows_status` — one doughnut per workflow with its state distribution.
-- `workflows_my_queue` — posts assigned to the current user, across all workflows (`limit`, `workflows`).
-- `workflows_created_by_me` — posts the current user created (`limit`, `workflows`).
-- `workflows_watched` — posts the current user watches (`limit`, `workflows`).
+- `workflows_my_queue` — posts assigned to the current user, across all workflows, paginated (`limit` = rows per page, `workflows`).
+- `workflows_created_by_me` — posts the current user created, paginated (`limit` = rows per page, `workflows`).
+- `workflows_watched` — posts the current user watches, paginated (`limit` = rows per page, `workflows`).
 - `workflows_overview` — "All posts": one table across every active workflow (new workflows appear automatically), with a workflow column linking to each manager, one state column per site, workflow/state/stale filters and "new post" buttons. Config: `workflows` (restrict), `per_page` (default 15). This is the entry point to the per-workflow managers, which have no nav entry.
 - `workflows_assigned_posts` — posts assigned to the current user in ONE workflow, resolved from `collection` (`limit`).
 

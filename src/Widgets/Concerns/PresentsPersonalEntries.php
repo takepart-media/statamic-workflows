@@ -5,10 +5,10 @@ namespace TakepartMedia\Workflows\Widgets\Concerns;
 use Illuminate\Support\Collection;
 
 /**
- * The config- and overflow-plumbing the two cross-workflow list widgets
- * (MyQueue, CreatedByMe) share on top of PersonalWorkItems. A trait rather
- * than a base class: the widgets already extend Statamic's Widget, and the
- * only thing they have in common besides it is exactly this.
+ * The config- and overflow-plumbing the cross-workflow list widgets (MyQueue,
+ * Watched, CreatedByMe, QueueStats) share on top of PersonalWorkItems. A trait
+ * rather than a base class: the widgets already extend Statamic's Widget, and
+ * the only thing they have in common besides it is exactly this.
  */
 trait PresentsPersonalEntries
 {
@@ -33,16 +33,15 @@ trait PresentsPersonalEntries
     }
 
     /**
-     * The rows the limit hides, grouped per workflow so the card's footer can
-     * say "+3 Beiträge · +1 Übersetzungen" and link each part to its manager
-     * page — a bare "+N" has nowhere to go, since the list mixes workflows.
+     * The rows a cap hides, grouped per workflow so a footer can say
+     * "+3 Beiträge · +1 Übersetzungen" and link each part to its manager page — a bare "+N" has nowhere to go, since the list mixes workflows.
      * Workflow order is preserved: the groups come out in the order the rows
      * first mention them. `url` is null for a workflow without a manager page
      * (no `metadata.nav`), and the footer renders that part unlinked.
      *
-     * Only CreatedByMe uses this. MyQueue's footer has to follow the active tab,
-     * so it subtracts client-side from the per-workflow counts in `tabs` — which
-     * carry the same `url` for the same purpose.
+     * Only QueueStats uses this (its stack lists are capped). The three
+     * personal cards ship their whole list and page through it client-side
+     * instead, so nothing of theirs is hidden and they have no such footer.
      *
      * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
      * @return \Illuminate\Support\Collection<int, array{count: int, label: string, color: string, url: string|null}>
