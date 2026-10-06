@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use TakepartMedia\Workflows\Http\Controllers\EntryPreviewController;
 use TakepartMedia\Workflows\Http\Controllers\WorkflowController;
+use TakepartMedia\Workflows\Http\Controllers\WorkflowSettingsController;
 
 // Auto-mounted by Statamic under the CP prefix (config('statamic.cp.route'),
 // default /cp) with CP auth + Inertia middleware. Route names get the
@@ -34,20 +35,20 @@ Route::get('workflows/{slug}', [WorkflowController::class, 'workflow'])
 
 // Super-admin-only settings index: one card per workflow, linking to its
 // settings editor. Landing page for "Settings > Workflows" in the CP nav.
-Route::get('workflows/settings', [WorkflowController::class, 'settingsIndex'])
+Route::get('workflows/settings', [WorkflowSettingsController::class, 'settingsIndex'])
     ->name('workflows.settings.index');
 
 // CP-side "workflows:install" — copy a shipped workflow example into the
 // project, set its collections, optionally seed states. Same primitives the
 // CLI command uses (see WorkflowInstaller). Only types the project does not
 // have yet; an installed workflow is managed through the two routes below.
-Route::post('workflows/api/settings/install', [WorkflowController::class, 'installWorkflow'])
+Route::post('workflows/api/settings/install', [WorkflowSettingsController::class, 'installWorkflow'])
     ->name('workflows.settings.install');
 
 // Switch an installed workflow on/off, or remove its definition. Keyed by the
 // workflow HANDLE (the YAML basename), not the nav slug: an inactive workflow
 // has no manager page, and a workflow without `metadata.nav` has no slug at all.
-Route::post('workflows/api/settings/{workflow}/active', [WorkflowController::class, 'setWorkflowActive'])
+Route::post('workflows/api/settings/{workflow}/active', [WorkflowSettingsController::class, 'setWorkflowActive'])
     ->where('workflow', '[A-Za-z0-9_-]+')
     ->name('workflows.settings.active');
 
@@ -55,10 +56,10 @@ Route::post('workflows/api/settings/{workflow}/active', [WorkflowController::cla
 // entries that predate it. Idempotent, so it needs no confirmation. The `--redo`
 // variant of the command stays CLI-only: re-deriving states that already exist
 // is the repair case, not the everyday one.
-Route::post('workflows/api/settings/{workflow}/seed', [WorkflowController::class, 'seedWorkflowStates'])
+Route::post('workflows/api/settings/{workflow}/seed', [WorkflowSettingsController::class, 'seedWorkflowStates'])
     ->where('workflow', '[A-Za-z0-9_-]+')
     ->name('workflows.settings.seed');
-Route::delete('workflows/api/settings/{workflow}', [WorkflowController::class, 'destroyWorkflow'])
+Route::delete('workflows/api/settings/{workflow}', [WorkflowSettingsController::class, 'destroyWorkflow'])
     ->where('workflow', '(?!install)[A-Za-z0-9_-]+')
     ->name('workflows.settings.destroy');
 
@@ -70,12 +71,17 @@ Route::delete('workflows/api/settings/{workflow}', [WorkflowController::class, '
 // QUEUE's nav item (under the manager's own section) match this URL too, since
 // its auto-generated pattern is `<slug>(/(.*)?|$)` — exactly the bug this
 // avoids: the editor should only ever activate "Settings > Workflows".
-Route::get('workflows/settings/{slug}', [WorkflowController::class, 'editSettings'])
-    ->where('slug', '(?!instances|api|settings)[a-z0-9-]+')
+//
+// Keyed by the workflow HANDLE, so a workflow without `metadata.nav` (no slug)
+// is editable too. A nav slug in this position still resolves: the controller
+// answers it with a 301 to the handle URL.
+Route::get('workflows/settings/{workflow}', [WorkflowSettingsController::class, 'editSettings'])
+    ->where('workflow', '(?!instances|api|settings)[a-z0-9_-]+')
     ->name('workflows.settings.edit');
-Route::post('workflows/api/{slug}/settings', [WorkflowController::class, 'saveSettings'])
+// Built by the editor from the handle; the slug is still accepted as a fallback.
+Route::post('workflows/api/{workflow}/settings', [WorkflowSettingsController::class, 'saveSettings'])
     ->name('workflows.api.settings.save');
-Route::post('workflows/api/{slug}/places/{place}/delete', [WorkflowController::class, 'deletePlace'])
+Route::post('workflows/api/{workflow}/places/{place}/delete', [WorkflowSettingsController::class, 'deletePlace'])
     ->name('workflows.api.settings.place.delete');
 
 // JSON API.

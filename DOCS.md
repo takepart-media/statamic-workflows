@@ -1897,6 +1897,8 @@ angehängt.
 | `GET /cp/workflows/{slug}` | `workflow` | Manager für einen bestimmten Workflow (per `nav.slug`). Kein Nav-Eintrag mehr — erreichbar per URL und über die Workflow-Spalte von `workflows_overview`. |
 | `GET /cp/workflows/{slug}/instances/{id}` | `showInWorkflow` | Detailseite (Content, History, Kommentare, Aktionen), kanonische URL (`InstanceUrl`). Der Zurück-Link führt aufs Dashboard. |
 | `GET /cp/workflows/instances/{id}` | `show` | Id-only-Form für Bookmarks/ältere Links; leitet auf die kanonische URL um. |
+| `GET /cp/workflows/settings` | `settingsIndex`* | Super-Admin-Übersicht aller Workflows (auch inaktive), „Settings > Workflows". |
+| `GET /cp/workflows/settings/{workflow}` | `editSettings`* | Settings-Editor, per **Handle** (YAML-Name, `workflows.settings.edit`) — damit sind auch Workflows ohne `metadata.nav` editierbar. Ein Nav-Slug an dieser Stelle wird per 301 auf die Handle-URL umgeleitet; weder Handle noch Slug → 404. |
 
 **JSON-API** (aufgerufen vom Vue-Frontend)
 
@@ -1920,6 +1922,14 @@ angehängt.
 | `POST workflows/api/settings/{workflow}/active` | `setWorkflowActive` | Workflow an-/abschalten (`active` in der YAML). |
 | `POST workflows/api/settings/{workflow}/seed` | `seedWorkflowStates` | Status für bestehende Einträge nachtragen (nur aktive Workflows). |
 | `DELETE workflows/api/settings/{workflow}` | `destroyWorkflow` | Definition löschen; DB-Daten bleiben. |
+| `POST workflows/api/{workflow}/settings` | `saveSettings`* | Editor-Payload speichern. `{workflow}` = Handle (Slug als Fallback). |
+| `POST workflows/api/{workflow}/places/{place}/delete` | `deletePlace`* | Place löschen, ggf. mit `migrate_to`. `{workflow}` = Handle (Slug als Fallback). |
+
+\* Die Super-Admin-Settings-Routen (Übersicht, Install, an/aus, Seed, Löschen,
+Editor samt Save/Place-Löschen) laufen über `WorkflowSettingsController`, alles
+andere über `WorkflowController`. Gemeinsame Helfer (`isSuperAdmin`,
+`workflowBySlug`, `siteHandles`, `siteName`, `workflowForCollection`, `t`) liegen
+im Trait `Http/Controllers/Concerns/WorkflowControllerHelpers.php`.
 
 ---
 
@@ -2437,8 +2447,8 @@ nur für **neu hinzugefügte** Collections (`saveSettings`). Der Button in der
 Übersicht ist der Weg, es für den ganzen Workflow nachzuholen.
 
 Was die Settings-Seite trotzdem sehen muss: `DefinitionLoader::allIncludingInactive()`
-liefert jede YAML unabhängig vom Schalter. Darauf laufen die Settings-Übersicht
-und `workflowBySlug()` — ein abgeschalteter Workflow muss editierbar und wieder
+liefert jede YAML unabhängig vom Schalter. Darauf laufen die Settings-Übersicht,
+die Handle-Auflösung des Editors und `workflowBySlug()` — ein abgeschalteter Workflow muss editierbar und wieder
 einschaltbar bleiben. Ebenfalls bewusst über `allIncludingInactive()`:
 `resolvePlaceLabel()`, `placeLabels()` und `placeColors()`, damit History-Zeilen
 eines abgeschalteten Workflows ihre Labels und Farben behalten. Kurz: `active` steuert

@@ -237,7 +237,9 @@ class ServiceProvider extends AddonServiceProvider
             // order. Not cached -- raw() reads from disk every time, on purpose
             // (see DefinitionLoader).
             $workflowNavs = collect($loader->all())
-                ->map(fn (string $name) => $loader->raw($name)['metadata']['nav'] ?? null)
+                // Keyed by handle: the settings editor's URL is the handle, the
+                // nav metadata only supplies label, icon and order.
+                ->mapWithKeys(fn (string $name) => [$name => $loader->raw($name)['metadata']['nav'] ?? null])
                 // A nav entry needs a slug for its URL and a label to show. The
                 // label may come from either side of navLabel(): the explicitly
                 // configured one, or the slug's translation when that field is
@@ -248,14 +250,13 @@ class ServiceProvider extends AddonServiceProvider
                 ->filter(fn ($meta) => is_array($meta)
                     && ! empty($meta['slug'])
                     && DefinitionLoader::navLabel($meta) !== '')
-                ->sortBy(fn ($meta) => $meta['order'] ?? PHP_INT_MAX)
-                ->values();
+                ->sortBy(fn ($meta) => $meta['order'] ?? PHP_INT_MAX);
 
             // Fresh objects on every build, so NavBuilder's in-place edits
             // cannot leak between builds.
             $settingsChildren = $workflowNavs
-                ->map(fn ($meta) => Nav::item(DefinitionLoader::navLabel($meta))
-                    ->route('workflows.settings.edit', ['slug' => $meta['slug']])
+                ->map(fn ($meta, $name) => Nav::item(DefinitionLoader::navLabel($meta))
+                    ->route('workflows.settings.edit', ['workflow' => $name])
                     ->icon($meta['icon'] ?? 'workflow'))
                 ->values();
 
