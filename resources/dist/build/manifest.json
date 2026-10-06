@@ -1,6 +1,6 @@
 {
   "resources/css/addon.css": {
-    "file": "assets/addon-LcfXNLxJ.css",
+    "file": "assets/addon-DfjSvrGX.css",
     "src": "resources/css/addon.css",
     "isEntry": true,
     "name": "addon",
@@ -9,7 +9,7 @@
     ]
   },
   "resources/js/addon.js": {
-    "file": "assets/addon-CCmNycca.js",
+    "file": "assets/addon-CXGchc6p.js",
     "name": "addon",
     "src": "resources/js/addon.js",
     "isEntry": true,
@@ -21,7 +21,7 @@
     ]
   },
   "resources/js/editor/components/WorkflowEditor.vue": {
-    "file": "assets/WorkflowEditor-D_CskfxS.js",
+    "file": "assets/WorkflowEditor-CKk41b_I.js",
     "name": "WorkflowEditor",
     "src": "resources/js/editor/components/WorkflowEditor.vue",
     "isDynamicEntry": true,
