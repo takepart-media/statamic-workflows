@@ -1902,7 +1902,7 @@ angehängt.
 
 | Pfad | Handler | Beschreibung |
 | --- | --- | --- |
-| `GET  workflows/api/listing` | `listing` | Tabellendaten für die Queue (Suche, Filter, Sortierung, Pagination). `workflow=<name>` für einen Manager; `all_workflows=1` für die workflow-übergreifende Liste des Widgets `workflows_overview`, optional eingeengt per `workflows=a,b` (unbekannte/inaktive Namen fallen still weg). |
+| `GET  workflows/api/listing` | `listing` | Tabellendaten für die Queue (Suche, Filter, Sortierung, Pagination). `workflow=<name>` für einen Manager; `all_workflows=1` für die workflow-übergreifende Liste des Widgets `workflows_overview`, optional eingeengt per `workflows=a,b` — Widget-Config bzw. der eine per Button gewählte Workflow (unbekannte/inaktive Namen fallen still weg). |
 | `GET  workflows/api/instances/{id}/actions` | `actionsJson` | Verfügbare Transitions ab dem aktuellen State. |
 | `GET  workflows/api/instances/{id}/history/{event}/diff` | `historyDiff` | Diff eines History-Events vs. voriger/erster Snapshot. |
 | `POST workflows/api/instances/{id}/transitions/{name}` | `applyTransition` | Transition anwenden. |
@@ -2024,18 +2024,28 @@ Fixture-ID einen echten Entry überdecken, weil `findInstance()` **vor**
   die sichtbaren Spalten als CSV. Titel bleibt immer sichtbar.
 - `filters($rows, $workflow, $scope = null)` — baut je nach Kontext `SiteFilter`,
   `StateFilter`, `AssigneeFilter`. Pivot-View hat nur den State-Filter (Site ist
-  ja die Spalte). Mit `$scope` (Übersicht) kommen `WorkflowNameFilter` (Handle
-  `workflow`, „Alle Workflows"), `StateFilter` mit der **Vereinigung** der Places
-  aller Workflows im Scope (geteilte Places einmal) und `StaleFilter`.
+  ja die Spalte). Mit `$scope` (Übersicht) dieselben zwei: `StateFilter` mit der
+  **Vereinigung** der Places aller Workflows im Scope (geteilte Places einmal)
+  und `StaleFilter`. Einen Workflow-Filter gibt es nicht — das Einengen auf
+  einen Workflow machen die Buttons des Widgets über `workflows=<name>` (§ 9).
 - `overviewColumns($workflows)` — Spalten der Übersicht: Titel, `workflow_label`
-  (Typ `workflow`), eine State-Spalte je Site, die mindestens ein Workflow im
-  Scope listet (`overviewSites()`, in sites.yaml-Reihenfolge), und
-  `content_updated_at` (sichtbar, sobald ein Nicht-Lokalisierungs-Workflow im
-  Scope ist).
-- `overviewProps($only)` — Startprops des Widgets `workflows_overview`: Spalten,
-  Filter, State-Farben/-Labels und `creates` (je Workflow, in dem der User
-  anlegen darf, dieselben Create-Props wie die Manager-Seite, aus
-  `createOptions()`). Null bei leerem Scope.
+  (Typ `workflow`; nur bei mehr als einem Workflow im Scope sichtbar), eine
+  State-Spalte je Site, die mindestens ein Workflow im Scope listet
+  (`overviewSites()`, in sites.yaml-Reihenfolge), und `content_updated_at`
+  (sichtbar, sobald ein Nicht-Lokalisierungs-Workflow im Scope ist).
+- `overviewProps($only, $default = null)` — Startprops des Widgets
+  `workflows_overview`: `columns`/`filters` des ganzen Scopes („Alle"),
+  `workflowOptions` (`[{value, label, color, columns, filters}]` je Workflow im
+  Scope, nach `metadata.nav.order` sortiert — Button plus Spalten/Filter der auf ihn eingeengten Liste; die Zeilen
+  werden dafür einmal gebaut und je Workflow geteilt), `defaultWorkflow`,
+  State-Farben/-Labels und `creates` (je Workflow, in dem der User anlegen darf,
+  dieselben Create-Props wie die Manager-Seite, aus `createOptions()`). Null bei
+  leerem Scope.
+- `overviewDefaultWorkflow($scope, $preferred)` — der beim Laden aktive Button:
+  `$preferred` (Widget-Config `default_workflow`), wenn im Scope; sonst der erste
+  Nicht-Lokalisierungs-Workflow, der eine Collection besitzt (der
+  Beitragsmanager — unabhängig vom Anlegerecht des Users), dann der erste
+  Nicht-Lokalisierungs-Workflow, dann der erste.
 - `filterOptions()` / `filterBadges()` — Options + Aktive-Filter-Anzeige.
 - `decodeFilters()` — dekodiert die base64/JSON-`filters`-Query.
 
@@ -3531,8 +3541,10 @@ jede Zeile trägt zusätzlich die URL zum Nicht-mehr-Beobachten. Config: `limit`
 Manager-Seiten über **alle** aktiven Workflows in einer Tabelle. Die Workflows
 kommen aus `DefinitionLoader::all()`; ein neu installierter oder aktivierter
 Workflow taucht also ohne Config-Änderung auf. Config: `workflows` (Teilmenge
-aktiver Workflow-Namen, Default alle, über `PresentsPersonalEntries`) und
-`per_page` (Zeilen je Seite, Default 15). Ist der Scope leer, liefert
+aktiver Workflow-Namen, Default alle, über `PresentsPersonalEntries`),
+`per_page` (Zeilen je Seite, Default 15) und `default_workflow` (Handle des beim
+Laden aktiven Workflows, Default der Authoring-Workflow, siehe
+`overviewDefaultWorkflow()` in § 5.4). Ist der Scope leer, liefert
 `component()` null und die Karte entfällt.
 
 **Komponenten-Widget**: `['name' => 'workflows-overview-widget', 'props' => …]`
@@ -3544,13 +3556,30 @@ Startprops kommen aus `WorkflowController::overviewProps()` — Spalten, Filter 
 Create-Buttons können so nicht von dem abweichen, was der Endpoint antwortet
 (§ 5.2, § 5.4).
 
+- **Workflow-Buttons:** über der Tabelle eine `ButtonGroup` (ab zwei Workflows
+  im Scope): je Workflow ein Button mit seinem farbigen Punkt + Label, sortiert
+  nach `metadata.nav.order` (ohne Order ans Ende, sonst Definitionsreihenfolge),
+  zuletzt
+  „Alle Workflows" (`all_workflows`). Einfachauswahl; aktiv beim Laden ist
+  `defaultWorkflow` (in der Praxis der Beitragsmanager) — die Auswahl wird nicht
+  gemerkt. Ein Workflow schickt `workflows=<name>`, „Alle" die
+  `workflows`-Config (oder nichts): der Endpoint engt Zeilen, Site-Spalten und
+  State-Filter ein. Die Liste ist nach der Auswahl **gekeyt** und wird beim
+  Wechsel neu gemountet, mit `columns`/`filters` aus dem passenden
+  `workflowOptions`-Eintrag: Listing würde zwar bei geänderten
+  `additionalParameters` selbst neu laden, schickt aber die alte
+  Spalten-Sichtbarkeit mit (`applyColumnVisibility()` blendet dann die neuen
+  Site-Spalten aus) und behält Zell-Slots, Filter und Seite. So startet jede
+  Auswahl auf Seite 1 mit genau ihren Spalten und Places; Suche und Filter
+  gehen beim Wechsel verloren (wie bei den Collection-Tabs der Manager-Seite).
 - **Spalten:** Titel, Workflow (farbiger Punkt + Label, verlinkt auf die
-  Manager-Seite, wo es eine gibt), eine State-Spalte je Site aus der Vereinigung
-  der Sites aller Workflows im Scope, „Inhaltlich aktualisiert". Eine Zelle in
-  einer Site, die der Workflow der Zeile nicht verwaltet, bleibt **leer** — nicht
-  der „nicht begonnen"-Strich.
-- **Filter:** Workflow (`WorkflowNameFilter`), Status (Vereinigung der Places),
-  veraltet (`StaleFilter`). Die Suche trifft auch den Workflow-Namen.
+  Manager-Seite, wo es eine gibt; nur bei „Alle" sichtbar), eine State-Spalte je
+  Site aus der Vereinigung der Sites aller Workflows im Scope, „Inhaltlich
+  aktualisiert". Eine Zelle in einer Site, die der Workflow der Zeile nicht
+  verwaltet, bleibt **leer** — nicht der „nicht begonnen"-Strich.
+- **Filter:** Status (Places des gewählten Workflows, bei „Alle" ihre
+  Vereinigung), veraltet (`StaleFilter`). Die Suche trifft auch den
+  Workflow-Namen.
 - **Mehrfach-Zeilen:** Ein Post, den zwei Workflows steuern (z. B.
   Beitragsmanager + Übersetzungsmanager), steht einmal je Workflow da; Zeilen-ID
   `"{workflow}:{rootId}"`.
@@ -3698,8 +3727,10 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
     Instanz, weil das Dashboard-Widget mehrere Buttons (und Modals) rendert.
   - `workflows-overview-widget` → `WorkflowsOverviewWidget.vue` — das
     Dashboard-Widget `workflows_overview` (§ 9): `Widget`-Shell, im
-    `#actions`-Slot ein `CreatePostButton` je `creates`-Eintrag, darunter
-    `WorkflowListing` mit `bare` und `perPage`.
+    `#actions`-Slot ein `CreatePostButton` je `creates`-Eintrag, darunter die
+    Workflow-`ButtonGroup` (Punkt aus `dotClass()`, `variant="pressed"` für den
+    aktiven) und `WorkflowListing` mit `bare` und `perPage`, nach der Auswahl
+    gekeyt.
   - `WorkflowHistory.vue` — History-Liste samt Diff-Panel und dem LCS-Wort-Diff.
     Von **beiden** Detailansichten benutzt (§ 5.10).
   - `workflows-queue-stats-widget` → `QueueStatsWidget.vue` — die Kennzahlreihe

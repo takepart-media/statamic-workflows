@@ -160,12 +160,13 @@ import { openPreviewWindow, previewPresentation } from '../support/preview.js';
 /**
  * Re-runs the listing's request when `token` changes.
  *
- * Statamic's <Listing> owns the fetch, and the only handle on it is the `refresh`
- * function it puts on its ListingContext — it watches neither its `url` nor its
- * `additionalParameters`, so nothing a parent passes in can trigger a refetch.
- * That context is provided by Listing itself, which means a parent cannot inject
- * it. Hence this renderless child: it sits inside the default slot, where the
- * injection resolves, and turns a prop change into a refresh() call.
+ * Statamic's <Listing> owns the fetch. It does refetch when its `url` or its
+ * `additionalParameters` change, but a re-request with unchanged parameters
+ * (rows mutated server-side) needs the `refresh` function it puts on its
+ * ListingContext. That context is provided by Listing itself, which means a
+ * parent cannot inject it. Hence this renderless child: it sits inside the
+ * default slot, where the injection resolves, and turns a prop change into a
+ * refresh() call.
  */
 const ListingRefresh = defineComponent({
     props: { token: { type: Number, default: 0 } },

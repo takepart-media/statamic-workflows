@@ -1,7 +1,8 @@
 <template>
     <!-- "Alle Beiträge": the manager pages' pivot listing, across every scoped
          workflow at once — one row per post, a workflow column, and one state
-         column per site any of those workflows manages.
+         column per site any of those workflows manages. A button group above
+         the table narrows it to one workflow; it opens on the authoring one.
 
          The shell is the CP's own `Widget`; the listing renders `bare` inside it,
          so the card is not drawn twice. -->
@@ -25,10 +26,44 @@
         </template>
 
         <div class="min-w-0 flex-1 px-4 pt-2">
+            <!-- One button per scoped workflow (its dot, as in the workflow
+                 column), single-select, plus "All" for the mixed table. Pointless
+                 with a single workflow in scope, so it only shows from two up. -->
+            <ButtonGroup v-if="workflowOptions.length > 1" class="mb-3">
+                <Button
+                    v-for="option in workflowOptions"
+                    :key="option.value"
+                    size="sm"
+                    :variant="active === option.value ? 'pressed' : 'default'"
+                    :aria-pressed="active === option.value"
+                    @click="active = option.value"
+                >
+                    <span class="inline-flex items-center gap-1.5">
+                        <span class="size-[6px] flex-none rounded-full" :class="dotClass(option.color)" aria-hidden="true"></span>
+                        {{ option.label }}
+                    </span>
+                </Button>
+                <Button
+                    size="sm"
+                    :variant="active === ALL ? 'pressed' : 'default'"
+                    :aria-pressed="active === ALL"
+                    :text="__('workflows::messages.all_workflows')"
+                    @click="active = ALL"
+                />
+            </ButtonGroup>
+
+            <!-- Keyed by the selection, so a switch remounts the listing rather
+                 than only changing its parameters: Listing would refetch on its
+                 own, but keep sending the old column visibility (the endpoint
+                 then hides the site columns the new scope adds), keep the old
+                 cell slots, filters and page. Remounted it starts on page 1 with
+                 exactly the columns and filters of the new scope — at the cost of
+                 the search term, as with the manager page's collection tabs. -->
             <WorkflowListing
+                :key="active"
                 :url="listingUrl"
-                :columns="columns"
-                :filters="filters"
+                :columns="view.columns"
+                :filters="view.filters"
                 :additional-parameters="parameters"
                 preferences-prefix="workflows.overview"
                 :per-page="perPage"
@@ -41,11 +76,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
-import { Widget } from '@statamic/cms/ui';
+import { computed, ref } from 'vue';
+import { Widget, ButtonGroup, Button } from '@statamic/cms/ui';
 import CreatePostButton from './CreatePostButton.vue';
 import WorkflowListing from './WorkflowListing.vue';
 import { registerStateColors, registerStateLabels } from '../support/states.js';
+import { dotClass } from '../support/widgetColors.js';
 
 /**
  * Dashboard widget `workflows_overview`. Everything but `perPage` and
@@ -55,8 +91,15 @@ import { registerStateColors, registerStateLabels } from '../support/states.js';
  */
 const props = defineProps({
     listingUrl: { type: String, required: true },
+    // Columns / filters of the whole scope — the "All" button's table.
     columns: { type: Array, default: () => [] },
     filters: { type: Array, default: () => [] },
+    // [{value, label, color, columns, filters}] — one button per scoped
+    // workflow, with the columns / filters of the table narrowed to it.
+    workflowOptions: { type: Array, default: () => [] },
+    // The workflow whose button is active on load (the authoring workflow, or
+    // the widget's `default_workflow` config). Not remembered across loads.
+    defaultWorkflow: { type: String, default: null },
     // Place handle => Badge color / label, across all workflows.
     stateColors: { type: Object, default: () => ({}) },
     stateLabels: { type: Object, default: () => ({}) },
@@ -75,10 +118,30 @@ const props = defineProps({
 registerStateColors(props.stateColors);
 registerStateLabels(props.stateLabels);
 
-const parameters = computed(() => ({
-    all_workflows: 1,
-    ...(props.workflows?.length ? { workflows: props.workflows.join(',') } : {}),
-}));
+// The "All" button's value. Not a workflow name, which never starts with `*`.
+const ALL = '*';
+
+const active = ref(
+    props.workflowOptions.length > 1 && props.workflowOptions.some((option) => option.value === props.defaultWorkflow)
+        ? props.defaultWorkflow
+        : ALL
+);
+
+const view = computed(
+    () => props.workflowOptions.find((option) => option.value === active.value) ?? { columns: props.columns, filters: props.filters }
+);
+
+// One workflow narrows the endpoint's scope to it — rows, site columns and
+// state filter alike. "All" sends the widget's own list, or nothing for every
+// active workflow.
+const parameters = computed(() => {
+    const workflows = active.value === ALL ? props.workflows ?? [] : [active.value];
+
+    return {
+        all_workflows: 1,
+        ...(workflows.length ? { workflows: workflows.join(',') } : {}),
+    };
+});
 
 // Same as on a manager page: a title click is a plain navigation to the
 // instance's own page (`row.url`).

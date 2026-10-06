@@ -9,9 +9,13 @@ use TakepartMedia\Workflows\Widgets\Concerns\PresentsPersonalEntries;
 /**
  * "Alle Beiträge" as a CP dashboard card: the manager pages' pivot listing
  * across every active entry workflow at once — one row per post, a workflow
- * column, one state column per managed site. Widget config: `per_page` (rows
- * per page, default 15) and `workflows` (restrict to a subset of workflow
- * names, default all active).
+ * column, one state column per managed site. A button group above the table
+ * narrows it to one workflow (only that workflow's site columns then) or shows
+ * all of them; it opens on the authoring workflow. Widget config: `per_page`
+ * (rows per page, default 15), `workflows` (restrict to a subset of workflow
+ * names, default all active) and `default_workflow` (the button active on
+ * load, default the authoring workflow — see
+ * WorkflowController::overviewDefaultWorkflow()).
  *
  * A component widget: the card IS the listing (`workflows-overview-widget`,
  * registered in `resources/js/addon.js`), which pages, searches and filters
@@ -27,7 +31,12 @@ class WorkflowsOverview extends Widget
 
     public function component()
     {
-        $props = app(WorkflowController::class)->overviewProps($this->workflowsConfig());
+        $default = $this->config('default_workflow');
+
+        $props = app(WorkflowController::class)->overviewProps(
+            $this->workflowsConfig(),
+            is_string($default) && $default !== '' ? $default : null
+        );
 
         // No html() either, and DashboardController drops a widget only when
         // both are empty — so null is how this card hides itself when the scope
