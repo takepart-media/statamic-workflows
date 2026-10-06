@@ -114,6 +114,8 @@ class ServiceProvider extends AddonServiceProvider
         // then lets projects override any of them.
         $this->mergeConfigFrom(__DIR__.'/../config/workflows.php', 'workflows');
 
+        $this->defaultDashboardWidgets();
+
         // Scoped, not a plain resolve: AssignmentCandidates memoises the user
         // filtering, and a fresh instance per app() call would throw that away —
         // the instance page resolves the same action twice per transition (once
@@ -150,6 +152,27 @@ class ServiceProvider extends AddonServiceProvider
         if (config('workflows.revisions', true) && config('statamic.revisions.enabled') !== false) {
             config(['statamic.revisions.enabled' => true]);
         }
+    }
+
+    /**
+     * Fill the CP dashboard with `workflows.dashboard_widgets` when the project
+     * configures no widgets of its own (`statamic.cp.widgets` empty, which is
+     * Statamic's default). A non-empty project list always wins and nothing is
+     * merged into it; `dashboard_widgets => false` turns the fallback off.
+     *
+     * Runs in register() so the list is in place before CoreNav decides
+     * whether to show the Dashboard nav item (it only does with widgets).
+     * Per-user/role widget preferences still take precedence over both.
+     */
+    private function defaultDashboardWidgets(): void
+    {
+        $defaults = config('workflows.dashboard_widgets');
+
+        if (! is_array($defaults) || $defaults === [] || ! empty(config('statamic.cp.widgets'))) {
+            return;
+        }
+
+        config(['statamic.cp.widgets' => $defaults]);
     }
 
     public function bootAddon()

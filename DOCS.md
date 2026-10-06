@@ -2848,8 +2848,14 @@ Vue beim Wechsel neu rendert.
 
 ## 9. Dashboard-Widgets
 
-Acht Widgets, alle im ServiceProvider registriert (`$widgets`); das Host-Projekt
-schaltet sie in `config/statamic/cp.php → widgets` frei:
+Acht Widgets, alle im ServiceProvider registriert (`$widgets`). Ohne eigene
+Einträge in `config/statamic/cp.php → widgets` (Statamic-Default: leer) setzt das
+Addon das Layout aus `workflows.dashboard_widgets` (`ServiceProvider::defaultDashboardWidgets()`,
+in `register()`, damit CoreNav den Dashboard-Nav-Punkt sieht). Sobald das Projekt dort
+irgendein Widget einträgt, gilt nur dessen Liste — es wird nichts gemischt;
+`'dashboard_widgets' => false` schaltet den Fallback ab. Widget-Preferences pro
+User/Rolle gehen beidem vor. Der Default (gleichzeitig das empfohlene Layout für eine
+eigene Liste):
 
 ```php
 'widgets' => [

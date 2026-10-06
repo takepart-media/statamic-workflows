@@ -174,6 +174,7 @@ Publish with `php artisan vendor:publish --tag=workflows-config`, then tune:
 | `privileged_groups`    | `['admins']`         | Groups that bypass every workflow gate                                                                                                                              |
 | `post_creator_groups`  | `['admins']`         | Fallback group for the "New post" button when a workflow does not set `metadata.post_creator_groups`                                                                |
 | `nav_section`          | `'Workflows'`        | **Deprecated, unused.** The addon no longer has its own nav section; the managers are reached from the `workflows_overview` dashboard widget                      |
+| `dashboard_widgets`    | 7 workflow widgets   | Dashboard layout used when `config/statamic/cp.php → widgets` is empty; your own list replaces it, `false` disables it (DOCS.md § 9) |
 | `header_responsibles`  | both `null`          | The "Responsible" row of the user-header dashboard card: `group` plus the `user_field` read on both sides. A member of the group counts as responsible when their values in that field overlap the current user's. Both `null` → no row |
 | `translation.plain_language.max_polls` | `5` | Polls one submission is waited out before it counts as dead. One poll is one minute at the scheduled tick. Env: `PLAIN_LANGUAGE_MAX_POLLS` |
 | `translation.plain_language.max_attempts` | `3` | Submissions a rewrite gets in total, the first included. A failed submission is sent to the service again; only after the last one does the version move to the workflow's failure place. `1` disables retries. Env: `PLAIN_LANGUAGE_MAX_ATTEMPTS` |
@@ -305,7 +306,10 @@ the `{base}_{lang}` convention (e.g. `main` + `main_en`). Override
 
 **Widgets**:
 
-Enable them in `config/statamic/cp.php → widgets` (details in DOCS.md § 9):
+If `config/statamic/cp.php → widgets` is empty (Statamic's default), the addon
+fills the dashboard from `workflows.dashboard_widgets` — the layout below. Any
+widget list of your own there replaces that default entirely; set
+`'dashboard_widgets' => false` to disable it (details in DOCS.md § 9):
 
 ```php
 'widgets' => [

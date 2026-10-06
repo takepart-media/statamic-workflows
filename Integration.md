@@ -92,7 +92,7 @@ Damit die Workflows greifen, müssen ein paar projekt-seitige Dinge stimmen:
 
 **Super-Admins.** Mindestens ein User mit `super: true` in `users/*.yaml` — Super-Admins umgehen alle Workflow-Gates und können die Settings-UI benutzen.
 
-<a id="dashboard-widget"></a>**Dashboard-Widget.** Einstieg in die Workflows ist das Dashboard, nicht die Nav. Das Widget in `config/statamic/cp.php` eintragen:
+<a id="dashboard-widget"></a>**Dashboard-Widget.** Einstieg in die Workflows ist das Dashboard, nicht die Nav. Ist `widgets` in `config/statamic/cp.php` leer (Statamic-Default), setzt das Addon automatisch sein Layout aus `workflows.dashboard_widgets` — nichts zu tun. Wer eine eigene Liste pflegt, trägt das Widget dort ein (eine eigene Liste ersetzt den Addon-Default komplett):
 
 ```php
 'widgets' => [

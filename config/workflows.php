@@ -436,6 +436,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Dashboard widgets
+    |--------------------------------------------------------------------------
+    |
+    | The dashboard layout the addon sets when the project configures no
+    | widgets of its own (`widgets` in config/statamic/cp.php is empty). As
+    | soon as the project lists any widget there, only that list applies and
+    | nothing from here is merged in. Set to false to never set a default.
+    |
+    | Order runs from personal to overall: who am I -> how much is waiting ->
+    | what do I have to do -> my other posts -> all posts -> distribution.
+    |
+    */
+
+    'dashboard_widgets' => [
+        ['type' => 'workflows_user_header', 'width' => 100],
+        ['type' => 'workflows_queue_stats', 'width' => 100],
+        ['type' => 'workflows_my_queue', 'width' => 100, 'limit' => 7],
+        ['type' => 'workflows_watched', 'width' => 50, 'limit' => 5],
+        ['type' => 'workflows_created_by_me', 'width' => 50, 'limit' => 5],
+        ['type' => 'workflows_overview', 'width' => 100],
+        ['type' => 'workflows_status', 'width' => 100],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | SLA scheduler
     |--------------------------------------------------------------------------
     |
