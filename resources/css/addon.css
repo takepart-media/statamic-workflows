@@ -14,9 +14,14 @@
  *     components via the explicit `@source` below.
  *   - No preflight import, so the surrounding CP chrome isn't reset. */
 
-@layer addon-theme, addon-utilities;
+@layer addon-theme, addon-vendor, addon-utilities;
 
 @import 'tailwindcss/theme.css' layer(addon-theme) source(none);
+/* Vue Flow's structural CSS (graph editor). Layered so it never outranks the CP
+ * or our own utilities; the editor's look lives in the unlayered `.wf-editor`
+ * block at the end of this file. The default theme is left out on purpose. */
+@import '@vue-flow/core/dist/style.css' layer(addon-vendor);
+@import '@vue-flow/minimap/dist/style.css' layer(addon-vendor);
 @import 'tailwindcss/utilities.css' layer(addon-utilities) source(none);
 
 /* Match the CP's class-based dark mode (.dark on an ancestor) so our `dark:`
@@ -380,4 +385,236 @@
  * `.wf-widget-tabs`. */
 .wf-status-pager .gap-1 {
     gap: 0.625rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * Graph editor (resources/js/editor). Unlayered and scoped to `.wf-editor`, so
+ * it beats both Vue Flow's own CSS (in `addon-vendor` above) and anything the
+ * CP's unlayered stylesheet might say about generic `svg`/`path` elements.
+ *
+ * Everything the canvas paints goes through the tokens below, mapped onto the
+ * CP's theme variables, with the dark set under the CP's `.dark` class. SVG
+ * colours (grid dots, markers, minimap) are set here in CSS rather than through
+ * Vue Flow's colour props: those end up as presentation attributes, which cannot
+ * resolve `var()`.
+ * ------------------------------------------------------------------------- */
+.wf-editor {
+    --wf-canvas-bg: var(--theme-color-gray-50, #f9fafb);
+    --wf-grid: var(--theme-color-gray-300, #d1d5db);
+    --wf-node-bg: var(--theme-color-white, #fff);
+    --wf-node-border: var(--theme-color-gray-300, #d1d5db);
+    --wf-node-text: var(--theme-color-gray-900, #111827);
+    --wf-node-muted: var(--theme-color-gray-500, #6b7280);
+    --wf-chip-bg: var(--theme-color-gray-100, #f3f4f6);
+    --wf-edge: var(--theme-color-gray-400, #9ca3af);
+    --wf-edge-active: var(--theme-color-primary, #4f46e5);
+    --wf-handle: var(--theme-color-gray-400, #9ca3af);
+    --wf-error: #ef4444;
+    --wf-focus: var(--theme-color-focus-outline, var(--wf-edge-active));
+    --wf-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.08);
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 420px;
+    overflow: hidden;
+    border: 1px solid var(--theme-color-gray-200, #e5e7eb);
+    border-radius: 0.75rem;
+    background-color: var(--wf-canvas-bg);
+    color: var(--wf-node-text);
+}
+.wf-editor:where(.dark, .dark *) {
+    --wf-canvas-bg: var(--theme-color-gray-950, #030712);
+    --wf-grid: var(--theme-color-gray-800, #1f2937);
+    --wf-node-bg: var(--theme-color-gray-900, #111827);
+    --wf-node-border: var(--theme-color-gray-700, #374151);
+    --wf-node-text: var(--theme-color-gray-100, #f3f4f6);
+    --wf-node-muted: var(--theme-color-gray-400, #9ca3af);
+    --wf-chip-bg: var(--theme-color-gray-800, #1f2937);
+    --wf-edge: var(--theme-color-gray-500, #6b7280);
+    --wf-handle: var(--theme-color-gray-500, #6b7280);
+    --wf-error: #f87171;
+    --wf-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+    border-color: var(--theme-color-gray-700, #374151);
+}
+
+/* Toolbar */
+.wf-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--wf-node-border);
+    background-color: var(--wf-node-bg);
+}
+.wf-editor-canvas {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Grid, markers, minimap */
+.wf-editor .vue-flow__background circle {
+    fill: var(--wf-grid);
+}
+.wf-editor .vue-flow__marker {
+    color: var(--wf-edge);
+}
+.wf-editor .vue-flow__minimap {
+    overflow: hidden;
+    border: 1px solid var(--wf-node-border);
+    border-radius: 0.5rem;
+    background-color: var(--wf-node-bg);
+}
+.wf-editor .vue-flow__minimap-node {
+    fill: var(--wf-node-border);
+}
+.wf-editor .vue-flow__minimap-node.wf-minimap-transition {
+    fill: var(--wf-edge);
+}
+.wf-editor .vue-flow__minimap-mask {
+    fill: rgb(0 0 0 / 0.06);
+}
+.wf-editor:where(.dark, .dark *) .vue-flow__minimap-mask {
+    fill: rgb(255 255 255 / 0.06);
+}
+.wf-editor .vue-flow__selection {
+    border: 1px dashed var(--wf-edge-active);
+    background-color: color-mix(in srgb, var(--wf-edge-active) 8%, transparent);
+}
+
+/* Edges */
+.wf-editor .vue-flow__edge-path {
+    stroke: var(--wf-edge);
+    stroke-width: 1.5;
+}
+.wf-editor .vue-flow__edge:hover .vue-flow__edge-path,
+.wf-editor .vue-flow__edge.selected .vue-flow__edge-path,
+.wf-editor .vue-flow__edge:focus-visible .vue-flow__edge-path {
+    stroke: var(--wf-edge-active);
+    stroke-width: 2;
+}
+.wf-editor .vue-flow__edge.wf-edge-ghost .vue-flow__edge-path {
+    stroke-dasharray: 5 4;
+    opacity: 0.7;
+}
+/* The initial place → first step: fixed by the definition, drawn heavier. */
+.wf-editor .vue-flow__edge.wf-edge-locked .vue-flow__edge-path {
+    stroke-width: 2.5;
+}
+
+/* Handles: connection points only, not interactive while read-only. */
+.wf-editor .vue-flow__handle {
+    width: 10px;
+    height: 10px;
+    min-width: 0;
+    min-height: 0;
+    border: 2px solid var(--wf-handle);
+    border-radius: 9999px;
+    background-color: var(--wf-node-bg);
+}
+
+/* Nodes: focus ring and selection on the node's own box. */
+.wf-editor .vue-flow__node:focus,
+.wf-editor .vue-flow__node:focus-visible {
+    outline: none;
+}
+.wf-editor .vue-flow__node:focus-visible > * {
+    outline: 2px solid var(--wf-focus);
+    outline-offset: 2px;
+}
+.wf-editor .vue-flow__node.selected > .wf-place,
+.wf-editor .vue-flow__node.selected > .wf-transition {
+    border-color: var(--wf-edge-active);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-edge-active) 25%, transparent), var(--wf-shadow);
+}
+
+.wf-place {
+    position: relative;
+    display: flex;
+    width: 240px;
+    border: 1px solid var(--wf-node-border);
+    border-radius: 0.5rem;
+    background-color: var(--wf-node-bg);
+    box-shadow: var(--wf-shadow);
+    color: var(--wf-node-text);
+}
+.wf-place-stripe {
+    flex: none;
+    width: 5px;
+    border-radius: 0.5rem 0 0 0.5rem;
+}
+.wf-place-body {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 0.625rem;
+}
+.wf-node-muted {
+    color: var(--wf-node-muted);
+}
+.wf-node-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.375rem;
+    border-radius: 0.25rem;
+    background-color: var(--wf-chip-bg);
+    color: var(--wf-node-muted);
+    font-size: 0.6875rem;
+    line-height: 1.125rem;
+    white-space: nowrap;
+}
+.wf-node-chip--warn {
+    background-color: color-mix(in srgb, var(--wf-error) 14%, transparent);
+    color: var(--wf-error);
+}
+
+/* Transition pill, tinted by its button variant. */
+.wf-transition {
+    --wf-variant-bg: var(--wf-node-bg);
+    --wf-variant-border: var(--wf-node-border);
+    --wf-variant-fg: var(--wf-node-text);
+    display: flex;
+    max-width: 240px;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.3125rem 0.875rem;
+    border: 1px solid var(--wf-variant-border);
+    border-radius: 9999px;
+    background-color: var(--wf-variant-bg);
+    box-shadow: var(--wf-shadow);
+    color: var(--wf-variant-fg);
+    text-align: center;
+}
+.wf-transition[data-variant="primary"] { --wf-variant-bg: #eff6ff; --wf-variant-border: #93c5fd; --wf-variant-fg: #1e40af; }
+.wf-transition[data-variant="danger"]  { --wf-variant-bg: #fef2f2; --wf-variant-border: #fca5a5; --wf-variant-fg: #991b1b; }
+.wf-transition[data-variant="filled"]  { --wf-variant-bg: #1f2937; --wf-variant-border: #111827; --wf-variant-fg: #f9fafb; }
+.wf-transition:where(.dark, .dark *)[data-variant="primary"] { --wf-variant-bg: #172554; --wf-variant-border: #1d4ed8; --wf-variant-fg: #bfdbfe; }
+.wf-transition:where(.dark, .dark *)[data-variant="danger"]  { --wf-variant-bg: #450a0a; --wf-variant-border: #b91c1c; --wf-variant-fg: #fecaca; }
+.wf-transition:where(.dark, .dark *)[data-variant="filled"]  { --wf-variant-bg: #f3f4f6; --wf-variant-border: #d1d5db; --wf-variant-fg: #111827; }
+.wf-transition .wf-node-chip {
+    background-color: color-mix(in srgb, currentColor 10%, transparent);
+    color: inherit;
+}
+
+/* The auto-injected parts (pending_revision and its system steps). */
+.wf-ghost {
+    display: flex;
+    max-width: 220px;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    border: 1px dashed var(--wf-node-border);
+    border-radius: 0.5rem;
+    background-color: color-mix(in srgb, var(--wf-node-bg) 60%, transparent);
+    color: var(--wf-node-muted);
+    text-align: center;
+}
+.wf-ghost--transition {
+    border-radius: 9999px;
 }

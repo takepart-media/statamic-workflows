@@ -17,7 +17,13 @@
                     {{ __('workflows::messages.settings_intro') }}
                 </p>
             </div>
-            <div class="flex gap-2">
+            <div class="flex items-center gap-2">
+                <!-- Beta: swaps the form below for the read-only graph of the same
+                     (unsaved) model. Remembered per browser. -->
+                <label class="mr-2 flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <Switch v-model="graphView" size="sm" />
+                    {{ __('workflows::messages.editor_graph_view') }}
+                </label>
                 <Button variant="secondary" :text="__('workflows::messages.back_to_queue')" @click="$inertia.visit(queueUrl)" />
                 <!-- Called with no args on purpose — save() takes an options
                      object, and forwarding the click event would shadow it. -->
@@ -25,7 +31,7 @@
             </div>
         </header>
 
-        <section class="mb-8">
+        <section v-show="!graphView" class="mb-8">
             <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-lg font-semibold dark:text-white">{{ __('workflows::messages.metadata') }}</h2>
             </div>
@@ -187,7 +193,7 @@
              backup and CI log. Shown anyway because a missing `.env` entry would
              otherwise first surface as a failed API call that looks like a broken
              integration. -->
-        <section v-if="isLocalizationWorkflow" class="mb-8">
+        <section v-if="isLocalizationWorkflow" v-show="!graphView" class="mb-8">
             <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-lg font-semibold dark:text-white">
                     {{ isPlainLanguageWorkflow
@@ -352,7 +358,7 @@
             </div>
         </section>
 
-        <section class="mb-8">
+        <section v-show="!graphView" class="mb-8">
             <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-lg font-semibold dark:text-white">{{ __('workflows::messages.collections') }}</h2>
             </div>
@@ -394,7 +400,7 @@
         <!-- Die Alterung gehört dem Workflow, der die Beiträge selbst führt. Ein
              Lokalisierungs-Workflow reagiert auf dessen Frist (Sektion darunter),
              er hat keine eigene — der Writer lehnt den Block dort auch ab. -->
-        <section v-if="! isLocalizationWorkflow" class="mb-8">
+        <section v-if="! isLocalizationWorkflow" v-show="!graphView" class="mb-8">
             <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-lg font-semibold dark:text-white">{{ __('workflows::messages.sla') }}</h2>
             </div>
@@ -507,7 +513,7 @@
 
         <!-- Das Gegenstück: nur eine Fassung hat eine Quelle über sich, die
              wegfallen kann. -->
-        <section v-if="isLocalizationWorkflow" class="mb-8">
+        <section v-if="isLocalizationWorkflow" v-show="!graphView" class="mb-8">
             <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-lg font-semibold dark:text-white">{{ __('workflows::messages.source_draft') }}</h2>
             </div>
@@ -528,7 +534,7 @@
             </div>
         </section>
 
-        <section class="mb-8">
+        <section v-show="!graphView" class="mb-8">
             <h2 class="mb-3 text-lg font-semibold dark:text-white">{{ __('workflows::messages.places') }}</h2>
 
             <p class="mb-3 rounded-md border border-amber-300 bg-amber-100 p-3 text-sm leading-relaxed text-amber-950">
@@ -858,7 +864,7 @@
             </div>
         </section>
 
-        <section class="mb-8">
+        <section v-show="!graphView" class="mb-8">
             <h2 class="mb-3 text-lg font-semibold dark:text-white">{{ __('workflows::messages.transitions') }}</h2>
 
             <p class="mb-3 rounded-md border border-amber-300 bg-amber-100 p-3 text-sm leading-relaxed text-amber-950">
@@ -1372,6 +1378,22 @@
             </div>
         </section>
 
+        <!-- Lazy chunk: the graph editor (Vue Flow, dagre) only loads once the
+             toggle is on. Gets the form's live model, so it shows unsaved edits. -->
+        <WorkflowEditor
+            v-if="graphView"
+            :definition="definition"
+            :model="form"
+            :injected="injected"
+            :state-usage="stateUsage"
+            :label-locales="labelLocales"
+            :label-locale="labelLocale"
+            :shipped-place-labels="shippedPlaceLabels"
+            :custom-actions="customActions"
+            :form-view-label="__('workflows::messages.editor_form_view')"
+            @form-view="graphView = false"
+        />
+
         <Modal :open="migrationModal.open" @update:open="(v) => v || closeMigrationModal()">
             <ModalTitle class="wf-modal-head">
                 <Icon name="warning-diamond" class="size-4" />
@@ -1444,8 +1466,8 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, watch, nextTick, getCurrentInstance } from 'vue';
-import { Badge, Button, Combobox, Dropdown, DropdownItem, DropdownMenu, Modal, ModalTitle, Icon, Input, Select, Checkbox, Field } from '@statamic/cms/ui';
+import { reactive, ref, computed, watch, nextTick, getCurrentInstance, defineAsyncComponent, h } from 'vue';
+import { Badge, Button, Combobox, Dropdown, DropdownItem, DropdownMenu, Modal, ModalTitle, Icon, Input, Select, Checkbox, Field, Switch } from '@statamic/cms/ui';
 import { Head } from '@statamic/cms/inertia';
 import { humanize, stateColor } from '../support/states.js';
 import EnvStatusLine from '../components/EnvStatusLine.vue';
@@ -1474,6 +1496,35 @@ import { clearTransitionRefs, replaceReferences } from '../editor/model/refs.js'
 // Used by the template as is.
 const { defaultVariant } = labels;
 
+// The graph editor is its own chunk: Vue Flow and dagre are only fetched when
+// somebody switches the graph view on, so the CP pages don't grow.
+const WorkflowEditor = defineAsyncComponent({
+    loader: () => import('../editor/components/WorkflowEditor.vue'),
+    loadingComponent: { render: () => h('p', { class: 'p-6 text-sm text-gray-500' }, __('workflows::messages.editor_loading')) },
+    errorComponent: { render: () => h('p', { class: 'p-6 text-sm text-red-600' }, __('workflows::messages.editor_load_failed')) },
+    delay: 150,
+});
+
+// Form or graph — remembered per browser. Storage may be unavailable (private
+// mode, blocked site data); then it just doesn't stick.
+const GRAPH_VIEW_KEY = 'workflows.settings.graphView';
+const graphView = ref(readGraphView());
+watch(graphView, (on) => {
+    try {
+        window.localStorage.setItem(GRAPH_VIEW_KEY, on ? '1' : '0');
+    } catch {
+        // not persisted — fine
+    }
+});
+
+function readGraphView() {
+    try {
+        return window.localStorage.getItem(GRAPH_VIEW_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
 // Statamic CP exposes axios via Vue's global properties, not as a bare import.
 // Same pattern used in every other addon component (WorkflowQueue, etc).
 const axios = getCurrentInstance()?.appContext?.config?.globalProperties?.$axios;
@@ -1482,6 +1533,9 @@ const props = defineProps({
     workflow: { type: String, required: true },
     slug: { type: String, required: true },
     definition: { type: Object, required: true },
+    // What DefinitionLoader adds at read time (pending_revision and its system
+    // transitions) — not part of `definition`, shown read-only in the graph view.
+    injected: { type: Object, default: () => ({ places: {}, transitions: {} }) },
     stateUsage: { type: Object, default: () => ({}) },
     saveUrl: { type: String, required: true },
     deletePlaceUrlTemplate: { type: String, required: true },
