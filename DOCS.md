@@ -3589,6 +3589,14 @@ Create-Buttons können so nicht von dem abweichen, was der Endpoint antwortet
   Site-Spalten aus) und behält Zell-Slots, Filter und Seite. So startet jede
   Auswahl auf Seite 1 mit genau ihren Spalten und Places; Suche und Filter
   gehen beim Wechsel verloren (wie bei den Collection-Tabs der Manager-Seite).
+  **Ohne Layout-Shift:** die neue Liste wird zunächst unsichtbar, absolut
+  positioniert und `inert` HINTER der alten gemountet (die gedimmt stehen
+  bleibt) und erst nach ihrem ersten erfolgreichen Request (`requestCompleted`,
+  Fallback nach 10 s) gegen die alte getauscht — kein Skeleton im Bild. Der
+  Bereich darunter hält per `min-height` die größte bisher gemessene Höhe, die
+  Karte schrumpft also bei keinem Klick (auch nicht bei weniger Zeilen oder
+  Spalten); Preis: eine kurze Liste lässt dann Leerraum. `pressed` und `default`
+  sind beim Kit-`Button` dieselbe Box, die Buttons selbst bewegen sich nicht.
 - **Spalten:** Titel, Workflow (farbiger Punkt + Label, verlinkt auf die
   Manager-Seite, wo es eine gibt; nur bei „Alle" sichtbar), eine State-Spalte je
   Site aus der Vereinigung der Sites aller Workflows im Scope, „Inhaltlich

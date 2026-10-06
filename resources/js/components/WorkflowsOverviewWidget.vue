@@ -29,7 +29,10 @@
         <div class="flex min-w-0 flex-1 flex-col px-4 pt-2">
             <!-- One button per scoped workflow (its dot, as in the workflow
                  column), single-select, plus "All" for the mixed table. Pointless
-                 with a single workflow in scope, so it only shows from two up. -->
+                 with a single workflow in scope, so it only shows from two up.
+                 `pressed` and `default` are the same box (same border, padding,
+                 weight — only the fill differs), so the active state does not
+                 move the group or the buttons beside it. -->
             <ButtonGroup v-if="workflowOptions.length > 1" class="mb-3">
                 <Button
                     v-for="option in workflowOptions"
@@ -37,7 +40,7 @@
                     size="sm"
                     :variant="active === option.value ? 'pressed' : 'default'"
                     :aria-pressed="active === option.value"
-                    @click="active = option.value"
+                    @click="select(option.value)"
                 >
                     <span class="inline-flex items-center gap-1.5">
                         <span class="size-[6px] flex-none rounded-full" :class="dotClass(option.color)" aria-hidden="true"></span>
@@ -49,36 +52,54 @@
                     :variant="active === ALL ? 'pressed' : 'default'"
                     :aria-pressed="active === ALL"
                     :text="__('workflows::messages.all_workflows')"
-                    @click="active = ALL"
+                    @click="select(ALL)"
                 />
             </ButtonGroup>
 
-            <!-- Keyed by the selection, so a switch remounts the listing rather
-                 than only changing its parameters: Listing would refetch on its
-                 own, but keep sending the old column visibility (the endpoint
-                 then hides the site columns the new scope adds), keep the old
-                 cell slots, filters and page. Remounted it starts on page 1 with
-                 exactly the columns and filters of the new scope — at the cost of
-                 the search term, as with the manager page's collection tabs. -->
-            <WorkflowListing
-                :key="active"
-                :url="listingUrl"
-                :columns="view.columns"
-                :filters="view.filters"
-                :additional-parameters="parameters"
-                preferences-prefix="workflows.overview"
-                :per-page="perPage"
-                :show-toolbar="true"
-                bare
-                class="flex flex-1 flex-col"
-                @open-summary="openSummary"
-            />
+            <!-- The stage. Never shorter than the tallest listing it has shown
+                 (`floor`), so a button click — a remount, a narrower table,
+                 fewer rows — never pulls the card, or the dashboard below it,
+                 up. -->
+            <div ref="stage" class="relative flex flex-1 flex-col" :style="floor ? { minHeight: `${floor}px` } : null">
+                <!-- Keyed by the selection, so a switch remounts the listing rather
+                     than only changing its parameters: Listing would refetch on its
+                     own, but keep sending the old column visibility (the endpoint
+                     then hides the site columns the new scope adds), keep the old
+                     cell slots, filters and page. Remounted it starts on page 1 with
+                     exactly the columns and filters of the new scope — at the cost of
+                     the search term, as with the manager page's collection tabs.
+
+                     A remount starts with Listing's skeleton, though, so the new
+                     listing is first mounted BEHIND the current one: absolutely
+                     positioned (no height of its own), invisible and inert, while
+                     the current one stays in place, dimmed. When the new one's first
+                     request completes the two swap in a single frame — the table
+                     changes, the layout does not. -->
+                <WorkflowListing
+                    v-for="key in stages"
+                    :key="key"
+                    :url="listingUrl"
+                    :columns="scopes[key].columns"
+                    :filters="scopes[key].filters"
+                    :additional-parameters="scopes[key].parameters"
+                    preferences-prefix="workflows.overview"
+                    :per-page="perPage"
+                    :show-toolbar="true"
+                    bare
+                    :class="stageClass(key)"
+                    :inert="key === pending || null"
+                    :aria-hidden="key === pending ? 'true' : null"
+                    :aria-busy="key === shown && pending ? 'true' : null"
+                    @request-completed="loaded(key)"
+                    @open-summary="openSummary"
+                />
+            </div>
         </div>
     </Widget>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Widget, ButtonGroup, Button } from '@statamic/cms/ui';
 import CreatePostButton from './CreatePostButton.vue';
 import WorkflowListing from './WorkflowListing.vue';
@@ -129,20 +150,86 @@ const active = ref(
         : ALL
 );
 
-const view = computed(
-    () => props.workflowOptions.find((option) => option.value === active.value) ?? { columns: props.columns, filters: props.filters }
+// Columns, filters and endpoint parameters per selection, built once: each
+// listing gets the same objects on every render, so none of them refetches
+// because a parameter object was merely recreated. One workflow narrows the
+// endpoint's scope to it — rows, site columns and state filter alike. "All"
+// sends the widget's own list, or nothing for every active workflow.
+const scopes = computed(() =>
+    Object.fromEntries(
+        [...props.workflowOptions.map((option) => option.value), ALL].map((key) => {
+            const view = props.workflowOptions.find((option) => option.value === key) ?? {
+                columns: props.columns,
+                filters: props.filters,
+            };
+            const workflows = key === ALL ? props.workflows ?? [] : [key];
+
+            return [
+                key,
+                {
+                    columns: view.columns,
+                    filters: view.filters,
+                    parameters: {
+                        all_workflows: 1,
+                        ...(workflows.length ? { workflows: workflows.join(',') } : {}),
+                    },
+                },
+            ];
+        }),
+    ),
 );
 
-// One workflow narrows the endpoint's scope to it — rows, site columns and
-// state filter alike. "All" sends the widget's own list, or nothing for every
-// active workflow.
-const parameters = computed(() => {
-    const workflows = active.value === ALL ? props.workflows ?? [] : [active.value];
+// `active` is the pressed button and follows a click at once; `shown` is the
+// listing on screen; `pending` the one loading behind it, if any. A click back
+// to the shown selection simply drops the pending one, and a third click while
+// one is pending replaces it.
+const shown = ref(active.value);
+const pending = ref(null);
+let fallback = null;
 
-    return {
-        all_workflows: 1,
-        ...(workflows.length ? { workflows: workflows.join(',') } : {}),
-    };
+const stages = computed(() => (pending.value ? [shown.value, pending.value] : [shown.value]));
+
+function select(key) {
+    active.value = key;
+    pending.value = key === shown.value ? null : key;
+    clearTimeout(fallback);
+    // Listing reports only a SUCCESSFUL request. A failed one (Listing toasts
+    // the error itself) must not leave the button pressed over the old table
+    // for good, so the new listing is shown after a while regardless.
+    if (pending.value) fallback = setTimeout(() => loaded(key), 10000);
+}
+
+function loaded(key) {
+    if (key !== pending.value) return;
+    clearTimeout(fallback);
+    shown.value = key;
+    pending.value = null;
+}
+
+function stageClass(key) {
+    if (key === pending.value) return 'invisible absolute inset-x-0 top-0';
+    return ['flex flex-1 flex-col transition-opacity', pending.value ? 'pointer-events-none opacity-50' : null];
+}
+
+// The height floor of the stage: the tallest it has been since the widget
+// mounted. A ResizeObserver on the stage sees every growth (it cannot shrink
+// below the floor it is held at), and the pending listing is absolutely
+// positioned, so only what is on screen counts.
+const stage = ref(null);
+const floor = ref(0);
+let observer = null;
+
+onMounted(() => {
+    if (typeof ResizeObserver === 'undefined' || !stage.value) return;
+    observer = new ResizeObserver(() => {
+        if (stage.value) floor.value = Math.max(floor.value, Math.ceil(stage.value.getBoundingClientRect().height));
+    });
+    observer.observe(stage.value);
+});
+
+onBeforeUnmount(() => {
+    observer?.disconnect();
+    clearTimeout(fallback);
 });
 
 // Same as on a manager page: a title click is a plain navigation to the
