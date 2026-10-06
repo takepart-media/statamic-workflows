@@ -4,8 +4,8 @@
 //   Ctrl/⌘+Shift+Z      redo             (native inside text fields)
 //   Ctrl+Y              redo             (native inside text fields)
 //   Ctrl/⌘+S            save             (everywhere, also while typing)
-//   Ctrl/⌘+,            workflow settings
-//   Esc                 close menu → deselect → collapse the panel
+//   Ctrl/⌘+,            workflow settings (open / close the stack)
+//   Esc                 close settings → close menu → deselect → collapse the panel
 //   Delete / Backspace  delete the selection          ┐
 //   Tab                 add menu beside the node      │ on the canvas (or with
 //   Enter               open the focused node's panel │ nothing focused)
@@ -15,7 +15,9 @@
 //   Shift+L             arrange automatically
 //
 // Single keys never fire while typing (inputs, textareas, selects, contenteditable
-// — the CodeEditor), inside a menu or a dialog, or outside the editor. The arrow
+// — the CodeEditor), inside a menu or a dialog, or outside the editor. While a
+// modal layer of the editor is open (the settings stack, `modal`), only the
+// Ctrl/⌘ shortcuts and Esc are left: the canvas behind it is out of reach. The arrow
 // keys are taken in the capture phase: Vue Flow moves a selected node itself
 // (1px, not recorded), so the nudge has to get there first.
 
@@ -30,6 +32,14 @@ const ARROWS = {
     ArrowUp: [0, -1],
     ArrowDown: [0, 1],
 };
+
+export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+
+/** "Strg+Z" / "⌘Z" — how a Ctrl/⌘ shortcut reads on this machine. */
+export function shortcutLabel(key, { shift = false } = {}) {
+    if (IS_MAC) return `${shift ? '⇧' : ''}⌘${key}`;
+    return `${__('workflows::messages.editor_key_ctrl')}+${shift ? `${__('workflows::messages.editor_key_shift')}+` : ''}${key}`;
+}
 
 const TYPING_ROLES = ['textbox', 'combobox', 'searchbox', 'listbox', 'option', 'menu', 'menuitem', 'dialog', 'alertdialog'];
 
@@ -50,9 +60,11 @@ export function isTypingTarget(el) {
  * @param {object} where
  * @param {boolean} where.typing    focus is in a text field / menu / dialog
  * @param {boolean} where.onCanvas  focus is on the canvas (or nowhere)
+ * @param {boolean} where.modal     a modal layer of the editor is open (settings
+ *                                  stack): no single-key shortcuts but Esc
  * @returns {{action: string, dx?: number, dy?: number}|null}
  */
-export function resolveShortcut(event, { typing = false, onCanvas = false } = {}) {
+export function resolveShortcut(event, { typing = false, onCanvas = false, modal = false } = {}) {
     const key = event.key ?? '';
     const lower = key.length === 1 ? key.toLowerCase() : key;
     const mod = !!(event.ctrlKey || event.metaKey);
@@ -69,6 +81,7 @@ export function resolveShortcut(event, { typing = false, onCanvas = false } = {}
     if (event.altKey || typing) return null;
 
     if (key === 'Escape') return { action: 'escape' };
+    if (modal) return null;
 
     if (onCanvas) {
         if (key === 'Delete' || key === 'Backspace') return { action: 'delete' };
@@ -95,21 +108,30 @@ export function resolveShortcut(event, { typing = false, onCanvas = false } = {}
  *                                                 events from inside it or with
  *                                                 nothing focused)
  * @param {() => HTMLElement|null} options.canvas  the canvas wrapper
+ * @param {() => HTMLElement[]} [options.scopes]  more places that count as "in the
+ *                                                 editor" — teleported layers like
+ *                                                 the settings stack
+ * @param {() => boolean} [options.modal]          a modal layer is open: single
+ *                                                 keys off, except Esc
  * @param {() => boolean} [options.enabled]        e.g. false while a dialog is open
  * @param {Record<string, (shortcut, event) => boolean|void>} options.handlers
  *        one per action (see resolveShortcut); returning false means "not
  *        handled" — the key then keeps its default behaviour
  */
-export function useShortcuts({ root, canvas, enabled = () => true, handlers }) {
+export function useShortcuts({ root, canvas, scopes = () => [], modal = () => false, enabled = () => true, handlers }) {
     const nothingFocused = (el) => !el || el === document.body || el === document.documentElement;
 
     function locate(event) {
         const el = event.target;
-        const inEditor = nothingFocused(el) || !!root()?.contains(el);
+        const inEditor = nothingFocused(el)
+            || !!root()?.contains(el)
+            || (scopes() ?? []).some((scope) => scope?.contains?.(el));
+        const isModal = !!modal();
         return {
             inEditor,
             typing: isTypingTarget(el),
-            onCanvas: nothingFocused(el) || !!canvas()?.contains(el),
+            onCanvas: !isModal && (nothingFocused(el) || !!canvas()?.contains(el)),
+            modal: isModal,
         };
     }
 

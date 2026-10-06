@@ -1,6 +1,7 @@
 <template>
     <div ref="root" class="wf-editor" :style="{ height }">
         <Toolbar
+            ref="toolbar"
             v-model:minimap="minimap"
             v-model:show-system="showSystem"
             :has-system-steps="hasSystemSteps"
@@ -13,6 +14,14 @@
             :can-redo="api.history.canRedo.value"
             :undo-action="historyLabel(api.history.undoTag.value)"
             :redo-action="historyLabel(api.history.redoTag.value)"
+            :workflow-name="workflowName"
+            :workflow-handle="workflow"
+            :active="active"
+            :active-busy="togglingActive"
+            :can-toggle-active="!!activeUrl"
+            :settings-open="settingsOpen"
+            @update:active="setActive"
+            @open-settings="toggleSettings"
             @undo="undo"
             @redo="redo"
             @zoom-in="canvas?.zoomIn()"
@@ -96,13 +105,27 @@
                         <NodePanel
                             :selected-id="selectedId"
                             :place-tab="placeTab"
+                            :problems="problems"
                             @collapse="panelCollapsed = true"
-                            @reset-positions="resetPositions"
+                            @open-settings="toggleSettings"
+                            @select-problem="selectProblem"
                         />
                     </SplitterPanel>
                 </template>
             </SplitterGroup>
         </div>
+
+        <WorkflowSettingsStack
+            ref="settingsStack"
+            v-model:open="settingsOpen"
+            :title="`${__('workflows::messages.editor_kind_workflow')} — ${workflowName}`"
+            :dirty="api.dirty.value"
+            :saving="saving"
+            :save-title="`${__('workflows::messages.save')} (${shortcutLabel('S')})`"
+            @save="save()"
+            @closed="settingsClosed"
+            @reset-positions="resetPositions"
+        />
 
         <AddNodeMenu
             v-model:open="addMenu.open"
@@ -166,12 +189,13 @@ import { besideAnchor, centredAt } from '../model/canvasActions.js';
 import { placeDisplayName } from '../model/labels.js';
 import { useWorkflowModel } from '../composables/useWorkflowModel.js';
 import { useSaveErrors } from '../composables/useSaveErrors.js';
-import { useShortcuts } from '../composables/useShortcuts.js';
+import { shortcutLabel, useShortcuts } from '../composables/useShortcuts.js';
 import { useLeaveGuard } from '../composables/useLeaveGuard.js';
 import AddNodeMenu from './AddNodeMenu.vue';
 import Canvas from './Canvas.vue';
 import Toolbar from './Toolbar.vue';
 import NodePanel from './panels/NodePanel.vue';
+import WorkflowSettingsStack from './settings/WorkflowSettingsStack.vue';
 import CollectionRemovalDialog from './shared/CollectionRemovalDialog.vue';
 import DeletePlaceDialog from './shared/DeletePlaceDialog.vue';
 import { EDITOR_CONTEXT } from './context.js';
@@ -339,6 +363,49 @@ function select(id, { tab = 'general', focus = null, delay = 0 } = {}) {
     selectedId.value = id ?? null;
     focusRequest.value = id && focus ? { id, field: focus, delay } : null;
     if (id && panelCollapsed.value) panelCollapsed.value = false;
+    // A node to look at (e.g. a save error) — the stack would cover it.
+    if (id && settingsOpen.value) settingsOpen.value = false;
+}
+
+// --- the workflow itself: name, active, settings ---
+
+// The nav label as it is being edited, else the handle.
+const workflowName = computed(() => api.model.workflow.metadata?.nav?.label?.trim() || props.workflow);
+
+// Active/inactive is not part of the definition: it switches right away, like
+// on the settings index.
+const active = ref(!!props.active);
+const togglingActive = ref(false);
+
+async function setActive(value) {
+    if (!axios || !props.activeUrl || togglingActive.value) return;
+    togglingActive.value = true;
+    try {
+        await axios.post(props.activeUrl, { active: value });
+        active.value = value;
+        const message = __(value ? 'workflows::messages.workflow_activated' : 'workflows::messages.workflow_deactivated');
+        Statamic.$toast.success(message);
+        announce(message);
+    } catch (e) {
+        Statamic.$toast.error(e?.response?.data?.message || __('workflows::messages.workflow_active_error'));
+    } finally {
+        togglingActive.value = false;
+    }
+}
+
+// The settings stack (toolbar button, Ctrl/⌘+,, the overview's button).
+const toolbar = ref(null);
+const settingsStack = ref(null);
+const settingsOpen = ref(false);
+
+function toggleSettings() {
+    addMenu.open = false;
+    settingsOpen.value = !settingsOpen.value;
+}
+
+// Back to the button that opens it — after the stack's focus trap has let go.
+function settingsClosed() {
+    setTimeout(() => toolbar.value?.focusSettings(), 50);
 }
 
 provide(EDITOR_CONTEXT, {
@@ -348,6 +415,7 @@ provide(EDITOR_CONTEXT, {
     get labelCtx() { return labelCtx.value; },
     ruleCtx,
     stateUsage,
+    get workflowName() { return workflowName.value; },
     select,
     get focusRequest() { return focusRequest.value; },
     takeFocus(id, field) {
@@ -718,6 +786,9 @@ function keyboardNode() {
 useShortcuts({
     root: () => root.value,
     canvas: () => canvas.value?.element() ?? null,
+    // The settings stack is teleported out of the editor, and covers the canvas.
+    scopes: () => [settingsStack.value?.element()],
+    modal: () => settingsOpen.value,
     // The dialogs handle their own keys.
     enabled: () => !deletion.open && !conflict.open && !collectionRemoval.open,
     handlers: {
@@ -731,10 +802,12 @@ useShortcuts({
             redo();
         },
         settings: () => {
-            select(null);
-            panelCollapsed.value = false;
+            toggleSettings();
         },
         escape: () => {
+            // The stack closes itself on Esc (its own global binding) — the
+            // canvas behind it stays as it is.
+            if (settingsOpen.value) return;
             if (addMenu.open) {
                 addMenu.open = false;
             } else if (selectedId.value) {
@@ -779,16 +852,37 @@ useShortcuts({
     },
 });
 
-function selectError(error) {
+// The node a save error is about ({kind, handle} → editor id), if it still exists.
+function errorNodeId(error) {
     const handle = error?.node?.handle;
-    if (!handle) return;
-    const id = error.node.kind === 'transition'
+    if (!handle) return null;
+    return error.node.kind === 'transition'
         ? transitionIdOf(api.model, handle)
         : (placeIdOf(api.model, handle) ?? api.model.deletions.find((d) => d.handle === handle)?.id ?? null);
-    if (id) {
-        select(id);
-        canvas.value?.reveal(id);
-    }
+}
+
+function reveal(id) {
+    if (!id) return;
+    select(id);
+    canvas.value?.reveal(id);
+}
+
+function selectError(error) {
+    reveal(errorNodeId(error));
+}
+
+// The overview's problem list: the last save's errors for now; live validation
+// (F5) adds its own entries here.
+//   [{ level, message, nodeId?, path? }]
+const problems = computed(() => saveErrors.state.errors.map((error) => ({
+    level: 'error',
+    message: error.message,
+    nodeId: errorNodeId(error),
+    path: error.path ?? null,
+})));
+
+function selectProblem(problem) {
+    reveal(problem?.nodeId);
 }
 
 // --- saving ---

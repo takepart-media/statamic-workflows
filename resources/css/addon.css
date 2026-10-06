@@ -488,6 +488,23 @@
     margin: 0;
     padding: 0.25rem 0.75rem 0;
     background-color: var(--wf-node-bg);
+    /* One row at any panel width: scrolls sideways rather than wrapping. */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+.wf-panel-tabs [data-ui-tabs-list]::-webkit-scrollbar {
+    display: none;
+}
+.wf-panel-tabs [data-ui-tabs-list] > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+/* The kit pushes the active line 1px onto the list's border — clipped by the
+ * scrolling box, so it sits just above it instead. */
+.wf-panel-tabs [data-ui-tabs-indicator] {
+    --tw-translate-y: 0px;
 }
 
 /* Grid, markers, minimap */

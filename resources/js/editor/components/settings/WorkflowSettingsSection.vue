@@ -1,36 +1,10 @@
 <template>
-    <Tabs v-model="tab" class="wf-panel-tabs">
-        <TabList class="flex-wrap">
-            <TabTrigger name="general" :text="__('workflows::messages.editor_tab_general')" />
-            <TabTrigger name="permissions" :text="__('workflows::messages.editor_tab_permissions')" />
-            <TabTrigger v-if="isLocalization" name="localization" :text="__('workflows::messages.editor_tab_localization')" />
-            <TabTrigger name="collections" :text="__('workflows::messages.collections')" />
-            <TabTrigger v-if="!isLocalization" name="sla" :text="__('workflows::messages.editor_tab_sla')" />
-            <TabTrigger name="order" :text="__('workflows::messages.editor_tab_order')" />
-            <TabTrigger name="advanced" :text="__('workflows::messages.editor_tab_advanced')" />
-        </TabList>
-
-        <TabContent name="general">
-            <div class="space-y-5 p-4">
-                <!-- Places marked for deletion — gone from the canvas, still
-                     reachable here until the save. -->
-                <div v-if="model.deletions.length" class="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700! dark:bg-amber-950/40!">
-                    <p class="text-sm font-medium text-amber-950 dark:text-amber-100">{{ __('workflows::messages.editor_pending_deletions') }}</p>
-                    <ul class="space-y-1">
-                        <li v-for="d in model.deletions" :key="d.id" class="flex items-center gap-2 text-sm">
-                            <code class="font-mono text-xs">{{ d.handle }}</code>
-                            <span v-if="d.usage" class="text-xs text-gray-600 dark:text-gray-300">
-                                {{ __('workflows::messages.editor_usage_count', { count: d.usage }) }}
-                            </span>
-                            <Button class="ml-auto" size="xs" variant="ghost" :text="__('workflows::messages.editor_open')" @click="editor.select(d.id)" />
-                        </li>
-                    </ul>
-                </div>
-
-                <Field :label="__('workflows::messages.workflow_active')" :instructions="__('workflows::messages.editor_active_hint')">
-                    <Switch :model-value="active" :disabled="togglingActive || !editor.options.activeUrl" @update:model-value="setActive" />
-                </Field>
-
+    <!-- One section of the workflow settings (WorkflowSettingsStack.vue shows the
+         navigation and the heading). Every edit goes through the editor model,
+         so undo/redo and the dirty state work here like on the canvas. -->
+    <div>
+        <template v-if="section === 'general'">
+            <div class="space-y-5">
                 <Field :label="__('workflows::messages.nav_label')" :instructions="__('workflows::messages.nav_label_hint')">
                     <Input :model-value="nav.label ?? ''" @update:model-value="(v) => setNav('label', v)" />
                 </Field>
@@ -84,10 +58,10 @@
                     />
                 </Field>
             </div>
-        </TabContent>
+        </template>
 
-        <TabContent name="permissions">
-            <div class="space-y-5 p-4">
+        <template v-if="section === 'permissions'">
+            <div class="space-y-5">
                 <Field :label="__('workflows::messages.settings_field_default_assignee_group')">
                     <Select
                         adaptive-width
@@ -144,13 +118,13 @@
                     />
                 </Field>
             </div>
-        </TabContent>
+        </template>
 
         <!-- Only what matters for THIS kind of localization manager: offering
              plain_language_site in a translation manager would let a dropdown
              swap the two managers' roles. -->
-        <TabContent v-if="isLocalization" name="localization">
-            <div class="space-y-5 p-4">
+        <template v-if="section === 'localization' && isLocalization">
+            <div class="space-y-5">
                 <p class="text-sm font-medium">
                     {{ isPlainLanguage ? __('workflows::messages.plain_language_settings') : __('workflows::messages.translation_settings') }}
                 </p>
@@ -265,10 +239,10 @@
                     <EnvStatusLine v-else :status="editor.options.envStatus.deepl" />
                 </div>
             </div>
-        </TabContent>
+        </template>
 
-        <TabContent name="collections">
-            <div class="space-y-3 p-4">
+        <template v-if="section === 'collections'">
+            <div class="space-y-3">
                 <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('workflows::messages.collections_intro') }}</p>
                 <Select
                     adaptive-width
@@ -290,12 +264,12 @@
                 </ul>
                 <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.collections_hint') }}</p>
             </div>
-        </TabContent>
+        </template>
 
         <!-- Ageing belongs to the workflow that owns the posts; a localization
              workflow reacts to that one's deadline instead. -->
-        <TabContent v-if="!isLocalization" name="sla">
-            <div class="space-y-5 p-4">
+        <template v-if="section === 'sla' && !isLocalization">
+            <div class="space-y-5">
                 <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('workflows::messages.sla_intro') }}</p>
                 <div v-for="stage in SLA_STAGES" :key="stage" class="space-y-3 rounded-md border border-gray-200 p-3 dark:border-gray-700!">
                     <div class="grid grid-cols-2 gap-3">
@@ -343,10 +317,10 @@
                     </p>
                 </div>
             </div>
-        </TabContent>
+        </template>
 
-        <TabContent name="order">
-            <div class="space-y-5 p-4">
+        <template v-if="section === 'order'">
+            <div class="space-y-5">
                 <Field :label="__('workflows::messages.places')" :instructions="__('workflows::messages.editor_order_places_hint')">
                     <OrderList kind="place" />
                 </Field>
@@ -354,16 +328,15 @@
                     <OrderList kind="transition" />
                 </Field>
             </div>
-        </TabContent>
+        </template>
 
-        <TabContent name="advanced">
-            <div class="space-y-5 p-4">
+        <template v-if="section === 'advanced'">
+            <div class="space-y-5">
                 <Field :label="__('workflows::messages.editor_reset_positions')" :instructions="__('workflows::messages.editor_reset_positions_hint')">
                     <Button size="sm" icon="hierarchy" :text="__('workflows::messages.editor_reset_positions')" @click="$emit('reset-positions')" />
                 </Field>
                 <Field :label="__('workflows::messages.editor_payload_preview')" :instructions="__('workflows::messages.editor_payload_preview_hint')">
                     <CodeEditor
-                        v-if="tab === 'advanced'"
                         read-only
                         mode="application/json"
                         :allow-mode-selection="false"
@@ -372,26 +345,13 @@
                     />
                 </Field>
             </div>
-        </TabContent>
-    </Tabs>
+        </template>
+    </div>
 </template>
 
 <script setup>
-import { computed, getCurrentInstance, inject, ref } from 'vue';
-import {
-    Button,
-    Checkbox,
-    CodeEditor,
-    Field,
-    Icon,
-    Input,
-    Select,
-    Switch,
-    TabContent,
-    TabList,
-    TabTrigger,
-    Tabs,
-} from '@statamic/cms/ui';
+import { computed, inject } from 'vue';
+import { Button, Checkbox, CodeEditor, Field, Icon, Input, Select } from '@statamic/cms/ui';
 import EnvStatusLine from '../../../components/EnvStatusLine.vue';
 import { SLA_STAGES } from '../../model/constants.js';
 import { hasPublishPlace, isLocalizationWorkflow, isPlainLanguageWorkflow } from '../../model/actionRules.js';
@@ -399,14 +359,16 @@ import { keyOf } from '../../model/editorModel.js';
 import { placeDisplayName } from '../../model/labels.js';
 import { EDITOR_CONTEXT } from '../context.js';
 import AudiencePicker from '../shared/AudiencePicker.vue';
-import OrderList from './OrderList.vue';
+import OrderList from '../panels/OrderList.vue';
+
+const props = defineProps({
+    // 'general' | 'permissions' | 'localization' | 'collections' | 'sla' | 'order' | 'advanced'
+    section: { type: String, default: 'general' },
+});
 
 defineEmits(['reset-positions']);
 
 const editor = inject(EDITOR_CONTEXT);
-const axios = getCurrentInstance()?.appContext?.config?.globalProperties?.$axios;
-
-const tab = ref('general');
 
 const model = editor.api.model;
 const meta = computed(() => model.workflow.metadata);
@@ -502,27 +464,8 @@ const slaAssignByOptions = computed(() => [
 ]);
 
 // What a save would send right now — read-only, for the curious and for bug
-// reports. Only computed while the tab is open.
-const payloadPreview = computed(() => (tab.value === 'advanced'
+// reports. Only computed while that section is open.
+const payloadPreview = computed(() => (props.section === 'advanced'
     ? JSON.stringify(editor.api.payload(), null, 2)
     : ''));
-
-// Active/inactive is not part of the definition: it switches right away, like
-// on the settings index.
-const active = ref(!!editor.options.active);
-const togglingActive = ref(false);
-
-async function setActive(value) {
-    if (!axios || !editor.options.activeUrl) return;
-    togglingActive.value = true;
-    try {
-        await axios.post(editor.options.activeUrl, { active: value });
-        active.value = value;
-        Statamic.$toast.success(__(value ? 'workflows::messages.workflow_activated' : 'workflows::messages.workflow_deactivated'));
-    } catch (e) {
-        Statamic.$toast.error(e?.response?.data?.message || __('workflows::messages.workflow_active_error'));
-    } finally {
-        togglingActive.value = false;
-    }
-}
 </script>

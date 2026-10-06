@@ -8,6 +8,24 @@
             :text="formViewLabel"
             @click="$emit('form-view')"
         />
+        <!-- Which workflow, and whether it runs. Active is not part of the
+             definition: the switch posts right away, independent of saving. -->
+        <div class="flex min-w-0 items-center gap-3 px-1">
+            <p class="flex min-w-0 items-baseline gap-1.5">
+                <span class="truncate text-sm font-semibold" :title="workflowName">{{ workflowName }}</span>
+                <code v-if="workflowHandle && workflowHandle !== workflowName" class="wf-node-muted hidden font-mono text-2xs sm:inline">{{ workflowHandle }}</code>
+            </p>
+            <label class="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs" :title="__('workflows::messages.editor_active_hint')">
+                <Switch
+                    size="xs"
+                    :model-value="active"
+                    :disabled="activeBusy || !canToggleActive"
+                    @update:model-value="$emit('update:active', $event)"
+                />
+                {{ __('workflows::messages.workflow_active') }}
+            </label>
+        </div>
+        <span class="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700!" aria-hidden="true" />
         <Button variant="ghost" size="sm" icon="plus" :text="__('workflows::messages.add_place')" @click="$emit('add-place')" />
         <Button variant="ghost" size="sm" icon="plus" :text="__('workflows::messages.add_transition')" @click="$emit('add-transition')" />
         <span class="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700!" aria-hidden="true" />
@@ -105,6 +123,18 @@
             </Popover>
 
             <span v-if="dirty" class="wf-node-muted text-xs" role="status">{{ __('workflows::messages.editor_unsaved') }}</span>
+            <span ref="settingsButton" class="contents">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="cog"
+                    :text="__('workflows::messages.editor_kind_workflow')"
+                    :title="`${__('workflows::messages.editor_kind_workflow')} (${shortcut(',')})`"
+                    :aria-keyshortcuts="isMac ? 'Meta+,' : 'Control+,'"
+                    :aria-expanded="settingsOpen ? 'true' : 'false'"
+                    @click="$emit('open-settings')"
+                />
+            </span>
             <Button
                 variant="primary"
                 size="sm"
@@ -131,8 +161,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Button, Popover, Switch } from '@statamic/cms/ui';
+import { IS_MAC, shortcutLabel } from '../composables/useShortcuts.js';
 
 const props = defineProps({
     minimap: { type: Boolean, default: false },
@@ -151,15 +182,18 @@ const props = defineProps({
     // What the next undo / redo would revert (a history step's name), if known.
     undoAction: { type: String, default: '' },
     redoAction: { type: String, default: '' },
+    // The workflow's name (nav label, else handle) and handle.
+    workflowName: { type: String, default: '' },
+    workflowHandle: { type: String, default: '' },
+    active: { type: Boolean, default: false },
+    // The active switch is posting / has nowhere to post.
+    activeBusy: { type: Boolean, default: false },
+    canToggleActive: { type: Boolean, default: true },
+    settingsOpen: { type: Boolean, default: false },
 });
 
-const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
-
-// "Strg+Z" / "⌘Z" — how the shortcut reads on this machine.
-function shortcut(key, { shift = false } = {}) {
-    if (isMac) return `${shift ? '⇧' : ''}⌘${key}`;
-    return `${__('workflows::messages.editor_key_ctrl')}+${shift ? `${__('workflows::messages.editor_key_shift')}+` : ''}${key}`;
-}
+const isMac = IS_MAC;
+const shortcut = shortcutLabel;
 
 const undoTitle = computed(() => {
     const label = props.undoAction
@@ -189,5 +223,13 @@ defineEmits([
     'expand-panel',
     'undo',
     'redo',
+    'update:active',
+    'open-settings',
 ]);
+
+// The settings stack hands the focus back here when it closes.
+const settingsButton = ref(null);
+defineExpose({
+    focusSettings: () => settingsButton.value?.querySelector('button')?.focus(),
+});
 </script>

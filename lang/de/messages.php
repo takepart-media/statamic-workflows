@@ -1139,4 +1139,16 @@ return [
     'editor_delete_refs' => 'Diese Verbindungen und Verweise werden entfernt:',
     'editor_delete_timer_note' => 'Verschobene Beiträge starten im Ziel-Status neu: SLA- und Auto-Übergangs-Uhren beginnen von vorn.',
     'editor_deleted' => 'Gelöscht (:count).',
+
+    // Graph-Editor: Übersicht und Einstellungen.
+    'editor_kind_overview' => 'Übersicht',
+    'editor_overview_hint' => 'Status oder Übergang anklicken, um ihn zu bearbeiten.',
+    'editor_overview_add_hint' => 'Mit „+“ am Knoten, Tab oder einer aus dem Ausgang gezogenen Linie kommt der nächste Schritt dazu; Doppelklick auf die freie Fläche legt einen Status an.',
+    'editor_overview_places' => 'Status',
+    'editor_overview_transitions' => 'Übergänge',
+    'editor_overview_entries' => 'Beiträge gesamt',
+    'editor_problems' => 'Probleme',
+    'editor_problems_none' => 'Keine Probleme bekannt.',
+    'editor_settings_sections' => 'Einstellungsbereiche',
+    'editor_tab_connections_short' => 'Verbindungen',
 ];

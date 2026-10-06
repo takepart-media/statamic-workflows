@@ -20,7 +20,12 @@
         <TabList>
             <TabTrigger name="general" :text="__('workflows::messages.editor_tab_general')" />
             <TabTrigger name="actions" :text="actionsTabText" />
-            <TabTrigger name="connections" :text="__('workflows::messages.editor_tab_connections')" />
+            <!-- Short in the tab, so the three fit the panel's width. -->
+            <TabTrigger
+                name="connections"
+                :text="__('workflows::messages.editor_tab_connections_short')"
+                :title="__('workflows::messages.editor_tab_connections')"
+            />
         </TabList>
 
         <TabContent name="general">

@@ -1130,4 +1130,16 @@ return [
     'editor_delete_refs' => 'These connections and references will be removed:',
     'editor_delete_timer_note' => 'Moved entries start over in the target place: SLA and auto-transition clocks restart.',
     'editor_deleted' => 'Deleted (:count).',
+
+    // Graph editor: overview and settings.
+    'editor_kind_overview' => 'Overview',
+    'editor_overview_hint' => 'Click a state or transition to edit it.',
+    'editor_overview_add_hint' => 'Add the next step with the “+” beside a node, Tab, or by dragging a line from its output; double-click the empty canvas for a new state.',
+    'editor_overview_places' => 'States',
+    'editor_overview_transitions' => 'Transitions',
+    'editor_overview_entries' => 'Entries in total',
+    'editor_problems' => 'Problems',
+    'editor_problems_none' => 'No known problems.',
+    'editor_settings_sections' => 'Settings sections',
+    'editor_tab_connections_short' => 'Connections',
 ];
