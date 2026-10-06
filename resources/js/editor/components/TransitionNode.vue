@@ -1,5 +1,14 @@
 <template>
-    <div class="wf-transition" :data-variant="data.variant" :title="data.handle">
+    <div :class="problemClass" class="wf-transition" :data-variant="data.variant" :title="data.handle">
+        <!-- Live validation: red ring + count for errors, amber for warnings. -->
+        <span
+            v-if="problems.errors || problems.warnings"
+            class="wf-node-problems"
+            :class="problems.errors ? 'wf-node-problems--error' : 'wf-node-problems--warning'"
+            role="img"
+            :title="problemTitle"
+            :aria-label="problemTitle"
+        >{{ problems.errors || problems.warnings }}</span>
         <!-- Lines are drawn from an output to an input, never the other way. -->
         <Handle type="target" :position="Position.Left" :connectable-start="false" />
         <div class="flex max-w-full items-center gap-1.5">
@@ -48,12 +57,13 @@ import { inject } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 import { Badge, Icon } from '@statamic/cms/ui';
 import { EDITOR_CONTEXT } from './context.js';
+import { useNodeProblems } from './nodeProblems.js';
 
 // Vue Flow passes every NodeProps field; only the declared ones are used, the
 // rest must not land on the root element as attributes.
 defineOptions({ inheritAttrs: false });
 
-defineProps({
+const props = defineProps({
     id: { type: String, required: true },
     // nodeInfo.js transitionInfo()
     data: { type: Object, required: true },
@@ -61,6 +71,8 @@ defineProps({
 });
 
 const editor = inject(EDITOR_CONTEXT, { customActions: { transition: [] } });
+
+const { problems, problemClass, problemTitle } = useNodeProblems(editor, () => props.id);
 
 const BADGE_COLORS = { start: 'blue', cta: 'green', system: 'default' };
 

@@ -43,6 +43,14 @@
                         >
                             <Icon :name="item.icon" class="size-4 shrink-0 text-gray-500 dark:text-gray-400" />
                             {{ item.label }}
+                            <!-- Live validation: problems in this section. -->
+                            <span
+                                v-if="countOf(item.name)"
+                                class="ms-auto rounded-full px-1.5 text-2xs font-semibold tabular-nums"
+                                :class="counts[item.name]?.errors ? 'bg-red-100 text-red-700 dark:bg-red-950! dark:text-red-300!' : 'bg-amber-100 text-amber-800 dark:bg-amber-950! dark:text-amber-300!'"
+                                :title="__('workflows::messages.editor_problems_count', counts[item.name])"
+                                :aria-label="__('workflows::messages.editor_problems_count', counts[item.name])"
+                            >{{ countOf(item.name) }}</span>
                         </button>
                     </li>
                 </ul>
@@ -68,6 +76,7 @@ import { Button, Icon, Stack } from '@statamic/cms/ui';
 import { isLocalizationWorkflow } from '../../model/actionRules.js';
 import { EDITOR_CONTEXT } from '../context.js';
 import WorkflowSettingsSection from './WorkflowSettingsSection.vue';
+import { focusPath } from '../../composables/useFocusRequest.js';
 
 defineProps({
     open: { type: Boolean, default: false },
@@ -107,12 +116,37 @@ const current = computed({
 });
 const currentLabel = computed(() => sections.value.find((s) => s.name === current.value)?.label ?? '');
 
-// Into the stack once it has slid in: the open section's entry.
+const counts = computed(() => editor.validation?.sectionCounts.value ?? {});
+const countOf = (name) => counts.value[name]?.errors || counts.value[name]?.warnings || 0;
+
+// A problem's field to show once the section is there (show()).
+let pendingPath = null;
+
+// Into the stack once it has slid in: the field a problem asked for, else the
+// open section's entry.
 function focusNavigation() {
-    nextTick(() => root.value?.querySelector('nav [aria-current="true"]')?.focus());
+    nextTick(() => {
+        if (pendingPath && focusPending()) return;
+        root.value?.querySelector('nav [aria-current="true"]')?.focus();
+    });
+}
+
+function focusPending() {
+    const path = pendingPath;
+    pendingPath = null;
+    return focusPath(root.value, path);
 }
 
 defineExpose({
+    /**
+     * Open `section` and focus the field for `path` (`data-path`). `now`: the
+     * stack is already open — otherwise that happens once it has slid in.
+     */
+    show(section, path = null, { now = false } = {}) {
+        if (sections.value.some((s) => s.name === section)) chosen.value = section;
+        pendingPath = path;
+        if (now) nextTick(() => setTimeout(focusPending, 50));
+    },
     // The stack is teleported out of the editor; its shortcuts still apply here —
     // header (save, close) included.
     element: () => root.value?.closest('.stack-content') ?? root.value,

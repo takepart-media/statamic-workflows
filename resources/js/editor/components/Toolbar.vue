@@ -95,31 +95,30 @@
             </label>
             <span class="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700!" aria-hidden="true" />
 
-            <!-- The server's validation errors of the last save. F5 maps them
-                 onto the nodes; for now a list that opens the node in question. -->
-            <Popover v-if="errors.length" align="end" class="w-96!">
+            <!-- Live validation: the client's rules and the server's last check,
+                 merged. The list opens the node (or settings section) in question. -->
+            <span
+                v-if="validating"
+                class="wf-node-muted flex items-center gap-1 text-xs"
+                :title="__('workflows::messages.editor_validating_hint')"
+            >
+                <Icon name="loading" class="size-3.5 animate-spin" />
+                {{ __('workflows::messages.editor_validating') }}
+            </span>
+            <Popover v-if="problems.length" align="end" class="w-96!">
                 <template #trigger>
                     <Button
                         variant="ghost"
                         size="sm"
-                        icon="warning-diamond"
-                        class="text-red-600! dark:text-red-400!"
-                        :text="__('workflows::messages.editor_errors', { count: errors.length })"
+                        :icon="summary.errors ? 'warning-diamond' : 'alert-warning-exclamation-mark'"
+                        :class="summary.errors ? 'text-red-600! dark:text-red-400!' : 'text-amber-600! dark:text-amber-400!'"
+                        :text="summaryText"
+                        :aria-label="`${__('workflows::messages.editor_problems')}: ${summaryText}`"
                     />
                 </template>
-                <ul class="max-h-80 space-y-1 overflow-y-auto text-sm">
-                    <li v-for="(error, i) in errors" :key="i">
-                        <button
-                            type="button"
-                            class="w-full rounded px-2 py-1 text-left hover:bg-gray-100 disabled:cursor-default disabled:hover:bg-transparent dark:hover:bg-gray-700"
-                            :disabled="!error.node"
-                            @click="$emit('select-error', error)"
-                        >
-                            <span class="block">{{ error.message }}</span>
-                            <code v-if="error.path" class="font-mono text-2xs text-gray-500">{{ error.path }}</code>
-                        </button>
-                    </li>
-                </ul>
+                <div class="max-h-80 overflow-y-auto">
+                    <ProblemsList :problems="problems" @select="(problem) => $emit('select-problem', problem)" />
+                </div>
             </Popover>
 
             <span v-if="dirty" class="wf-node-muted text-xs" role="status">{{ __('workflows::messages.editor_unsaved') }}</span>
@@ -162,7 +161,8 @@
 
 <script setup>
 import { computed, ref } from 'vue';
-import { Button, Popover, Switch } from '@statamic/cms/ui';
+import { Button, Icon, Popover, Switch } from '@statamic/cms/ui';
+import ProblemsList from './panels/ProblemsList.vue';
 import { IS_MAC, shortcutLabel } from '../composables/useShortcuts.js';
 
 const props = defineProps({
@@ -174,8 +174,12 @@ const props = defineProps({
     formViewLabel: { type: String, default: '' },
     saving: { type: Boolean, default: false },
     dirty: { type: Boolean, default: false },
-    // [{path, code, message, node: {kind, handle}|null}] from the last 422.
-    errors: { type: Array, default: () => [] },
+    // The merged problem list (useValidation.js) — see ProblemsList.vue.
+    problems: { type: Array, default: () => [] },
+    // { errors, warnings } of that list.
+    summary: { type: Object, default: () => ({ errors: 0, warnings: 0 }) },
+    // The server's check is pending or older than the last edit.
+    validating: { type: Boolean, default: false },
     panelCollapsed: { type: Boolean, default: false },
     canUndo: { type: Boolean, default: false },
     canRedo: { type: Boolean, default: false },
@@ -194,6 +198,11 @@ const props = defineProps({
 
 const isMac = IS_MAC;
 const shortcut = shortcutLabel;
+
+const summaryText = computed(() => [
+    props.summary.errors ? __('workflows::messages.editor_errors', { count: props.summary.errors }) : null,
+    props.summary.warnings ? __('workflows::messages.editor_warnings', { count: props.summary.warnings }) : null,
+].filter(Boolean).join(' · '));
 
 const undoTitle = computed(() => {
     const label = props.undoAction
@@ -219,7 +228,7 @@ defineEmits([
     'save',
     'add-place',
     'add-transition',
-    'select-error',
+    'select-problem',
     'expand-panel',
     'undo',
     'redo',

@@ -410,6 +410,7 @@
     --wf-edge-active: var(--theme-color-primary, #4f46e5);
     --wf-handle: var(--theme-color-gray-400, #9ca3af);
     --wf-error: #ef4444;
+    --wf-warning: #f59e0b;
     --wf-focus: var(--theme-color-focus-outline, var(--wf-edge-active));
     --wf-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.08);
 
@@ -434,6 +435,7 @@
     --wf-edge: var(--theme-color-gray-500, #6b7280);
     --wf-handle: var(--theme-color-gray-500, #6b7280);
     --wf-error: #f87171;
+    --wf-warning: #fbbf24;
     --wf-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
     border-color: var(--theme-color-gray-700, #374151);
 }
@@ -668,6 +670,50 @@
 .wf-editor .vue-flow__node.selected > .wf-transition {
     border-color: var(--wf-edge-active);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-edge-active) 25%, transparent), var(--wf-shadow);
+}
+
+/* Live validation: a ring in the colour of the worst problem, plus a count. A
+   selected node keeps its selection border, the ring stays outside it. */
+.wf-editor .wf-node--error {
+    border-color: var(--wf-error);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--wf-error) 45%, transparent), var(--wf-shadow);
+}
+.wf-editor .wf-node--warning {
+    border-color: var(--wf-warning);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--wf-warning) 45%, transparent), var(--wf-shadow);
+}
+.wf-editor .vue-flow__node.selected > .wf-node--error {
+    border-color: var(--wf-edge-active);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-error) 45%, transparent), var(--wf-shadow);
+}
+.wf-editor .vue-flow__node.selected > .wf-node--warning {
+    border-color: var(--wf-edge-active);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-warning) 45%, transparent), var(--wf-shadow);
+}
+.wf-node-problems {
+    position: absolute;
+    top: -9px;
+    right: -9px;
+    z-index: 1;
+    display: flex;
+    min-width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    color: #fff;
+    box-shadow: var(--wf-shadow);
+}
+.wf-node-problems--error {
+    background-color: var(--wf-error);
+}
+.wf-node-problems--warning {
+    background-color: var(--wf-warning);
+    color: #1f2937;
 }
 
 .wf-place {

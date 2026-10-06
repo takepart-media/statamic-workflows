@@ -1,4 +1,5 @@
 <template>
+    <NodeProblems :path="`transition:${transition.id}`" />
     <Tabs v-model="tab" class="wf-panel-tabs">
         <TabList>
             <TabTrigger name="general" :text="__('workflows::messages.editor_tab_general')" />
@@ -23,10 +24,11 @@
                     </p>
                 </div>
 
-                <Field
+                <ProblemField
                     :label="__('workflows::messages.editor_field_handle')"
                     :instructions="transition.isNew ? __('workflows::messages.editor_handle_new_hint') : __('workflows::messages.editor_handle_saved_hint')"
                     :error="handleError"
+                    :path="`transition:${transition.id}.handle`"
                 >
                     <Input
                         v-if="transition.isNew"
@@ -36,9 +38,13 @@
                         @update:model-value="(v) => editor.api.setHandle(transition.id, v)"
                     />
                     <code v-else class="inline-block rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700 dark:bg-gray-900! dark:text-gray-200!">{{ transition.handle }}</code>
-                </Field>
+                </ProblemField>
 
-                <Field :label="__('workflows::messages.label_placeholder')" :instructions="__('workflows::messages.editor_transition_label_hint', { key: `action_${key}` })">
+                <ProblemField
+                    :label="__('workflows::messages.label_placeholder')"
+                    :instructions="__('workflows::messages.editor_transition_label_hint', { key: `action_${key}` })"
+                    :path="`transition:${transition.id}.label`"
+                >
                     <div ref="labelField">
                         <Input
                             :model-value="transition.metadata.label ?? ''"
@@ -46,7 +52,7 @@
                             @update:model-value="(v) => update({ metadata: { label: v } })"
                         />
                     </div>
-                </Field>
+                </ProblemField>
 
                 <Field :label="__('workflows::messages.settings_field_variant')">
                     <div class="flex flex-wrap items-center gap-2">
@@ -67,9 +73,10 @@
                 <!-- The first transition leads out of the start place: its `from`
                      follows initial_place (shown, not editable) — unless a
                      `start_localization` action pins the start elsewhere. -->
-                <Field
+                <ProblemField
                     :label="__('workflows::messages.settings_field_from')"
                     :instructions="coupled ? __('workflows::messages.from_follows_initial_place') : __('workflows::messages.editor_from_hint')"
+                    :path="`transition:${transition.id}.from`"
                 >
                     <Select
                         adaptive-width
@@ -81,9 +88,12 @@
                         :placeholder="__('workflows::messages.select_place')"
                         @update:model-value="onFrom"
                     />
-                </Field>
+                </ProblemField>
 
-                <Field :label="__('workflows::messages.settings_field_to')">
+                <ProblemField
+                    :label="__('workflows::messages.settings_field_to')"
+                    :path="`transition:${transition.id}.to`"
+                >
                     <Select
                         adaptive-width
                         :model-value="transition.to"
@@ -91,7 +101,7 @@
                         :placeholder="__('workflows::messages.select_place')"
                         @update:model-value="(v) => update({ to: v ?? null })"
                     />
-                </Field>
+                </ProblemField>
 
                 <Field :label="__('workflows::messages.editor_field_order')" :instructions="__('workflows::messages.editor_order_transitions_hint')">
                     <div class="flex items-center gap-2">
@@ -127,7 +137,11 @@
             <!-- The gate: who may run this step in addition to being responsible.
                  Stored as `required_group` / `required_role` (serialize()). -->
             <div class="space-y-5 p-4">
-                <Field :label="__('workflows::messages.required_by')" :instructions="__('workflows::messages.required_by_hint')">
+                <ProblemField
+                    :label="__('workflows::messages.required_by')"
+                    :instructions="__('workflows::messages.required_by_hint')"
+                    :path="`transition:${transition.id}.required_handles`"
+                >
                     <AudiencePicker
                         :by="transition.metadata.required_by ?? 'none'"
                         :handles="transition.metadata.required_handles ?? []"
@@ -136,7 +150,7 @@
                         @update:by="(v) => update({ metadata: { required_by: v ?? 'none' } })"
                         @update:handles="(v) => update({ metadata: { required_handles: v } })"
                     />
-                </Field>
+                </ProblemField>
             </div>
         </TabContent>
 
@@ -151,7 +165,10 @@
 <script setup>
 import { computed, inject, ref } from 'vue';
 import { Badge, Button, Field, Input, Select, TabContent, TabList, TabTrigger, Tabs } from '@statamic/cms/ui';
-import { useFocusRequest } from '../../composables/useFocusRequest.js';
+import { useFocusRequest, usePathRequest } from '../../composables/useFocusRequest.js';
+import { tabForPath } from '../../model/validationPaths.js';
+import NodeProblems from './NodeProblems.vue';
+import ProblemField from '../shared/ProblemField.vue';
 import { explicitStartTransitionId, keyOf, startingTransitionId } from '../../model/editorModel.js';
 import { defaultVariant, placeDisplayName } from '../../model/labels.js';
 import { EDITOR_CONTEXT } from '../context.js';
@@ -161,11 +178,23 @@ import TransitionActionList from './TransitionActionList.vue';
 const props = defineProps({
     // A transition entry of the editor model.
     transition: { type: Object, required: true },
+    // Which tab to open first ('general' | 'permission' | 'actions').
+    initialTab: { type: String, default: 'general' },
 });
 
 const editor = inject(EDITOR_CONTEXT);
 
-const tab = ref('general');
+const TABS = ['general', 'permission', 'actions'];
+const tab = ref(TABS.includes(props.initialTab) ? props.initialTab : 'general');
+
+// A problem picked in a list: the tab that shows it (the shell focuses it).
+usePathRequest(editor, () => props.transition.id, (path) => {
+    const wanted = tabForPath(path);
+    tab.value = TABS.includes(wanted) ? wanted : 'general';
+});
+
+// Live validation (useValidation.js) for one field of this transition.
+const errorFor = (field) => editor.validation?.errorFor(`transition:${props.transition.id}.${field}`);
 
 // A node just created on the canvas: straight into its name.
 const labelField = ref(null);
@@ -185,8 +214,10 @@ const isCta = computed(() => editor.api.model.workflow.metadata?.create_transiti
 const isSystem = computed(() => !!props.transition.metadata?.system);
 
 const handleError = computed(() => {
+    const live = errorFor('handle');
+    if (live) return live;
     const problem = props.transition.isNew ? editor.api.handleProblem(props.transition.id) : null;
-    return problem ? __(`workflows::messages.editor_handle_${problem}`) : null;
+    return problem ? __(`workflows::messages.editor_handle_${problem}`) : undefined;
 });
 
 const variant = computed(() => props.transition.metadata.variant || defaultVariant(key.value));

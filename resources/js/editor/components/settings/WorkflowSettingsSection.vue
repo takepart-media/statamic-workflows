@@ -5,9 +5,9 @@
     <div>
         <template v-if="section === 'general'">
             <div class="space-y-5">
-                <Field :label="__('workflows::messages.nav_label')" :instructions="__('workflows::messages.nav_label_hint')">
+                <ProblemField :label="__('workflows::messages.nav_label')" :instructions="__('workflows::messages.nav_label_hint')" path="metadata.nav">
                     <Input :model-value="nav.label ?? ''" @update:model-value="(v) => setNav('label', v)" />
-                </Field>
+                </ProblemField>
                 <div class="grid grid-cols-2 gap-4">
                     <Field :label="__('workflows::messages.nav_icon')">
                         <Input :model-value="nav.icon ?? ''" @update:model-value="(v) => setNav('icon', v)" />
@@ -20,18 +20,19 @@
                     <Input :model-value="editor.options.slug" disabled />
                 </Field>
 
-                <Field :label="__('workflows::messages.settings_field_initial_place')">
+                <ProblemField :label="__('workflows::messages.settings_field_initial_place')" path="initial_place">
                     <Select
                         adaptive-width
                         :model-value="model.workflow.initial_place"
                         :options="placeOptions"
                         @update:model-value="(v) => editor.api.setInitialPlace(v)"
                     />
-                </Field>
+                </ProblemField>
 
-                <Field
+                <ProblemField
                     :label="__('workflows::messages.settings_field_progress_orientation')"
                     :instructions="__('workflows::messages.settings_field_progress_orientation_hint')"
+                    path="metadata.progress_orientation"
                 >
                     <Select
                         adaptive-width
@@ -39,14 +40,15 @@
                         :options="editor.options.progressOrientationOptions"
                         @update:model-value="(v) => setMeta('progress_orientation', v)"
                     />
-                </Field>
+                </ProblemField>
 
                 <!-- Only when auto-detection would fail (no allow_publish place)
                      or an override is stored, so it can be cleared. -->
-                <Field
+                <ProblemField
                     v-if="showSeed"
                     :label="__('workflows::messages.seed_published_place')"
                     :instructions="__('workflows::messages.seed_published_place_hint')"
+                    path="metadata.seed_published_place"
                 >
                     <Select
                         adaptive-width
@@ -56,7 +58,7 @@
                         :placeholder="__('workflows::messages.seed_published_place_none')"
                         @update:model-value="(v) => setMeta('seed_published_place', v ?? null)"
                     />
-                </Field>
+                </ProblemField>
             </div>
         </template>
 
@@ -75,10 +77,11 @@
                 <Field :label="__('workflows::messages.settings_field_assign_creator')">
                     <Checkbox solo :model-value="!!meta.assign_creator" @update:model-value="(v) => setMeta('assign_creator', v)" />
                 </Field>
-                <Field
+                <ProblemField
                     v-if="!isLocalization"
                     :label="__('workflows::messages.post_creator_groups')"
                     :instructions="postCreatorHint"
+                    path="metadata.post_creator_groups"
                 >
                     <Select
                         adaptive-width
@@ -90,11 +93,12 @@
                         :placeholder="__('workflows::messages.post_creator_groups_none')"
                         @update:model-value="(v) => setMeta('post_creator_groups', v ?? [])"
                     />
-                </Field>
-                <Field
+                </ProblemField>
+                <ProblemField
                     v-if="!isLocalization"
                     :label="__('workflows::messages.create_transition')"
                     :instructions="__('workflows::messages.create_transition_hint')"
+                    path="metadata.create_transition"
                 >
                     <Select
                         adaptive-width
@@ -104,8 +108,8 @@
                         :placeholder="__('workflows::messages.create_transition_none')"
                         @update:model-value="(v) => setMeta('create_transition', v ?? null)"
                     />
-                </Field>
-                <Field :label="__('workflows::messages.assigner_groups')" :instructions="assignerHint">
+                </ProblemField>
+                <ProblemField :label="__('workflows::messages.assigner_groups')" :instructions="assignerHint" path="metadata.assigner_groups">
                     <Select
                         adaptive-width
                         multiple
@@ -116,7 +120,7 @@
                         :placeholder="__('workflows::messages.assigner_groups_none')"
                         @update:model-value="(v) => setMeta('assigner_groups', v ?? [])"
                     />
-                </Field>
+                </ProblemField>
             </div>
         </template>
 
@@ -128,7 +132,11 @@
                 <p class="text-sm font-medium">
                     {{ isPlainLanguage ? __('workflows::messages.plain_language_settings') : __('workflows::messages.translation_settings') }}
                 </p>
-                <Field :label="__('workflows::messages.translation_source_site')" :instructions="__('workflows::messages.translation_source_site_hint')">
+                <ProblemField
+                    :label="__('workflows::messages.translation_source_site')"
+                    :instructions="__('workflows::messages.translation_source_site_hint')"
+                    path="metadata.translation_source_site"
+                >
                     <Select
                         adaptive-width
                         clearable
@@ -137,9 +145,13 @@
                         :placeholder="__('workflows::messages.translation_source_site_none')"
                         @update:model-value="(v) => setMeta('translation_source_site', v ?? null)"
                     />
-                </Field>
+                </ProblemField>
                 <template v-if="isPlainLanguage">
-                    <Field :label="__('workflows::messages.plain_language_site')" :instructions="__('workflows::messages.plain_language_site_hint')">
+                    <ProblemField
+                        :label="__('workflows::messages.plain_language_site')"
+                        :instructions="__('workflows::messages.plain_language_site_hint')"
+                        path="metadata.plain_language_site"
+                    >
                         <Select
                             adaptive-width
                             clearable
@@ -148,8 +160,12 @@
                             :placeholder="__('workflows::messages.plain_language_site_none')"
                             @update:model-value="(v) => setMeta('plain_language_site', v ?? null)"
                         />
-                    </Field>
-                    <Field :label="__('workflows::messages.plain_language_completed_place')" :instructions="__('workflows::messages.plain_language_completed_place_hint')">
+                    </ProblemField>
+                    <ProblemField
+                        :label="__('workflows::messages.plain_language_completed_place')"
+                        :instructions="__('workflows::messages.plain_language_completed_place_hint')"
+                        path="metadata.plain_language_completed_place"
+                    >
                         <Select
                             adaptive-width
                             clearable
@@ -158,8 +174,12 @@
                             :placeholder="__('workflows::messages.plain_language_completed_place_none')"
                             @update:model-value="(v) => setMeta('plain_language_completed_place', v ?? null)"
                         />
-                    </Field>
-                    <Field :label="__('workflows::messages.plain_language_failed_place')" :instructions="__('workflows::messages.plain_language_failed_place_hint')">
+                    </ProblemField>
+                    <ProblemField
+                        :label="__('workflows::messages.plain_language_failed_place')"
+                        :instructions="__('workflows::messages.plain_language_failed_place_hint')"
+                        path="metadata.plain_language_failed_place"
+                    >
                         <Select
                             adaptive-width
                             clearable
@@ -168,19 +188,24 @@
                             :placeholder="__('workflows::messages.plain_language_failed_place_none')"
                             @update:model-value="(v) => setMeta('plain_language_failed_place', v ?? null)"
                         />
-                    </Field>
+                    </ProblemField>
                 </template>
-                <Field
+                <ProblemField
                     v-else
                     :label="__('workflows::messages.translation_source_pick')"
                     :instructions="__('workflows::messages.translation_source_pick_hint')"
+                    path="metadata.translation_source_pick"
                 >
                     <Checkbox solo :model-value="!!meta.translation_source_pick" @update:model-value="(v) => setMeta('translation_source_pick', v)" />
-                </Field>
+                </ProblemField>
 
                 <!-- Who sees the source column how: mode + audience per rule. A rule
                      without handles is dropped on save. -->
-                <Field :label="__('workflows::messages.translation_source_view')" :instructions="__('workflows::messages.translation_source_view_hint')">
+                <ProblemField
+                    :label="__('workflows::messages.translation_source_view')"
+                    :instructions="__('workflows::messages.translation_source_view_hint')"
+                    path="metadata.translation_source_view"
+                >
                     <div class="space-y-2">
                         <div
                             v-for="(rule, i) in meta.translation_source_view"
@@ -218,17 +243,21 @@
                             @click="meta.translation_source_view.push({ mode: 'hidden', by: 'group', handles: [] })"
                         />
                     </div>
-                </Field>
+                </ProblemField>
 
                 <!-- Where a version falls back to when its source goes to draft. -->
-                <Field :label="__('workflows::messages.source_draft_place')" :instructions="`${__('workflows::messages.source_draft_intro')} ${__('workflows::messages.source_draft_hint')}`">
+                <ProblemField
+                    :label="__('workflows::messages.source_draft_place')"
+                    :instructions="`${__('workflows::messages.source_draft_intro')} ${__('workflows::messages.source_draft_hint')}`"
+                    path="metadata.source_draft_place"
+                >
                     <Select
                         adaptive-width
                         :model-value="meta.source_draft_place"
                         :options="sourceDraftPlaceOptions"
                         @update:model-value="(v) => setMeta('source_draft_place', v ?? null)"
                     />
-                </Field>
+                </ProblemField>
 
                 <div class="space-y-1 border-t border-gray-200 pt-4 dark:border-gray-700!">
                     <p class="mb-2 text-sm font-medium text-gray-600 dark:text-gray-300">{{ __('workflows::messages.translation_apis') }}</p>
@@ -242,7 +271,7 @@
         </template>
 
         <template v-if="section === 'collections'">
-            <div class="space-y-3">
+            <div class="space-y-3" data-path="collections">
                 <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('workflows::messages.collections_intro') }}</p>
                 <Select
                     adaptive-width
@@ -254,6 +283,7 @@
                     :placeholder="__('workflows::messages.select_collections')"
                     @update:model-value="(v) => editor.api.updateWorkflow({ collections: v ?? [] })"
                 />
+                <p v-if="err('collections')" class="text-sm text-red-600 dark:text-red-400">{{ err('collections') }}</p>
                 <!-- The alphabetically first workflow owns a shared collection; a
                      non-owner only governs entries with a stored state. -->
                 <ul v-if="foreignCollections.length" class="space-y-1">
@@ -273,7 +303,7 @@
                 <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('workflows::messages.sla_intro') }}</p>
                 <div v-for="stage in SLA_STAGES" :key="stage" class="space-y-3 rounded-md border border-gray-200 p-3 dark:border-gray-700!">
                     <div class="grid grid-cols-2 gap-3">
-                        <Field :label="__(`workflows::messages.sla_${stage}_days`)">
+                        <ProblemField :label="__(`workflows::messages.sla_${stage}_days`)" :path="`metadata.sla.${stage}_days`">
                             <Input
                                 type="number"
                                 min="0"
@@ -281,19 +311,19 @@
                                 :placeholder="__('workflows::messages.sla_placeholder_disabled')"
                                 @update:model-value="(v) => (sla[`${stage}_days`] = v === '' || v === null ? null : Number(v))"
                             />
-                        </Field>
-                        <Field :label="__(`workflows::messages.sla_${stage}_place`)">
+                        </ProblemField>
+                        <ProblemField :label="__(`workflows::messages.sla_${stage}_place`)" :path="`metadata.sla.${stage}_place`">
                             <Select
                                 adaptive-width
                                 :model-value="sla[`${stage}_place`]"
                                 :options="slaPlaceOptions"
                                 @update:model-value="(v) => (sla[`${stage}_place`] = v ?? null)"
                             />
-                        </Field>
+                        </ProblemField>
                     </div>
                     <!-- Nobody clicks into an ageing stage — the scheduler moves it —
                          so who takes over is set here. Empty = keep. -->
-                    <Field :label="__(`workflows::messages.sla_${stage}_assign`)">
+                    <ProblemField :label="__(`workflows::messages.sla_${stage}_assign`)" :path="`metadata.sla.${stage}_assign`">
                         <AudiencePicker
                             :by="sla[`${stage}_assign`]?.by ?? null"
                             :handles="sla[`${stage}_assign`]?.handles ?? []"
@@ -302,8 +332,10 @@
                             @update:by="(v) => (assignOf(stage).by = v)"
                             @update:handles="(v) => (assignOf(stage).handles = v)"
                         />
-                    </Field>
+                    </ProblemField>
                 </div>
+                <!-- What the writer says about the block as a whole. -->
+                <p v-if="slaBlockError" class="text-sm text-red-600 dark:text-red-400" data-path="metadata.sla">{{ slaBlockError }}</p>
                 <div class="space-y-1">
                     <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.sla_hint') }}</p>
                     <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.sla_place_hint') }}</p>
@@ -321,12 +353,12 @@
 
         <template v-if="section === 'order'">
             <div class="space-y-5">
-                <Field :label="__('workflows::messages.places')" :instructions="__('workflows::messages.editor_order_places_hint')">
+                <ProblemField :label="__('workflows::messages.places')" :instructions="__('workflows::messages.editor_order_places_hint')" path="places">
                     <OrderList kind="place" />
-                </Field>
-                <Field :label="__('workflows::messages.transitions')" :instructions="__('workflows::messages.editor_order_transitions_hint')">
+                </ProblemField>
+                <ProblemField :label="__('workflows::messages.transitions')" :instructions="__('workflows::messages.editor_order_transitions_hint')" path="transitions">
                     <OrderList kind="transition" />
-                </Field>
+                </ProblemField>
             </div>
         </template>
 
@@ -359,6 +391,7 @@ import { keyOf } from '../../model/editorModel.js';
 import { placeDisplayName } from '../../model/labels.js';
 import { EDITOR_CONTEXT } from '../context.js';
 import AudiencePicker from '../shared/AudiencePicker.vue';
+import ProblemField from '../shared/ProblemField.vue';
 import OrderList from '../panels/OrderList.vue';
 
 const props = defineProps({
@@ -376,6 +409,16 @@ const nav = computed(() => model.workflow.metadata.nav ?? {});
 const sla = computed(() => model.workflow.metadata.sla);
 
 const setMeta = (key, value) => editor.api.updateWorkflow({ metadata: { [key]: value } });
+
+// Live validation (useValidation.js): the errors at a field's path, as one string.
+const err = (path) => editor.validation?.errorFor(path);
+
+// Errors on `metadata.sla` itself (the server's, which has no finer path) —
+// minus what a stage's field already shows.
+const slaBlockError = computed(() => {
+    const found = editor.validation?.problemsExactly('metadata.sla').filter((p) => p.level === 'error') ?? [];
+    return found.length ? [...new Set(found.map((p) => p.message))].join(' ') : null;
+});
 
 function setNav(key, value) {
     const next = { ...(model.workflow.metadata.nav ?? {}) };

@@ -3,11 +3,14 @@
          transition, plus the mail after it. Only one DIALOG fits in that moment,
          so the option lists come from actionRules.actionTypeOptionsFor() — a type
          that is unavailable is left out instead of failing on save. -->
-    <div class="space-y-2">
+    <div class="space-y-2" :data-path="`transition:${transition.id}.actions`">
+        <ActionProblems :path="`transition:${transition.id}.actions`" exact />
         <div
             v-for="(action, i) in transition.metadata.actions"
             :key="i"
-            class="space-y-2 rounded-md border border-gray-200 p-2 dark:border-gray-700!"
+            class="space-y-2 rounded-md border p-2"
+            :class="rowHasError(i) ? 'border-red-400 dark:border-red-500!' : 'border-gray-200 dark:border-gray-700!'"
+            :data-path="`transition:${transition.id}.actions.${i}`"
         >
             <div class="flex items-start gap-2">
                 <Select
@@ -77,6 +80,7 @@
             </template>
 
             <CustomActionFields :action="action" scope="transition" />
+            <ActionProblems :path="`transition:${transition.id}.actions.${i}`" />
         </div>
 
         <p v-if="!transition.metadata.actions?.length" class="text-sm text-gray-500 dark:text-gray-400">
@@ -109,6 +113,7 @@ import { keyOf } from '../../model/editorModel.js';
 import { EDITOR_CONTEXT } from '../context.js';
 import CriteriaBuilder from '../shared/CriteriaBuilder.vue';
 import CustomActionFields from '../shared/CustomActionFields.vue';
+import ActionProblems from './ActionProblems.vue';
 
 const props = defineProps({
     // A transition entry of the editor model.
@@ -123,6 +128,8 @@ const modeOptions = computed(() =>
 const matchOptions = computed(() =>
     ASSIGNMENT_MATCHES.map((value) => ({ value, label: __(`workflows::messages.assignment_match_${value}`) })),
 );
+
+const rowHasError = (i) => !!editor.validation?.errorFor(`transition:${props.transition.id}.actions.${i}`);
 
 // The view shares this transition's `metadata`, so `current` is recognised.
 function typeOptions(current) {

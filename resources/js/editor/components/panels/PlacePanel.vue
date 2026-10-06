@@ -7,6 +7,8 @@
         </div>
         <MigrationTarget
             v-if="deletion.usage > 0"
+            :path="`place:${deletion.id}.migrate_to`"
+            :error="editor.validation?.errorFor(`place:${deletion.id}.migrate_to`)"
             :usage="deletion.usage"
             :place="deletion.handle"
             :model-value="deletion.migrateTo"
@@ -16,176 +18,188 @@
         <Button icon="history" :text="__('workflows::messages.editor_restore_place')" @click="restore" />
     </div>
 
-    <Tabs v-else v-model="tab" class="wf-panel-tabs">
-        <TabList>
-            <TabTrigger name="general" :text="__('workflows::messages.editor_tab_general')" />
-            <TabTrigger name="actions" :text="actionsTabText" />
-            <!-- Short in the tab, so the three fit the panel's width. -->
-            <TabTrigger
-                name="connections"
-                :text="__('workflows::messages.editor_tab_connections_short')"
-                :title="__('workflows::messages.editor_tab_connections')"
-            />
-        </TabList>
+    <template v-else>
+        <NodeProblems :path="`place:${place.id}`" />
+        <Tabs v-model="tab" class="wf-panel-tabs">
+            <TabList>
+                <TabTrigger name="general" :text="__('workflows::messages.editor_tab_general')" />
+                <TabTrigger name="actions" :text="actionsTabText" />
+                <!-- Short in the tab, so the three fit the panel's width. -->
+                <TabTrigger
+                    name="connections"
+                    :text="__('workflows::messages.editor_tab_connections_short')"
+                    :title="__('workflows::messages.editor_tab_connections')"
+                />
+            </TabList>
 
-        <TabContent name="general">
-            <div class="space-y-5 p-4">
-                <Field
-                    :label="__('workflows::messages.editor_field_handle')"
-                    :instructions="place.isNew ? __('workflows::messages.editor_handle_new_hint') : __('workflows::messages.editor_handle_saved_hint')"
-                    :error="handleError"
-                >
-                    <Input
-                        v-if="place.isNew"
-                        :model-value="place.handle ?? ''"
-                        :placeholder="__('workflows::messages.handle_placeholder')"
-                        class="font-mono"
-                        @update:model-value="(v) => editor.api.setHandle(place.id, v)"
-                    />
-                    <code v-else class="inline-block rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700 dark:bg-gray-900! dark:text-gray-200!">{{ place.handle }}</code>
-                </Field>
+            <TabContent name="general">
+                <div class="space-y-5 p-4">
+                    <ProblemField
+                        :label="__('workflows::messages.editor_field_handle')"
+                        :instructions="place.isNew ? __('workflows::messages.editor_handle_new_hint') : __('workflows::messages.editor_handle_saved_hint')"
+                        :error="handleError"
+                        :path="`place:${place.id}.handle`"
+                    >
+                        <Input
+                            v-if="place.isNew"
+                            :model-value="place.handle ?? ''"
+                            :placeholder="__('workflows::messages.handle_placeholder')"
+                            class="font-mono"
+                            @update:model-value="(v) => editor.api.setHandle(place.id, v)"
+                        />
+                        <code v-else class="inline-block rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700 dark:bg-gray-900! dark:text-gray-200!">{{ place.handle }}</code>
+                    </ProblemField>
 
-                <!-- One name per language. Empty = the grey placeholder: what the
-                     place is called without one (language file, else the other
-                     name) — see labels.placeLabelFallback(). -->
-                <Field :label="__('workflows::messages.editor_field_labels')" :instructions="__('workflows::messages.editor_labels_hint', { key: `state_${key}` })">
-                    <div ref="labelFields" class="space-y-2">
-                        <div v-for="locale in editor.options.labelLocales" :key="locale" class="flex items-center gap-2">
-                            <span class="w-6 shrink-0 font-mono text-2xs uppercase text-gray-500 dark:text-gray-400">{{ locale }}</span>
-                            <Input
+                    <!-- One name per language. Empty = the grey placeholder: what the
+                         place is called without one (language file, else the other
+                         name) — see labels.placeLabelFallback(). -->
+                    <ProblemField
+                        :label="__('workflows::messages.editor_field_labels')"
+                        :instructions="__('workflows::messages.editor_labels_hint', { key: `state_${key}` })"
+                        :path="`place:${place.id}.labels`"
+                    >
+                        <div ref="labelFields" class="space-y-2">
+                            <div v-for="locale in editor.options.labelLocales" :key="locale" class="flex items-center gap-2">
+                                <span class="w-6 shrink-0 font-mono text-2xs uppercase text-gray-500 dark:text-gray-400">{{ locale }}</span>
+                                <Input
+                                    class="flex-1"
+                                    :model-value="place.labels[locale] ?? ''"
+                                    :placeholder="fallback(locale)"
+                                    :aria-label="`${__('workflows::messages.label_placeholder')} (${locale})`"
+                                    @update:model-value="(v) => update({ labels: { [locale]: v } })"
+                                />
+                            </div>
+                        </div>
+                    </ProblemField>
+
+                    <Field :label="__('workflows::messages.settings_field_color')">
+                        <div class="flex items-center gap-2">
+                            <span class="size-3 shrink-0 rounded-full" :class="colorClasses.dot" aria-hidden="true" />
+                            <Select
+                                adaptive-width
                                 class="flex-1"
-                                :model-value="place.labels[locale] ?? ''"
-                                :placeholder="fallback(locale)"
-                                :aria-label="`${__('workflows::messages.label_placeholder')} (${locale})`"
-                                @update:model-value="(v) => update({ labels: { [locale]: v } })"
+                                :model-value="place.metadata.color ?? null"
+                                :options="editor.options.colorOptions"
+                                clearable
+                                :placeholder="__('workflows::messages.color_default')"
+                                @update:model-value="(v) => update({ metadata: { color: v ?? null } })"
+                            />
+                            <Badge :text="displayName" :color="place.metadata.color || stateColor(key)" size="sm" />
+                        </div>
+                    </Field>
+
+                    <Field :label="__('workflows::messages.settings_field_allow_publish')">
+                        <Checkbox
+                            solo
+                            :model-value="!!place.metadata.allow_publish"
+                            @update:model-value="(v) => update({ metadata: { allow_publish: v } })"
+                        />
+                    </Field>
+
+                    <!-- Presentation only: drawn beside its predecessor in the progress
+                         bar instead of as a stage on the way. Never for the start. -->
+                    <ProblemField
+                        v-if="!isInitial || place.metadata.branch"
+                        :label="__('workflows::messages.settings_field_branch')"
+                        :instructions="__('workflows::messages.settings_field_branch_hint')"
+                        :path="`place:${place.id}.branch`"
+                    >
+                        <Checkbox
+                            solo
+                            :model-value="!!place.metadata.branch"
+                            @update:model-value="(v) => update({ metadata: { branch: v } })"
+                        />
+                    </ProblemField>
+
+                    <Field :label="__('workflows::messages.editor_field_order')" :instructions="__('workflows::messages.editor_order_places_hint')">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm">{{ __('workflows::messages.editor_order_position', { position: index + 1, total: editor.api.model.places.length }) }}</span>
+                            <Button
+                                variant="ghost"
+                                icon="chevron-up"
+                                size="sm"
+                                icon-only
+                                :disabled="index === 0"
+                                :aria-label="__('workflows::messages.move_up')"
+                                @click="editor.api.movePlace(place.id, index - 1)"
+                            />
+                            <Button
+                                variant="ghost"
+                                icon="chevron-down"
+                                size="sm"
+                                icon-only
+                                :disabled="index === editor.api.model.places.length - 1"
+                                :aria-label="__('workflows::messages.move_down')"
+                                @click="editor.api.movePlace(place.id, index + 1)"
                             />
                         </div>
-                    </div>
-                </Field>
+                    </Field>
 
-                <Field :label="__('workflows::messages.settings_field_color')">
-                    <div class="flex items-center gap-2">
-                        <span class="size-3 shrink-0 rounded-full" :class="colorClasses.dot" aria-hidden="true" />
-                        <Select
-                            adaptive-width
-                            class="flex-1"
-                            :model-value="place.metadata.color ?? null"
-                            :options="editor.options.colorOptions"
-                            clearable
-                            :placeholder="__('workflows::messages.color_default')"
-                            @update:model-value="(v) => update({ metadata: { color: v ?? null } })"
-                        />
-                        <Badge :text="displayName" :color="place.metadata.color || stateColor(key)" size="sm" />
-                    </div>
-                </Field>
-
-                <Field :label="__('workflows::messages.settings_field_allow_publish')">
-                    <Checkbox
-                        solo
-                        :model-value="!!place.metadata.allow_publish"
-                        @update:model-value="(v) => update({ metadata: { allow_publish: v } })"
-                    />
-                </Field>
-
-                <!-- Presentation only: drawn beside its predecessor in the progress
-                     bar instead of as a stage on the way. Never for the start. -->
-                <Field
-                    v-if="!isInitial"
-                    :label="__('workflows::messages.settings_field_branch')"
-                    :instructions="__('workflows::messages.settings_field_branch_hint')"
-                >
-                    <Checkbox
-                        solo
-                        :model-value="!!place.metadata.branch"
-                        @update:model-value="(v) => update({ metadata: { branch: v } })"
-                    />
-                </Field>
-
-                <Field :label="__('workflows::messages.editor_field_order')" :instructions="__('workflows::messages.editor_order_places_hint')">
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm">{{ __('workflows::messages.editor_order_position', { position: index + 1, total: editor.api.model.places.length }) }}</span>
-                        <Button
-                            variant="ghost"
-                            icon="chevron-up"
-                            size="sm"
-                            icon-only
-                            :disabled="index === 0"
-                            :aria-label="__('workflows::messages.move_up')"
-                            @click="editor.api.movePlace(place.id, index - 1)"
-                        />
-                        <Button
-                            variant="ghost"
-                            icon="chevron-down"
-                            size="sm"
-                            icon-only
-                            :disabled="index === editor.api.model.places.length - 1"
-                            :aria-label="__('workflows::messages.move_down')"
-                            @click="editor.api.movePlace(place.id, index + 1)"
-                        />
-                    </div>
-                </Field>
-
-                <Field :label="__('workflows::messages.settings_field_initial_place')">
-                    <Badge v-if="isInitial" color="blue" :text="__('workflows::messages.editor_is_initial')" />
-                    <Button v-else size="sm" icon="pin" :text="__('workflows::messages.editor_set_initial')" @click="editor.api.setInitialPlace(place.id)" />
-                </Field>
-            </div>
-        </TabContent>
-
-        <TabContent name="actions">
-            <div class="p-4">
-                <PlaceActionList :place="place" />
-            </div>
-        </TabContent>
-
-        <TabContent name="connections">
-            <div class="space-y-5 p-4">
-                <Field :label="__('workflows::messages.editor_incoming')">
-                    <TransitionLinks :transitions="incoming" />
-                </Field>
-                <Field :label="__('workflows::messages.editor_outgoing')">
-                    <TransitionLinks :transitions="outgoing" />
-                </Field>
-                <Field v-if="roles.length" :label="__('workflows::messages.editor_referenced_by')">
-                    <ul class="space-y-1 text-sm">
-                        <li v-for="role in roles" :key="role.role" class="flex items-center gap-1.5">
-                            <Icon name="link" class="size-3.5 text-gray-400" />
-                            {{ __(role.label) }}
-                        </li>
-                    </ul>
-                </Field>
-                <Field :label="__('workflows::messages.editor_usage')">
-                    <p class="text-sm">
-                        {{ place.isNew ? __('workflows::messages.editor_usage_new') : __('workflows::messages.editor_usage_count', { count: usage }) }}
-                    </p>
-                </Field>
-
-                <div class="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700!">
-                    <p v-if="isInitial" class="text-sm text-gray-500 dark:text-gray-400">
-                        {{ __('workflows::messages.editor_delete_initial_blocked') }}
-                    </p>
-                    <!-- The dialog asks, wants a target for entries still in
-                         here and lists what loses its link. -->
-                    <template v-else>
-                        <p v-if="!place.isNew" class="text-xs text-gray-500 dark:text-gray-400">
-                            {{ __('workflows::messages.editor_delete_on_save') }}
-                        </p>
-                        <Button
-                            variant="destructive"
-                            icon="trash"
-                            :text="__('workflows::messages.delete')"
-                            @click="editor.requestDelete([place.id])"
-                        />
-                    </template>
+                    <Field :label="__('workflows::messages.settings_field_initial_place')">
+                        <Badge v-if="isInitial" color="blue" :text="__('workflows::messages.editor_is_initial')" />
+                        <Button v-else size="sm" icon="pin" :text="__('workflows::messages.editor_set_initial')" @click="editor.api.setInitialPlace(place.id)" />
+                    </Field>
                 </div>
-            </div>
-        </TabContent>
-    </Tabs>
+            </TabContent>
+
+            <TabContent name="actions">
+                <div class="p-4">
+                    <PlaceActionList :place="place" />
+                </div>
+            </TabContent>
+
+            <TabContent name="connections">
+                <div class="space-y-5 p-4">
+                    <Field :label="__('workflows::messages.editor_incoming')">
+                        <TransitionLinks :transitions="incoming" />
+                    </Field>
+                    <Field :label="__('workflows::messages.editor_outgoing')">
+                        <TransitionLinks :transitions="outgoing" />
+                    </Field>
+                    <Field v-if="roles.length" :label="__('workflows::messages.editor_referenced_by')">
+                        <ul class="space-y-1 text-sm">
+                            <li v-for="role in roles" :key="role.role" class="flex items-center gap-1.5">
+                                <Icon name="link" class="size-3.5 text-gray-400" />
+                                {{ __(role.label) }}
+                            </li>
+                        </ul>
+                    </Field>
+                    <Field :label="__('workflows::messages.editor_usage')">
+                        <p class="text-sm">
+                            {{ place.isNew ? __('workflows::messages.editor_usage_new') : __('workflows::messages.editor_usage_count', { count: usage }) }}
+                        </p>
+                    </Field>
+
+                    <div class="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700!">
+                        <p v-if="isInitial" class="text-sm text-gray-500 dark:text-gray-400">
+                            {{ __('workflows::messages.editor_delete_initial_blocked') }}
+                        </p>
+                        <!-- The dialog asks, wants a target for entries still in
+                             here and lists what loses its link. -->
+                        <template v-else>
+                            <p v-if="!place.isNew" class="text-xs text-gray-500 dark:text-gray-400">
+                                {{ __('workflows::messages.editor_delete_on_save') }}
+                            </p>
+                            <Button
+                                variant="destructive"
+                                icon="trash"
+                                :text="__('workflows::messages.delete')"
+                                @click="editor.requestDelete([place.id])"
+                            />
+                        </template>
+                    </div>
+                </div>
+            </TabContent>
+        </Tabs>
+    </template>
 </template>
 
 <script setup>
 import { computed, defineComponent, h, inject, ref, watch } from 'vue';
-import { useFocusRequest } from '../../composables/useFocusRequest.js';
+import { useFocusRequest, usePathRequest } from '../../composables/useFocusRequest.js';
+import { tabForPath } from '../../model/validationPaths.js';
+import NodeProblems from './NodeProblems.vue';
+import ProblemField from '../shared/ProblemField.vue';
 import { Badge, Button, Checkbox, Field, Icon, Input, Select, TabContent, TabList, TabTrigger, Tabs } from '@statamic/cms/ui';
 import { placeColorClasses } from '../../../support/placeColors.js';
 import { stateColor } from '../../../support/states.js';
@@ -223,9 +237,18 @@ const usage = computed(() => (props.place?.isNew ? 0 : Number(editor.stateUsage[
 
 const update = (patch) => editor.api.updatePlace(props.place.id, patch);
 
+// Live validation (useValidation.js); the handle check covers new nodes only.
 const handleError = computed(() => {
-    const problem = props.place?.isNew ? editor.api.handleProblem(props.place.id) : null;
-    return problem ? __(`workflows::messages.editor_handle_${problem}`) : null;
+    if (!props.place) return undefined;
+    const live = editor.validation?.errorFor(`place:${props.place.id}.handle`);
+    if (live) return live;
+    const problem = props.place.isNew ? editor.api.handleProblem(props.place.id) : null;
+    return problem ? __(`workflows::messages.editor_handle_${problem}`) : undefined;
+});
+
+// A problem picked in a list: the tab that shows it (the shell focuses it).
+usePathRequest(editor, () => props.place?.id, (path) => {
+    tab.value = tabForPath(path);
 });
 
 const fallback = (locale) => placeLabelFallback(editor.api.view.value, key.value, locale, editor.labelCtx);
@@ -287,11 +310,15 @@ const MigrationTarget = defineComponent({
         options: { type: Array, required: true },
         usage: { type: Number, required: true },
         place: { type: String, required: true },
+        error: { type: String, default: undefined },
+        // validationPaths.js path, as `data-path` for focusing a problem.
+        path: { type: String, default: undefined },
     },
     emits: ['update:modelValue'],
     setup(targetProps, { emit }) {
-        return () => h(Field, {
+        return () => h('div', { 'data-path': targetProps.path }, h(Field, {
             label: __('workflows::messages.migrate_target'),
+            error: targetProps.error,
             instructions: __('workflows::messages.migrate_place_prompt', { place: targetProps.place, count: targetProps.usage }),
         }, () => h(Select, {
             adaptiveWidth: true,
@@ -299,7 +326,7 @@ const MigrationTarget = defineComponent({
             options: targetProps.options,
             placeholder: __('workflows::messages.select_place'),
             'onUpdate:modelValue': (v) => emit('update:modelValue', v ?? null),
-        }));
+        })));
     },
 });
 </script>

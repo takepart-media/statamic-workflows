@@ -31,7 +31,7 @@
         <div class="wf-panel-body">
             <PlacePanel v-if="place" :key="place.id" :place="place" :initial-tab="placeTab" />
             <PlacePanel v-else-if="deletion" :key="`del-${deletion.id}`" :deletion="deletion" />
-            <TransitionPanel v-else-if="transition" :key="transition.id" :transition="transition" />
+            <TransitionPanel v-else-if="transition" :key="transition.id" :transition="transition" :initial-tab="placeTab" />
             <OverviewPanel
                 v-else
                 :problems="problems"
@@ -54,7 +54,8 @@ import TransitionPanel from './TransitionPanel.vue';
 
 const props = defineProps({
     selectedId: { type: String, default: null },
-    // Which place tab to open first ('general' | 'actions' | 'connections').
+    // Which tab of the node's panel to open first (place: 'general' | 'actions' |
+    // 'connections'; transition: 'general' | 'permission' | 'actions').
     placeTab: { type: String, default: 'general' },
     // For the overview: see ProblemsList.vue.
     problems: { type: Array, default: () => [] },

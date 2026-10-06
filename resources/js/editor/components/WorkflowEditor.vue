@@ -8,7 +8,9 @@
             :form-view-label="formViewLabel"
             :saving="saving"
             :dirty="api.dirty.value"
-            :errors="saveErrors.state.errors"
+            :problems="problems"
+            :summary="validation.summary.value"
+            :validating="!!validateUrl && serverValidation.stale.value"
             :panel-collapsed="panelCollapsed"
             :can-undo="api.history.canUndo.value"
             :can-redo="api.history.canRedo.value"
@@ -32,7 +34,7 @@
             @add-place="addPlace"
             @add-transition="addTransition"
             @save="save()"
-            @select-error="selectError"
+            @select-problem="selectProblem"
             @expand-panel="panelCollapsed = false"
         />
         <div ref="body" class="wf-editor-body">
@@ -172,6 +174,18 @@
             </div>
         </ConfirmationModal>
 
+        <!-- Saving with errors the client already sees: the server decides,
+             but the author should know before asking it. -->
+        <ConfirmationModal
+            :open="saveConfirm.open"
+            :title="__('workflows::messages.editor_save_with_errors_title', { count: saveConfirm.count })"
+            :button-text="__('workflows::messages.editor_save_anyway')"
+            @update:open="(v) => (saveConfirm.open = v)"
+            @confirm="saveAnyway"
+        >
+            <p class="text-sm">{{ __('workflows::messages.editor_save_with_errors_body') }}</p>
+        </ConfirmationModal>
+
         <!-- Screen readers hear what happened without the focus moving: save
              results, undo/redo, validation counts. -->
         <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">{{ liveMessage }}</div>
@@ -183,12 +197,16 @@ import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, pro
 import { Button, ConfirmationModal, ContextItem, ContextSeparator, SplitterGroup, SplitterPanel, SplitterResizeHandle } from '@statamic/cms/ui';
 import { humanize } from '../../support/states.js';
 import { ACTION_TYPES, PLACE_ACTION_TYPES, SHARED_ACTION_TYPES } from '../model/constants.js';
-import { keyOf, placeIdOf, transitionIdOf } from '../model/editorModel.js';
+import { keyOf, placeIdOf } from '../model/editorModel.js';
 import { placeReferences } from '../model/refs.js';
 import { besideAnchor, centredAt } from '../model/canvasActions.js';
 import { placeDisplayName } from '../model/labels.js';
 import { useWorkflowModel } from '../composables/useWorkflowModel.js';
 import { useSaveErrors } from '../composables/useSaveErrors.js';
+import { useServerValidation } from '../composables/useServerValidation.js';
+import { useValidation } from '../composables/useValidation.js';
+import { focusPath } from '../composables/useFocusRequest.js';
+import { tabForPath } from '../model/validationPaths.js';
 import { shortcutLabel, useShortcuts } from '../composables/useShortcuts.js';
 import { useLeaveGuard } from '../composables/useLeaveGuard.js';
 import AddNodeMenu from './AddNodeMenu.vue';
@@ -272,6 +290,22 @@ const version = ref(props.version);
 const stateUsage = reactive({ ...(props.stateUsage ?? {}) });
 const saveErrors = useSaveErrors();
 
+// --- live validation ---
+// The client's rules on every edit, the server's dry run 800ms after the last
+// one (never during a save); one merged list for canvas, panels and toolbar.
+const saving = ref(false);
+const serverValidation = useServerValidation(api, {
+    url: () => props.validateUrl,
+    axios,
+    version: () => version.value,
+    saving: () => saving.value,
+});
+const validation = useValidation(api, {
+    t: (key, replace) => __(`workflows::messages.${key}`, replace),
+    get reservedPlaces() { return props.reservedPlaces; },
+    get reservedTransitions() { return props.reservedTransitions; },
+}, { server: serverValidation });
+
 watch(() => api.dirty.value, (dirty) => emit('dirty-change', dirty), { immediate: true });
 useLeaveGuard(() => api.dirty.value);
 onBeforeUnmount(() => api.history.stop());
@@ -287,6 +321,20 @@ function announce(text) {
     if (text) liveTimer = setTimeout(() => (liveMessage.value = text), 50);
 }
 onBeforeUnmount(() => clearTimeout(liveTimer));
+
+// Changed problem counts, once the author pauses — not on every keystroke.
+let countsTimer = null;
+let announcedCounts = `${validation.summary.value.errors}/${validation.summary.value.warnings}`;
+watch(() => validation.summary.value, ({ errors, warnings }) => {
+    clearTimeout(countsTimer);
+    countsTimer = setTimeout(() => {
+        const key = `${errors}/${warnings}`;
+        if (key === announcedCounts) return;
+        announcedCounts = key;
+        announce(`${__('workflows::messages.editor_problems')}: ${__('workflows::messages.editor_problems_count', { errors, warnings })}`);
+    }, 1500);
+});
+onBeforeUnmount(() => clearTimeout(countsTimer));
 
 // --- undo / redo ---
 
@@ -350,6 +398,9 @@ const selectedId = ref(null);
 const placeTab = ref('general');
 // A field the panel of a node should focus once it shows (useFocusRequest.js).
 const focusRequest = ref(null);
+// A problem's spot the panel of a node should show (useFocusRequest.js usePathRequest()).
+const pathRequest = ref(null);
+let pathSeq = 0;
 
 /**
  * @param {string|null} id
@@ -357,11 +408,13 @@ const focusRequest = ref(null);
  * @param {string} [options.tab]    the place tab to open
  * @param {string} [options.focus]  a field of the node's panel to focus ('label')
  * @param {number} [options.delay]  ms before focusing (after a menu closed)
+ * @param {string} [options.path]   a problem's path to show (tab + `data-path` focus)
  */
-function select(id, { tab = 'general', focus = null, delay = 0 } = {}) {
-    placeTab.value = tab;
+function select(id, { tab = 'general', focus = null, delay = 0, path = null } = {}) {
+    placeTab.value = path ? tabForPath(path) : tab;
     selectedId.value = id ?? null;
     focusRequest.value = id && focus ? { id, field: focus, delay } : null;
+    pathRequest.value = id && path ? { id, path, seq: ++pathSeq } : null;
     if (id && panelCollapsed.value) panelCollapsed.value = false;
     // A node to look at (e.g. a save error) — the stack would cover it.
     if (id && settingsOpen.value) settingsOpen.value = false;
@@ -429,6 +482,8 @@ provide(EDITOR_CONTEXT, {
     // Delete nodes the way the canvas does (dialog, migration targets).
     requestDelete: (ids) => deleteNodes(ids),
     announce,
+    validation,
+    get pathRequest() { return pathRequest.value; },
 });
 
 const hasSystemSteps = computed(() =>
@@ -790,7 +845,7 @@ useShortcuts({
     scopes: () => [settingsStack.value?.element()],
     modal: () => settingsOpen.value,
     // The dialogs handle their own keys.
-    enabled: () => !deletion.open && !conflict.open && !collectionRemoval.open,
+    enabled: () => !deletion.open && !conflict.open && !collectionRemoval.open && !saveConfirm.open,
     handlers: {
         save: () => {
             save();
@@ -852,44 +907,34 @@ useShortcuts({
     },
 });
 
-// The node a save error is about ({kind, handle} → editor id), if it still exists.
-function errorNodeId(error) {
-    const handle = error?.node?.handle;
-    if (!handle) return null;
-    return error.node.kind === 'transition'
-        ? transitionIdOf(api.model, handle)
-        : (placeIdOf(api.model, handle) ?? api.model.deletions.find((d) => d.handle === handle)?.id ?? null);
-}
+// The merged problem list (toolbar, overview).
+//   [{ level, message, nodeId?, path?, section?, displayPath? }]
+const problems = computed(() => validation.problems.value);
 
-function reveal(id) {
-    if (!id) return;
-    select(id);
-    canvas.value?.reveal(id);
-}
-
-function selectError(error) {
-    reveal(errorNodeId(error));
-}
-
-// The overview's problem list: the last save's errors for now; live validation
-// (F5) adds its own entries here.
-//   [{ level, message, nodeId?, path? }]
-const problems = computed(() => saveErrors.state.errors.map((error) => ({
-    level: 'error',
-    message: error.message,
-    nodeId: errorNodeId(error),
-    path: error.path ?? null,
-})));
-
+// Show where a problem is: its node (right tab, the field focused) or the
+// settings section holding the workflow-level field.
 function selectProblem(problem) {
-    reveal(problem?.nodeId);
+    if (!problem) return;
+    const id = problem.nodeId;
+    if (id && (api.findPlace(id) || api.findTransition(id) || api.findDeletion(id))) {
+        select(id, { path: problem.path });
+        canvas.value?.reveal(id);
+        setTimeout(() => focusPath(root.value, problem.path), 80);
+        return;
+    }
+    if (problem.section) {
+        const wasOpen = settingsOpen.value;
+        addMenu.open = false;
+        settingsOpen.value = true;
+        settingsStack.value?.show(problem.section, problem.path, { now: wasOpen });
+    }
 }
 
 // --- saving ---
 
-const saving = ref(false);
 const collectionRemoval = reactive({ open: false, collections: [], affectedCount: 0 });
 const conflict = reactive({ open: false, definition: null, version: null });
+const saveConfirm = reactive({ open: false, count: 0 });
 
 function applyStateUsage(usage) {
     if (!usage || typeof usage !== 'object') return;
@@ -904,9 +949,15 @@ function adopt(definition, newVersion, { snapshot = null } = {}) {
     if (newVersion) version.value = newVersion;
     const kept = selectedId.value ? (ids[selectedId.value] ?? selectedId.value) : null;
     selectedId.value = kept && (api.findPlace(kept) || api.findTransition(kept)) ? kept : null;
+    return ids;
 }
 
-async function save({ confirmCollectionRemoval = false, force = false } = {}) {
+/**
+ * @param {object} [options]
+ * @param {boolean} [options.ignoreErrors]  the author confirmed saving despite
+ *        the errors the client sees (the server still decides)
+ */
+async function save({ confirmCollectionRemoval = false, force = false, ignoreErrors = false } = {}) {
     if (saving.value || !axios) return;
 
     // A new node without a usable handle can't be written — stop and show it.
@@ -920,6 +971,15 @@ async function save({ confirmCollectionRemoval = false, force = false } = {}) {
         return;
     }
 
+    // Errors the client already sees: ask first. A follow-up save (collection
+    // removal, overwrite) was already asked about.
+    const clientErrors = validation.clientErrors.value.length;
+    if (clientErrors && !ignoreErrors && !confirmCollectionRemoval && !force) {
+        saveConfirm.count = clientErrors;
+        saveConfirm.open = true;
+        return;
+    }
+
     saving.value = true;
     const snapshot = api.handleSnapshot();
     const { definition, removed_places } = api.payload();
@@ -930,9 +990,10 @@ async function save({ confirmCollectionRemoval = false, force = false } = {}) {
     try {
         const { data } = await axios.post(props.saveDefinitionUrl, body);
         const result = data?.data ?? {};
-        adopt(result.definition, result.version, { snapshot });
+        const ids = adopt(result.definition, result.version, { snapshot });
         applyStateUsage(result.state_usage);
         saveErrors.clear();
+        serverValidation.saved(ids);
         conflict.open = false;
         collectionRemoval.open = false;
 
@@ -989,6 +1050,7 @@ function handleSaveError(e) {
         saveErrors.set(data.message, removals
             .filter((r) => r.error || r.target_error)
             .map((r) => ({ path: `removed_places.${r.place}`, code: 'needs_migration', message: r.error || r.target_error, node: { kind: 'place', handle: r.place } })));
+        serverValidation.applySave(saveErrors.state.errors);
         saveFailed(data.message || __('workflows::messages.settings_save_error'));
         const pending = problem ? api.model.deletions.find((d) => d.handle === problem.place) : null;
         const target = pending?.id ?? (problem ? placeIdOf(api.model, problem.place) : null);
@@ -998,6 +1060,7 @@ function handleSaveError(e) {
 
     if (status === 422) {
         saveErrors.set(data.message, data.errors);
+        serverValidation.applySave(saveErrors.state.errors);
         saveFailed(data.message || data.errors?.[0]?.message || __('workflows::messages.settings_save_error'));
         return;
     }
@@ -1009,6 +1072,11 @@ function handleSaveError(e) {
         || (status ? `${status} ${e.response.statusText || ''}`.trim() : null)
         || __('workflows::messages.settings_save_error'),
     );
+}
+
+function saveAnyway() {
+    saveConfirm.open = false;
+    save({ ignoreErrors: true });
 }
 
 async function confirmCollectionRemoval() {
@@ -1025,6 +1093,8 @@ async function reloadFromConflict() {
     if (!conflict.definition) return;
     adopt(conflict.definition, conflict.version);
     saveErrors.clear();
+    serverValidation.clear();
+    serverValidation.revalidate();
     conflict.open = false;
     // Fresh counts for the version just taken over.
     if (axios && props.usageUrl) {

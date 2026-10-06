@@ -25,6 +25,13 @@
             </p>
             <ul class="space-y-1">
                 <li v-for="d in model.deletions" :key="d.id" class="flex items-center gap-2 text-sm">
+                    <Icon
+                        v-if="editor.validation?.countsFor(d.id).errors"
+                        name="warning-diamond"
+                        class="size-3.5 shrink-0 text-red-600 dark:text-red-400"
+                        :aria-label="editor.validation.errorsFor(d.id).map((p) => p.message).join(' ')"
+                        :title="editor.validation.errorsFor(d.id).map((p) => p.message).join(' ')"
+                    />
                     <code class="font-mono text-xs">{{ d.handle }}</code>
                     <span v-if="d.usage" class="text-xs text-gray-600 dark:text-gray-300">
                         {{ __('workflows::messages.editor_usage_count', { count: d.usage }) }}
@@ -46,7 +53,8 @@
         <section class="space-y-2" :aria-label="__('workflows::messages.editor_problems')">
             <h3 class="flex items-center gap-2 text-sm font-semibold">
                 {{ __('workflows::messages.editor_problems') }}
-                <Badge v-if="problems.length" :text="String(problems.length)" color="red" size="sm" />
+                <Badge v-if="counts.errors" :text="String(counts.errors)" color="red" size="sm" :title="__('workflows::messages.editor_errors', { count: counts.errors })" />
+                <Badge v-if="counts.warnings" :text="String(counts.warnings)" color="amber" size="sm" :title="__('workflows::messages.editor_warnings', { count: counts.warnings })" />
             </h3>
             <ProblemsList :problems="problems" @select="(problem) => $emit('select-problem', problem)" />
         </section>
@@ -60,7 +68,7 @@ import { IS_MAC, shortcutLabel } from '../../composables/useShortcuts.js';
 import { EDITOR_CONTEXT } from '../context.js';
 import ProblemsList from './ProblemsList.vue';
 
-defineProps({
+const props = defineProps({
     // See ProblemsList.vue.
     problems: { type: Array, default: () => [] },
 });
@@ -69,6 +77,11 @@ defineEmits(['open-settings', 'select-problem']);
 
 const editor = inject(EDITOR_CONTEXT);
 const model = editor.api.model;
+
+const counts = computed(() => ({
+    errors: props.problems.filter((p) => p.level === 'error').length,
+    warnings: props.problems.filter((p) => p.level === 'warning').length,
+}));
 
 // Entries counted per stored state (stateUsage) — what the workflow governs
 // right now, whatever the unsaved edits say.

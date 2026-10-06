@@ -1142,4 +1142,20 @@ return [
     'editor_problems_none' => 'No known problems.',
     'editor_settings_sections' => 'Settings sections',
     'editor_tab_connections_short' => 'Connections',
+
+    // Graph editor: validation.
+    'editor_rule_transition_no_from' => 'Transition [:handle] has no source place.',
+    'editor_rule_required_handles_missing' => 'Transition [:handle]: a permission type is chosen, but no group or role.',
+    'editor_rule_start_localization_from_initial' => 'Transition [:handle] creates the target version and must therefore start in the initial place [:place].',
+    'editor_rule_resubmit_on_start' => 'Transition [:handle] creates the target version in the first place — a [:action] action makes no sense there.',
+    'editor_rule_reminder_mail_type' => 'Place [:handle], action [reminder]: no mail type is chosen.',
+    'editor_rule_place_isolated' => 'Place [:place] is not connected to any transition.',
+    'editor_rule_no_publish_place' => 'No place allows publishing and no place for already published entries is set — existing entries cannot be placed.',
+    'editor_warnings' => ':count warnings',
+    'editor_validating' => 'Checking …',
+    'editor_validating_hint' => 'The server is checking the latest changes — the list may still be out of date.',
+    'editor_problems_count' => ':errors errors, :warnings warnings',
+    'editor_save_with_errors_title' => 'There are :count errors — save anyway?',
+    'editor_save_with_errors_body' => 'The server checks again when saving and refuses what cannot work; your changes stay in the editor then.',
+    'editor_save_anyway' => 'Save anyway',
 ];

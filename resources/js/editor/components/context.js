@@ -4,5 +4,6 @@
 //   { customActions: { transition: [{value, label}], place: [{value, label}] } }
 //
 // …plus the shell's services (WorkflowEditor.vue): api, select(), requestDelete(ids)
-// (the delete dialog), announce(text) (the aria-live region), focus requests.
+// (the delete dialog), announce(text) (the aria-live region), focus requests,
+// validation (useValidation.js) and pathRequest (a picked problem's spot).
 export const EDITOR_CONTEXT = Symbol('workflows.editor');

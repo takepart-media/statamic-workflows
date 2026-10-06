@@ -1,5 +1,14 @@
 <template>
-    <div class="wf-place" :title="data.handle">
+    <div :class="problemClass" class="wf-place" :title="data.handle">
+        <!-- Live validation: red ring + count for errors, amber for warnings. -->
+        <span
+            v-if="problems.errors || problems.warnings"
+            class="wf-node-problems"
+            :class="problems.errors ? 'wf-node-problems--error' : 'wf-node-problems--warning'"
+            role="img"
+            :title="problemTitle"
+            :aria-label="problemTitle"
+        >{{ problems.errors || problems.warnings }}</span>
         <!-- Lines are drawn from an output to an input, never the other way. -->
         <Handle type="target" :position="Position.Left" :connectable-start="false" />
         <span class="wf-place-stripe" :class="colorClasses.dot" aria-hidden="true" />
@@ -65,6 +74,7 @@ import { placeColorClasses } from '../../support/placeColors.js';
 import { stateColor } from '../../support/states.js';
 import { SHARED_ACTION_TYPES } from '../model/constants.js';
 import { EDITOR_CONTEXT } from './context.js';
+import { useNodeProblems } from './nodeProblems.js';
 
 // Vue Flow passes every NodeProps field; only the declared ones are used, the
 // rest must not land on the root element as attributes.
@@ -78,6 +88,8 @@ const props = defineProps({
 });
 
 const editor = inject(EDITOR_CONTEXT, { customActions: { place: [] } });
+
+const { problems, problemClass, problemTitle } = useNodeProblems(editor, () => props.id);
 
 const colorClasses = computed(() => placeColorClasses(props.data.color || stateColor(props.data.handle)));
 

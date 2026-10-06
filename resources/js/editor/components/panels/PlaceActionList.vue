@@ -2,11 +2,14 @@
     <!-- Behaviours that apply while a subject sits in this place — see
          Workflow\PlaceActions. A list: a place may want the spinner AND a
          reminder at once. Rows are edited in place. -->
-    <div class="space-y-2">
+    <div class="space-y-2" :data-path="`place:${place.id}.actions`">
+        <ActionProblems :path="`place:${place.id}.actions`" exact />
         <div
             v-for="(action, i) in place.metadata.actions"
             :key="i"
-            class="space-y-2 rounded-md border border-gray-200 p-2 dark:border-gray-700!"
+            class="space-y-2 rounded-md border p-2"
+            :class="rowHasError(i) ? 'border-red-400 dark:border-red-500!' : 'border-gray-200 dark:border-gray-700!'"
+            :data-path="`place:${place.id}.actions.${i}`"
         >
             <div class="flex items-start gap-2">
                 <Select
@@ -112,6 +115,7 @@
             </template>
 
             <CustomActionFields :action="action" scope="place" />
+            <ActionProblems :path="`place:${place.id}.actions.${i}`" />
         </div>
 
         <p v-if="!place.metadata.actions?.length" class="text-sm text-gray-500 dark:text-gray-400">
@@ -144,6 +148,7 @@ import { placeActionTypeOptionsFor } from '../../model/actionRules.js';
 import { autoTransitionOptions as autoOptions } from '../../model/editorModel.js';
 import { EDITOR_CONTEXT } from '../context.js';
 import CustomActionFields from '../shared/CustomActionFields.vue';
+import ActionProblems from './ActionProblems.vue';
 
 const props = defineProps({
     // A place entry of the editor model.
@@ -158,6 +163,8 @@ const editor = inject(EDITOR_CONTEXT);
 function typeOptions(current) {
     return placeActionTypeOptionsFor(editor.api.view.value, props.place, current, editor.ruleCtx);
 }
+
+const rowHasError = (i) => !!editor.validation?.errorFor(`place:${props.place.id}.actions.${i}`);
 
 // Values are transition ids — the model's reference currency.
 const autoTransitionOptions = computed(() => autoOptions(editor.api.model, props.place.id));

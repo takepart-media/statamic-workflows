@@ -1,6 +1,6 @@
 // The validation errors of the last save (422 `{message, errors[]}`), kept per
-// editor so the toolbar can list them now and live validation (F5) can map them
-// onto nodes and fields later.
+// editor; useServerValidation.applySave() maps them onto nodes and fields like
+// any other answer of the server.
 //
 //   errors: [{ path, code, message, node: { kind: 'place'|'transition', handle } | null }]
 

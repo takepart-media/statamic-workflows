@@ -35,3 +35,54 @@ export function useFocusRequest(editor, id, field, prepare) {
         { immediate: true },
     );
 }
+
+// --- problems: "show me where this is" ---
+//
+// The shell records `pathRequest` { id, path, seq } when a problem is picked
+// (WorkflowEditor selectProblem()); the panel of that node switches to the tab
+// that shows the path, then the shell focuses the element carrying it as
+// `data-path` (focusPath()).
+
+/**
+ * @param {object} editor              the injected EDITOR_CONTEXT
+ * @param {() => string} id            the node the panel shows
+ * @param {(path: string) => void} setTab
+ */
+export function usePathRequest(editor, id, setTab) {
+    watch(
+        () => editor?.pathRequest,
+        (request) => {
+            if (request && request.id === id() && request.path) setTab(request.path);
+        },
+        { immediate: true },
+    );
+}
+
+const FOCUSABLE = 'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+const escape = (value) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(value) : value.replace(/["\\]/g, '\\$&'));
+
+/**
+ * Focus (and scroll to) the element for `path` inside `root` — or, if there is
+ * none, the closest enclosing path that has one (`…actions.0.criteria` →
+ * `…actions.0` → `…actions` → the node).
+ *
+ * @returns {boolean} whether an element was found
+ */
+export function focusPath(root, path) {
+    if (!root || !path) return false;
+    let current = path;
+    while (current) {
+        const el = root.querySelector(`[data-path="${escape(current)}"]`);
+        if (el) {
+            el.scrollIntoView?.({ block: 'nearest' });
+            const target = el.matches?.(FOCUSABLE) ? el : el.querySelector?.(FOCUSABLE);
+            target?.focus?.({ preventScroll: true });
+            return true;
+        }
+        const dot = current.lastIndexOf('.');
+        if (dot < 0) break;
+        current = current.slice(0, dot);
+    }
+    return false;
+}

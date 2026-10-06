@@ -1151,4 +1151,20 @@ return [
     'editor_problems_none' => 'Keine Probleme bekannt.',
     'editor_settings_sections' => 'Einstellungsbereiche',
     'editor_tab_connections_short' => 'Verbindungen',
+
+    // Graph-Editor: Validierung.
+    'editor_rule_transition_no_from' => 'Transition [:handle] hat keinen Ausgangs-Status.',
+    'editor_rule_required_handles_missing' => 'Transition [:handle]: Für die Berechtigung ist eine Art gewählt, aber keine Gruppe bzw. Rolle.',
+    'editor_rule_start_localization_from_initial' => 'Transition [:handle] erzeugt die Ziel-Fassung und muss deshalb im Startzustand [:place] beginnen.',
+    'editor_rule_resubmit_on_start' => 'Transition [:handle] erzeugt die Ziel-Fassung erst – eine [:action]-Action ergibt dort keinen Sinn.',
+    'editor_rule_reminder_mail_type' => 'Place [:handle], Action [reminder]: Es ist kein Mail-Typ gewählt.',
+    'editor_rule_place_isolated' => 'Place [:place] ist mit keinem Übergang verbunden.',
+    'editor_rule_no_publish_place' => 'Kein Status erlaubt das Veröffentlichen, und es ist kein Status für bereits veröffentlichte Beiträge gewählt – bestehende Beiträge lassen sich nicht einordnen.',
+    'editor_warnings' => ':count Warnungen',
+    'editor_validating' => 'Wird geprüft …',
+    'editor_validating_hint' => 'Der Server prüft die letzten Änderungen – die Liste kann noch veraltet sein.',
+    'editor_problems_count' => ':errors Fehler, :warnings Warnungen',
+    'editor_save_with_errors_title' => 'Es gibt :count Fehler – trotzdem speichern?',
+    'editor_save_with_errors_body' => 'Der Server prüft beim Speichern noch einmal und lehnt ab, was nicht geht; deine Änderungen bleiben dann im Editor erhalten.',
+    'editor_save_anyway' => 'Trotzdem speichern',
 ];
