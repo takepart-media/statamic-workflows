@@ -11,12 +11,12 @@ use TakepartMedia\Workflows\Http\Controllers\WorkflowController;
 // Inertia pages (full-page Vue, wrapped in the CP chrome).
 Route::get('workflows', [WorkflowController::class, 'queue'])->name('workflows.queue');
 
-// Instance summary. The canonical form nests under the manager's own slug, and
-// that nesting is load-bearing rather than cosmetic: Statamic derives a nav
-// item's active state purely from its URL (NavItem::generateActivePatternForCpUrl
-// builds `<slug>(/(.*)?|$)`) and offers no way to set the pattern by hand. With
-// the workflow in the query string instead, no nav child ever matched on a
-// detail page, the section collapsed, and the manager links disappeared.
+// Instance summary. The canonical form nests under the manager's own slug, so
+// an instance URL reads as part of its workflow (`workflows/<slug>/instances/<id>`,
+// built by InstanceUrl from the workflow's `metadata.nav.slug`). The nesting used
+// to be load-bearing for CP nav highlighting too (Statamic derives a nav item's
+// active state purely from its URL); with the per-workflow nav items gone that
+// no longer applies, but the URL structure stays.
 //
 // The id-only form stays for bookmarks and older stored links; it resolves the
 // workflow and redirects to the canonical URL.

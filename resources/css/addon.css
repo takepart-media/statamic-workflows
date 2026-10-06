@@ -139,35 +139,6 @@
     color: var(--theme-color-gray-300);
 }
 
-/* Long labels in the addon's own CP nav items.
- *
- * `wf-nav-item` is set in ServiceProvider::bootNav() via NavItem::attributes(),
- * which the sidebar spreads onto the `<a>` through Vue's mergeProps — class
- * values are concatenated there, so core's `active` class is untouched. Scoping
- * to our class matters: this must not change the appearance of Statamic's own
- * nav entries.
- *
- * The sidebar is 12rem wide with 0.75rem of inline padding, and the link is a
- * flex row of icon + 0.75rem gap + label, which leaves the label roughly 124px —
- * about 17 characters at the nav's `text-sm`. Core sets no truncation, no
- * wrapping and no `min-width` anywhere in `.nav-main`, so a label that does not
- * fit simply overflows the sidebar. The shipped labels are short enough (see the
- * `nav` map in lang/{de,en}/messages.php), but a project defines its own
- * workflows and picks its own `metadata.nav.label`, and that must degrade
- * instead of breaking the chrome.
- *
- * `min-width: 0` is the load-bearing half: a flex item defaults to
- * `min-width: auto`, which refuses to shrink below its min-content width, and
- * for a German compound like "Übersetzungsmanager" min-content IS the whole
- * word. `overflow-wrap: anywhere` then supplies the break opportunity the word
- * itself does not have. Wrapping rather than an ellipsis on purpose — a nav
- * label cut to "Übersetzungsman…" is worse to live with than one on two lines,
- * and nothing is hidden. */
-.wf-nav-item > span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
 /* There is deliberately NO scroll container of our own inside a modal. Statamic's
  * modal content is already one, capped around 60vh. Adding a second made the
  * outer content taller than that cap, so the modal opened scrolled — autofocus

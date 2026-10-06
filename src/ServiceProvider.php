@@ -104,17 +104,6 @@ class ServiceProvider extends AddonServiceProvider
         'publicDirectory' => 'resources/dist',
     ];
 
-    /**
-     * Ability for the nav-section anchor, deliberately registered NOWHERE.
-     *
-     * `NavBuilder::filterAuthorizedNavItems()` resolves it through the Gate, and
-     * Statamic's super-admin bypass in `AuthServiceProvider::boot()` only grants
-     * abilities that are actual registered Statamic permissions. An invented one
-     * is therefore false for every user, super admins included -- which is the
-     * point: see bootNav().
-     */
-    private const NAV_ANCHOR_ABILITY = 'workflows-nav-anchor';
-
     public function register()
     {
         parent::register();
@@ -178,30 +167,15 @@ class ServiceProvider extends AddonServiceProvider
     }
 
     /**
-     * The addon's own CP nav section, directly below Statamic's "Top Level"
-     * (i.e. above "Content"), with one FLAT item per workflow that declares
-     * `metadata.nav`.
+     * The super-admin "Settings > Workflows" CP nav entry, with one child per
+     * workflow that declares `metadata.nav`.
      *
-     * Section order is the order in which sections first APPEAR in `Nav::$items`:
-     * `NavBuilder::trackCoreSections()` maps the registered items to unique
-     * section names and force-prepends "Top Level". There is no numeric ordering
-     * API -- `NavItem::order()` orders items within a section, never sections.
-     * And `Nav::makeBaseItems()` snapshots the already-registered items BEFORE
-     * calling `CoreNav::make()`, running the `Nav::extend` callbacks only after
-     * it. So anything registered in `Nav::extend` can only land BELOW the core
-     * sections; the sole way above them is to already sit in `Nav::$items`
-     * before the first `Nav::build()`.
+     * The addon has no nav section of its own any more: the per-workflow
+     * managers are reached from the dashboard's workflow widget (and stay
+     * reachable by URL under `workflows/{slug}`), so only the settings entry
+     * is registered here.
      *
-     * Hence the split. Eagerly registered is only an ANCHOR whose entire job is
-     * to claim the section's position -- and because only the FIRST occurrence
-     * of a section name fixes that position, the real items may be created later
-     * and still inherit the slot. The anchor carries no URL and is filtered out
-     * again by `NavBuilder::authorizeItems()`, which runs AFTER
-     * trackCoreSections(): the slot survives, the item never renders -- not in
-     * the sidebar, and not in the nav customiser under Preferences > Nav (which
-     * builds with `withHidden`, so `hidden(true)` alone would not have sufficed).
-     *
-     * Registering the real items eagerly would be wrong three times over:
+     * Registered in `Nav::extend` rather than eagerly, for three reasons:
      * `cp_route()` throws at boot (Statamic loads its routes on the line AFTER
      * `Statamic::runBootedCallbacks()`, and addon routes even later), the CP
      * locale is not set until the `statamic.cp.authenticated` middleware group
@@ -214,51 +188,30 @@ class ServiceProvider extends AddonServiceProvider
      * Keeping the workflow-dependent work in `Nav::extend` also keeps it off the
      * public frontend entirely: those bodies only run from `Nav::build()`, so a
      * frontend request still reads zero workflow YAMLs.
-     *
-     * Caveat for a future Octane adoption: the anchor lives on the `Nav` facade's
-     * resolved-instance cache -- `Statamic\CP\Navigation\Nav` is not a container
-     * singleton -- so anything calling `Facade::clearResolvedInstances()`
-     * mid-process would drop it and sink the section to the bottom.
      */
     private function bootNav(): void
     {
-        $section = config('workflows.nav_section', 'Workflows');
-
-        // findOrCreate rather than item(), so a double boot stays idempotent.
-        //
-        // The URL is deliberately unroutable and never navigated to -- it exists
-        // because `NavBuilder::resolveChildrenClosures()` calls isActive() on
-        // EVERY item, long before authorizeItems() drops this one, and
-        // `NavItem::isActive()` hands the url straight to
-        // `URL::removeQueryAndFragment()`. A null there is a deprecation today
-        // and a TypeError on PHP 9. It must not be a URL anyone can visit
-        // either: `trackUrls()` collects it into the shared `urlsAll` list, and
-        // `currentUrlIsNotExplicitlyReferencedInNav()` flips every other item
-        // from pattern matching to exact matching on a URL that appears there.
-        // The underscores keep it from even matching the `[a-z0-9-]+` slug
-        // constraint in routes/cp.php.
-        $anchor = Nav::findOrCreate($section, $section)
-            ->id('workflows::__anchor__')
-            ->url('workflows/__anchor__')
-            ->hidden(true)
-            ->can(self::NAV_ANCHOR_ABILITY);
-
-        Nav::extend(function ($nav) use ($anchor, $section) {
-            // Re-assert the anchor on every build. It is the one nav item that
-            // outlives a build, and `NavBuilder::renameSection()` writes the new
-            // name straight onto it -- stranding it in the renamed section, so
-            // the next build finds ours unclaimed and sinks it to the bottom.
-            // This runs before applyPreferenceOverrides(), so a genuine rename
-            // still takes effect within its own build. Same story for `hidden`,
-            // which `@hide` sets persistently.
-            $anchor->section($section)->hidden(true);
+        Nav::extend(function ($nav) {
+            // Super admins get a "Workflows" entry inside the built-in
+            // "Settings" section (alongside Sites, Preferences etc.). Clicking
+            // the parent lands on an index page; children link straight to each
+            // workflow's settings editor. `Nav::settings(...)` maps via __call
+            // to findOrCreate('Settings', 'Workflows'), and appending to a
+            // section that already exists does not move it.
+            //
+            // The gate has to be checked here rather than through an eager
+            // `can()`: User::current() does not exist at boot, and "super admin"
+            // cannot be expressed as an ability at all, because the Gate only
+            // grants the super bypass for registered permissions.
+            if (! (User::current()?->isSuper() ?? false)) {
+                return;
+            }
 
             $loader = app(DefinitionLoader::class);
 
             // Workflows that opt into the nav via `metadata.nav`, in declared
-            // order. Both the section items and the (super-admin-only) settings
-            // entry derive from this one list. Not cached -- raw() reads from
-            // disk every time, on purpose (see DefinitionLoader).
+            // order. Not cached -- raw() reads from disk every time, on purpose
+            // (see DefinitionLoader).
             $workflowNavs = collect($loader->all())
                 ->map(fn (string $name) => $loader->raw($name)['metadata']['nav'] ?? null)
                 // A nav entry needs a slug for its URL and a label to show. The
@@ -274,47 +227,18 @@ class ServiceProvider extends AddonServiceProvider
                 ->sortBy(fn ($meta) => $meta['order'] ?? PHP_INT_MAX)
                 ->values();
 
-            // One flat item per workflow. No children, so isActive() takes the
-            // URL-pattern path (`workflows/<slug>(/(.*)?|$)`) and an instance
-            // detail page keeps its manager highlighted. Fresh objects on every
-            // build, so NavBuilder's in-place edits cannot leak between builds.
-            // The icon fallback has to be explicit: children used to inherit the
-            // parent's icon, flat items have no parent to inherit from.
-            // The `wf-nav-item` class is the addon's only hook into core's nav
-            // markup, and it is what resources/css/addon.css scopes its
-            // long-label handling to. Safe because the sidebar spreads
-            // `attributes` through Vue's mergeProps, which CONCATENATES class
-            // values rather than replacing them -- core's own `active` class
-            // survives.
-            $workflowNavs->each(fn ($meta) => $nav->item(DefinitionLoader::navLabel($meta))
-                ->section($section)
-                ->route('workflows.workflow', ['slug' => $meta['slug']])
-                ->icon($meta['icon'] ?? 'workflow')
-                ->attributes(['class' => 'wf-nav-item']));
+            // Fresh objects on every build, so NavBuilder's in-place edits
+            // cannot leak between builds.
+            $settingsChildren = $workflowNavs
+                ->map(fn ($meta) => Nav::item(DefinitionLoader::navLabel($meta))
+                    ->route('workflows.settings.edit', ['slug' => $meta['slug']])
+                    ->icon($meta['icon'] ?? 'workflow'))
+                ->values();
 
-            // Super admins get a "Workflows" entry inside the built-in
-            // "Settings" section (alongside Sites, Preferences etc.). Clicking
-            // the parent lands on an index page; children link straight to each
-            // workflow's settings editor. `Nav::settings(...)` maps via __call
-            // to findOrCreate('Settings', 'Workflows'), and appending to a
-            // section that already exists does not move it.
-            //
-            // This gate has to stay here rather than move to the anchor's
-            // eager `can()`: User::current() does not exist at boot, and "super
-            // admin" cannot be expressed as an ability at all, because the Gate
-            // only grants the super bypass for registered permissions.
-            if (User::current()?->isSuper() ?? false) {
-                $settingsChildren = $workflowNavs
-                    ->map(fn ($meta) => Nav::item(DefinitionLoader::navLabel($meta))
-                        ->route('workflows.settings.edit', ['slug' => $meta['slug']])
-                        ->icon($meta['icon'] ?? 'workflow'))
-                    ->values();
-
-                $nav->settings('Workflows')
-                    ->route('workflows.settings.index')
-                    ->icon('workflow')
-                    ->children($settingsChildren->all());
-            }
+            $nav->settings('Workflows')
+                ->route('workflows.settings.index')
+                ->icon('workflow')
+                ->children($settingsChildren->all());
         });
     }
 

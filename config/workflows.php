@@ -421,21 +421,14 @@ return [
     | CP navigation
     |--------------------------------------------------------------------------
     |
-    | Title of the addon's own CP nav section. The per-workflow managers are
-    | listed flat inside it, and the section sits directly below Statamic's own
-    | top level -- i.e. above "Content".
+    | DEPRECATED -- no longer read. The addon used to register a CP nav section
+    | of this title, listing every workflow manager in it. The managers are now
+    | reached from the dashboard's workflow widget (and stay reachable by URL
+    | under /cp/workflows/{slug}); the only nav entry left is the super-admin
+    | "Settings > Workflows", which lives in Statamic's own Settings section.
     |
-    | Pointing this at an EXISTING section name ("Content", "Tools", ...) also
-    | works: the managers are then listed in that section, and that section
-    | moves up to just below the top level, because the addon claims it first.
-    |
-    | Renaming this changes the nav-preference IDs derived from it
-    | (NavItem::id() is `{snake_section}::{snake_display}`), so any user who has
-    | customised the CP nav loses their overrides for these items.
-    |
-    | The title is rendered through the CP's JS translator, which resolves bare
-    | strings only from a project-level `lang/<locale>.json`. Without such an
-    | entry it renders verbatim -- same as "Settings > Workflows" does today.
+    | The key is kept so published configs that still set it keep loading
+    | unchanged; it may be removed in a future major version.
     |
     */
 
