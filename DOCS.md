@@ -4090,7 +4090,8 @@ Problemliste, Einstellungen, Speichern), `Canvas.vue` mit `PlaceNode`,
 `pending_revision` samt Systemschritten: read-only, gestrichelt, ausblendbar),
 `AddNodeMenu.vue` („+“ am Ausgang, Linie ins Leere, Tab, Kontextmenü),
 Kontextmenüs für Knoten, Linien, Auswahl und leere Fläche (Doppelklick legt einen
-Place an).
+Place an). Linien-Enden lassen sich greifen: ins Leere gezogen trennt die Linie,
+auf einen anderen Knoten gezogen verlegt sie sie (ein Undo-Schritt).
 
 - **Seitenpanel** (`panels/NodePanel.vue`, per Splitter in der Breite
   verstellbar, einklappbar): `PlacePanel` (Tabs Allgemein / Actions /

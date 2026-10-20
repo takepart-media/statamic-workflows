@@ -19,7 +19,7 @@
                     :connection-mode="ConnectionMode.Strict"
                     :connection-radius="28"
                     :is-valid-connection="isValidConnection"
-                    :edges-updatable="false"
+                    :edges-updatable="!!connectionRule"
                     :delete-key-code="null"
                     :zoom-on-double-click="false"
                     :min-zoom="0.2"
@@ -33,6 +33,9 @@
                     @connect-start="onConnectStart"
                     @connect="onConnect"
                     @connect-end="onConnectEnd"
+                    @edge-update-start="onEdgeUpdateStart"
+                    @edge-update="onEdgeUpdate"
+                    @edge-update-end="onEdgeUpdateEnd"
                     @node-context-menu="onNodeContextMenu"
                     @edge-context-menu="onEdgeContextMenu"
                     @pane-context-menu="onPaneContextMenu"
@@ -95,6 +98,10 @@ const props = defineProps({
     // output to `target`'s input (model/connections.js canConnect()). Without
     // it nothing connects.
     connectionRule: { type: Function, default: null },
+    // (edge, source, target) => {ok, kind?, reason?}: may the line `edge`
+    // ({transition, place, direction}) be moved to run source → target
+    // (model/connections.js canReconnect(); kind 'same' = where it is).
+    reconnectRule: { type: Function, default: null },
 });
 
 // select: a node (or, via its edges, a transition) was picked; null = nothing.
@@ -107,11 +114,16 @@ const props = defineProps({
 // connect-refused: a line was dropped on something it can't connect to — {reason}.
 // connect-drop: a line from an output was dropped on empty canvas — {source,
 //               client: {x, y}, position} (flow coordinates of the drop point).
+// edge-disconnect: an end of a line was dragged off onto the empty canvas —
+//                  {edge: {transition, place, direction}}.
+// edge-reconnect: an end of a line was dragged onto another node — {edge,
+//                 source, target, position} (the line it becomes; position as
+//                 for `connect`). Refused moves arrive as connect-refused.
 // pane-dblclick: {position} on the empty canvas.
 //
 // The keyboard (Delete, Tab, Enter, arrows …) lives in useShortcuts.js; the
 // canvas only answers what is selected / focused (deleteTargets(), focusedNode()).
-const emit = defineEmits(['select', 'nodes-moved', 'positions', 'connect', 'connect-refused', 'connect-drop', 'pane-dblclick']);
+const emit = defineEmits(['select', 'nodes-moved', 'positions', 'connect', 'connect-refused', 'connect-drop', 'edge-disconnect', 'edge-reconnect', 'pane-dblclick']);
 
 // One store per canvas — the id keeps two editors (or a remount) apart. A module
 // counter rather than Vue's useId(): the CP's own Vue decides which APIs exist.
@@ -245,9 +257,11 @@ const isModelNode = (id) => {
     return type === 'place' || type === 'transition';
 };
 
-// Called by Vue Flow for every handle the line comes near.
+// Called by Vue Flow for every handle the line comes near. While an end of an
+// existing line is dragged, the question is whether the line may MOVE there.
 function isValidConnection(connection) {
     if (!props.connectionRule || !isModelNode(connection.source) || !isModelNode(connection.target)) return false;
+    if (moving) return !!moving.ends && reconnectVerdict(connection.source, connection.target).ok === true;
     return props.connectionRule(connection.source, connection.target).ok === true;
 }
 
@@ -255,6 +269,12 @@ function isValidConnection(connection) {
 let drawing = null;
 
 function onConnectStart({ nodeId, handleType }) {
+    // Vue Flow draws a dragged line end like a new line from the end that
+    // stays put — that is not a new line (no add menu when it is let go).
+    if (moving) {
+        moving.grabbed = handleType === 'target' ? 'source' : 'target';
+        return;
+    }
     drawing = { nodeId, handleType, connected: false };
 }
 
@@ -297,6 +317,81 @@ function onConnectEnd(event) {
     // Not over the minimap or another overlay.
     if (hit.closest('.vue-flow__panel, .vue-flow__minimap')) return;
     emit('connect-drop', { source: started.nodeId, client: point, position: flow.screenToFlowCoordinate(point) });
+}
+
+// --- dragging an end of a line ---
+// Vue Flow only reports the drag (edgesUpdatable / per-edge `updatable`); it
+// never edits the edge itself — nothing listens to `edge-update` but this, and
+// the line changes once the MODEL does (useGraph's sync). Order of events on
+// release: edge-update (only over a valid handle), connect-end, edge-update-end.
+
+// {edge, ends, grabbed: 'source'|'target', start: {x, y}, to: connection|null}
+let moving = null;
+
+function onEdgeUpdateStart({ event, edge }) {
+    moving = { edge, ends: edgeEnds(edge), grabbed: null, start: pointOf(event), to: null };
+}
+
+function onEdgeUpdate({ connection }) {
+    if (moving) moving.to = connection;
+}
+
+// The line `moving` would become with its grabbed end on node `id`.
+function movedTo(id) {
+    return moving.grabbed === 'source' ? { source: id, target: moving.edge.target } : { source: moving.edge.source, target: id };
+}
+
+function reconnectVerdict(source, target) {
+    return props.reconnectRule ? props.reconnectRule(moving.ends, source, target) : { ok: false, reason: 'unknown' };
+}
+
+function onEdgeUpdateEnd({ event }) {
+    // Vue Flow's connection state (the handle the line last snapped to) is
+    // still set here; it is cleared right after.
+    const snapped = flow.connectionEndHandle.value;
+    try {
+        if (moving?.ends && moving.grabbed) settleMove(moving, event, snapped);
+    } finally {
+        moving = null;
+    }
+}
+
+function settleMove(done, event, snapped) {
+    // Let go on a valid handle.
+    if (done.to) return reconnectTo(done.to.source, done.to.target);
+
+    const point = pointOf(event);
+    // A click on the grab point, not a drag.
+    if (Math.hypot(point.x - done.start.x, point.y - done.start.y) < 4) return;
+
+    // Snapped to a handle that refused, or let go on a node's body.
+    let target = snapped?.nodeId ?? null;
+    const hit = document.elementFromPoint(point.x, point.y);
+    if (!target) {
+        if (!hit || !wrapper.value?.contains(hit)) return;
+        target = hit.closest('.vue-flow__node')?.getAttribute('data-id') ?? null;
+    }
+    if (target) {
+        // Back on the node the line stays attached to: nothing happened.
+        const fixed = done.grabbed === 'source' ? done.edge.target : done.edge.source;
+        if (target === fixed) return;
+        const { source, target: to } = movedTo(target);
+        return reconnectTo(source, to);
+    }
+    // Over another line, the minimap or an overlay: snap back.
+    if (hit.closest('.vue-flow__edge, .vue-flow__panel, .vue-flow__minimap')) return;
+    // The empty canvas: the line goes.
+    emit('edge-disconnect', { edge: done.ends });
+}
+
+function reconnectTo(source, target) {
+    const verdict = isModelNode(source) && isModelNode(target) ? reconnectVerdict(source, target) : { ok: false, reason: 'unknown' };
+    if (!verdict.ok) {
+        emit('connect-refused', { reason: verdict.reason });
+        return;
+    }
+    if (verdict.kind === 'same') return;
+    emit('edge-reconnect', { edge: moving.ends, source, target, position: midpoint(source, target) });
 }
 
 // Top-left of a transition centred between two nodes.

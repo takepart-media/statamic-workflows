@@ -3,9 +3,11 @@ import { addMenuEntries, besideAnchor, centredAt, chainPositions, checkAddAction
 import {
     applyConnect,
     applyDisconnect,
+    applyReconnect,
     bridgeLabel,
     canConnect,
     canDisconnect,
+    canReconnect,
     canStartTransitionFrom,
     edgeEnds,
     isCoupledStart,
@@ -152,6 +154,58 @@ describe('disconnect', () => {
         expect(canDisconnect(m, { transition: 't:nope', place: 'p:draft', direction: 'in' }).ok).toBe(false);
         expect(canDisconnect(m, { transition: 't:publish', place: 'p:draft', direction: 'out' }).ok).toBe(false);
         expect(edgeEnds({ source: 'a', target: 'b' })).toBeNull();
+    });
+});
+
+describe('reconnect (dragging an end of a line)', () => {
+    const inEdge = (transition, place) => ({ transition, place, direction: 'in' });
+    const outEdge = (transition, place) => ({ transition, place, direction: 'out' });
+
+    it('swaps the source place of a place → transition line in its slot', () => {
+        const m = base();
+        // reject: from [review, published] → move "review" to "archived".
+        expect(canReconnect(m, inEdge('t:reject', 'p:review'), 'p:archived', 't:reject')).toEqual({ ok: true, kind: 'from' });
+        expect(applyReconnect(m, inEdge('t:reject', 'p:review'), 'p:archived', 't:reject').ok).toBe(true);
+        expect(findTransition(m, 't:reject').from).toEqual(['p:archived', 'p:published']);
+    });
+
+    it('moves a place → transition line to another transition', () => {
+        const m = base();
+        expect(applyReconnect(m, inEdge('t:reject', 'p:published'), 'p:published', 't:publish').ok).toBe(true);
+        expect(findTransition(m, 't:reject').from).toEqual(['p:review']);
+        expect(findTransition(m, 't:publish').from).toEqual(['p:review', 'p:published']);
+    });
+
+    it('moves the target of a transition → place line, or the line to another transition', () => {
+        const m = base();
+        expect(applyReconnect(m, outEdge('t:publish', 'p:published'), 't:publish', 'p:archived').ok).toBe(true);
+        expect(findTransition(m, 't:publish').to).toBe('p:archived');
+
+        expect(applyReconnect(m, outEdge('t:publish', 'p:archived'), 't:reject', 'p:archived').ok).toBe(true);
+        expect(findTransition(m, 't:publish').to).toBeNull();
+        expect(findTransition(m, 't:reject').to).toBe('p:archived');
+    });
+
+    it('judges the move without the old line: back where it was is a no-op', () => {
+        const m = base();
+        const before = JSON.stringify(m);
+        expect(canReconnect(m, outEdge('t:publish', 'p:published'), 't:publish', 'p:published')).toEqual({ ok: true, kind: 'same' });
+        expect(applyReconnect(m, outEdge('t:publish', 'p:published'), 't:publish', 'p:published').kind).toBe('same');
+        expect(JSON.stringify(m)).toBe(before);
+    });
+
+    it('refuses invalid moves and leaves the model alone', () => {
+        const m = base();
+        const before = JSON.stringify(m);
+        // review is already a source of reject.
+        expect(applyReconnect(m, inEdge('t:reject', 'p:published'), 'p:review', 't:reject')).toEqual({ ok: false, reason: 'exists' });
+        // A transition leads into a status, not into another transition.
+        expect(applyReconnect(m, outEdge('t:publish', 'p:published'), 't:publish', 't:reject')).toEqual({ ok: false, reason: 'transition_to_transition' });
+        // Onto the coupled first transition.
+        expect(applyReconnect(m, inEdge('t:reject', 'p:published'), 'p:published', 't:submit')).toEqual({ ok: false, reason: 'start_locked' });
+        // The locked start line itself can't move.
+        expect(applyReconnect(m, inEdge('t:submit', 'p:draft'), 'p:review', 't:submit')).toEqual({ ok: false, reason: 'start_locked' });
+        expect(JSON.stringify(m)).toBe(before);
     });
 });
 

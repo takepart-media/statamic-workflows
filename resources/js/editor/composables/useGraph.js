@@ -210,7 +210,10 @@ export function buildElements(model, graph, { showSystem = true, ctx = {} } = {}
             if (id === lockedEdge) classes.push('wf-edge-locked');
             const ghostly = ghosts.has(source) || ghosts.has(target);
             // Removing an edge (Delete, context menu) is the canvas's own
-            // business — Vue Flow's deleting stays off.
+            // business — Vue Flow's deleting stays off. Both ends of a line of
+            // the model can be dragged away (Canvas.vue turns that into a
+            // disconnect / reconnect of the MODEL; Vue Flow never edits edges).
+            // The locked start line too: letting go says why it can't move.
             edges.push({
                 id,
                 source,
@@ -218,7 +221,7 @@ export function buildElements(model, graph, { showSystem = true, ctx = {} } = {}
                 type: 'default',
                 markerEnd: MARKER,
                 selectable: !ghostly,
-                updatable: false,
+                updatable: !ghostly,
                 deletable: false,
                 focusable: !ghostly,
                 class: classes.join(' '),

@@ -192,3 +192,45 @@ export function edgeEnds(edge) {
     if (!transition || !direction) return null;
     return { transition, direction, place: direction === 'in' ? edge.source : edge.target };
 }
+
+/**
+ * Moving one end of a drawn line (dragging it on the canvas) to `source` →
+ * `target`: the old line goes and the new one is drawn, judged by canConnect()
+ * as the model would stand WITHOUT the old line. The same line again is
+ * `{ok: true, kind: 'same'}` — nothing to do.
+ *
+ * @param {object} edge  `{transition, place, direction}` (edgeEnds())
+ * @returns {{ok: true, kind: string, replaces?: string|null} | {ok: false, reason: string}}
+ */
+export function canReconnect(model, edge, source, target) {
+    const removable = canDisconnect(model, edge);
+    if (!removable.ok) return removable;
+    const [oldSource, oldTarget] = edge.direction === 'in' ? [edge.place, edge.transition] : [edge.transition, edge.place];
+    if (source === oldSource && target === oldTarget) return { ok: true, kind: 'same' };
+    // A throwaway copy without the old line — canConnect() only reads.
+    const without = JSON.parse(JSON.stringify({ places: model.places, transitions: model.transitions, workflow: model.workflow }));
+    applyDisconnect(without, edge);
+    return canConnect(without, source, target);
+}
+
+/**
+ * Move one end of a drawn line: remove the old line, draw `source` → `target`
+ * (options as applyConnect()). Nothing changes when the move is refused. A
+ * place swapped at the start of a line keeps its slot in the transition's `from`.
+ *
+ * @returns {{ok: true, kind: string, transition?: string, created?: boolean} | {ok: false, reason: string}}
+ */
+export function applyReconnect(model, edge, source, target, options = {}) {
+    const check = canReconnect(model, edge, source, target);
+    if (!check.ok || check.kind === 'same') return check;
+    const slot = edge.direction === 'in' ? findTransition(model, edge.transition).from.indexOf(edge.place) : -1;
+    applyDisconnect(model, edge);
+    const result = applyConnect(model, source, target, options);
+    if (result.ok && result.kind === 'from' && result.transition === edge.transition && slot >= 0) {
+        const transition = findTransition(model, edge.transition);
+        const from = transition.from.filter((v) => v !== source);
+        from.splice(Math.min(slot, from.length), 0, source);
+        transition.from = from;
+    }
+    return result;
+}

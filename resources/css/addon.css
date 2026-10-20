@@ -560,6 +560,31 @@
     stroke-width: 2.5;
     stroke-dasharray: 10 3 2 3;
 }
+/* The grab points at both ends of a line: drag one away to disconnect it, or
+ * onto another node to rewire it. Shown while the line is hovered or selected
+ * (the circle doubles as the hit area, so it stays in the DOM, just invisible). */
+.wf-editor .vue-flow__edgeupdater {
+    cursor: grab;
+    stroke-width: 1.5;
+    transition: fill 0.1s, stroke 0.1s;
+}
+.wf-editor .vue-flow__edgeupdater:active {
+    cursor: grabbing;
+}
+.wf-editor .vue-flow__edge:hover .vue-flow__edgeupdater,
+.wf-editor .vue-flow__edge.selected .vue-flow__edgeupdater,
+.wf-editor .vue-flow__edge.updating .vue-flow__edgeupdater {
+    fill: color-mix(in srgb, var(--wf-edge-active) 15%, var(--wf-node-bg));
+    stroke: var(--wf-edge-active);
+}
+.wf-editor .vue-flow__edge.updating .vue-flow__edge-path {
+    stroke: var(--wf-edge-active);
+    stroke-width: 2;
+}
+/* The locked start line can be grabbed, but letting go only says why not. */
+.wf-editor .vue-flow__edge.wf-edge-locked .vue-flow__edgeupdater {
+    cursor: not-allowed;
+}
 
 /* Handles: lines start at an output (right) and end at an input (left). */
 .wf-editor .vue-flow__handle {

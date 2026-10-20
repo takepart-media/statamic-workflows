@@ -6,6 +6,7 @@ import { effectScope, nextTick } from 'vue';
 import { useVueFlow } from '@vue-flow/core';
 import { useWorkflowModel } from '../useWorkflowModel.js';
 import { useGraph, watchGraph } from '../useGraph.js';
+import { edgeEnds } from '../../model/connections.js';
 
 const definition = {
     type: 'state_machine',
@@ -95,5 +96,80 @@ describe('useGraph sync with a Vue Flow store', () => {
         api.removeTransition('t:finish');
         await nextTick();
         expect(edgeIds()).toEqual(['p:draft->t:submit', 't:submit->p:review']);
+    });
+
+    // What Canvas.vue does when an end of a line is dragged: off onto the empty
+    // canvas → api.disconnect(edgeEnds(edge)); onto another node → api.reconnect().
+    describe('dragging an end of a line', () => {
+        const ends = (flow, id) => edgeEnds(flow.findEdge(id));
+
+        it('makes the model\'s lines updatable at both ends', () => {
+            const { flow } = setup();
+            expect(flow.getEdges.value.every((e) => e.updatable === true)).toBe(true);
+        });
+
+        it('drops a place → transition line dragged away, both nodes keep standing; undo brings it back', async () => {
+            const { api, flow, edgeIds } = setup();
+            expect(api.disconnect(ends(flow, 'p:review->t:finish')).ok).toBe(true);
+            await nextTick();
+            expect(edgeIds()).not.toContain('p:review->t:finish');
+            expect(flow.findNode('p:review')).toBeTruthy();
+            expect(flow.findNode('t:finish')).toBeTruthy();
+            expect(api.findTransition('t:finish').from).toEqual([]);
+            expect(api.history.undoTag.value).toBe('disconnect');
+
+            api.undo();
+            await nextTick();
+            expect(edgeIds()).toContain('p:review->t:finish');
+        });
+
+        it('drops a transition → place line dragged away', async () => {
+            const { api, flow, edgeIds } = setup();
+            expect(api.disconnect(ends(flow, 't:finish->p:done')).ok).toBe(true);
+            await nextTick();
+            expect(edgeIds()).not.toContain('t:finish->p:done');
+            expect(api.findTransition('t:finish').to).toBeNull();
+
+            api.undo();
+            await nextTick();
+            expect(edgeIds()).toContain('t:finish->p:done');
+        });
+
+        it('moves a line onto another place in one undo step', async () => {
+            const { api, flow, edgeIds } = setup();
+            const result = api.reconnect(ends(flow, 't:finish->p:done'), 't:finish', 'p:draft');
+            expect(result.ok).toBe(true);
+            await nextTick();
+            expect(edgeIds()).toContain('t:finish->p:draft');
+            expect(edgeIds()).not.toContain('t:finish->p:done');
+            expect(api.history.undoTag.value).toBe('connect');
+
+            api.undo();
+            await nextTick();
+            expect(edgeIds()).toContain('t:finish->p:done');
+            expect(edgeIds()).not.toContain('t:finish->p:draft');
+            expect(api.history.canUndo.value).toBe(false);
+        });
+
+        it('moves the source end of a place → transition line', async () => {
+            const { api, flow, edgeIds } = setup();
+            expect(api.reconnect(ends(flow, 'p:review->t:finish'), 'p:done', 't:finish').ok).toBe(true);
+            await nextTick();
+            expect(edgeIds()).toContain('p:done->t:finish');
+            expect(edgeIds()).not.toContain('p:review->t:finish');
+        });
+
+        it('leaves model, lines and history alone when the move is refused', async () => {
+            const { api, flow, edgeIds } = setup();
+            const before = edgeIds();
+            // Onto the coupled first transition, and the locked start line itself.
+            expect(api.reconnect(ends(flow, 'p:review->t:finish'), 'p:review', 't:submit')).toEqual({ ok: false, reason: 'start_locked' });
+            expect(api.reconnect(ends(flow, 'p:draft->t:submit'), 'p:review', 't:submit')).toEqual({ ok: false, reason: 'start_locked' });
+            // Two transitions.
+            expect(api.reconnect(ends(flow, 't:finish->p:done'), 't:finish', 't:submit').ok).toBe(false);
+            await nextTick();
+            expect(edgeIds()).toEqual(before);
+            expect(api.history.canUndo.value).toBe(false);
+        });
     });
 });

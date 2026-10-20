@@ -51,12 +51,15 @@
                             :show-minimap="minimap"
                             :selected="selectedId"
                             :connection-rule="api.canConnect"
+                            :reconnect-rule="api.canReconnect"
                             @select="select"
                             @nodes-moved="({ positions }) => api.moveNodes(positions)"
                             @positions="({ positions, touched }) => api.setPositions(positions, { touched })"
                             @connect="onConnect"
                             @connect-refused="({ reason }) => refuse(reason)"
                             @connect-drop="onConnectDrop"
+                            @edge-disconnect="({ edge }) => disconnect([edge])"
+                            @edge-reconnect="onReconnect"
                             @pane-dblclick="({ position }) => createAt('place', position)"
                         >
                             <template #context-menu="{ target }">
@@ -599,6 +602,22 @@ function onConnect({ source, target, position }) {
         return;
     }
     // place → place: the new transition in between, ready to be named.
+    if (result.created) {
+        select(result.transition, { focus: 'label' });
+    } else if (selectedId.value !== result.transition) {
+        select(result.transition);
+    }
+}
+
+// An end of a line dragged onto another node: the line moves there (one undo
+// step). The canvas has vetted it; a refusal here means the model moved on.
+function onReconnect({ edge, source, target, position }) {
+    const result = api.reconnect(edge, source, target, { position, labelOf: placeName });
+    if (!result.ok) {
+        refuse(result.reason);
+        return;
+    }
+    if (result.kind === 'same') return;
     if (result.created) {
         select(result.transition, { focus: 'label' });
     } else if (selectedId.value !== result.transition) {

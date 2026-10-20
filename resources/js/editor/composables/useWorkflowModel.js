@@ -151,6 +151,9 @@ export function useWorkflowModel(definition, ctx, { history: historyOptions = {}
         connect: tracked('connect', (source, target, { position = null, labelOf = null } = {}) => C.applyConnect(model, source, target, { position, labelOf, ctx })),
         canDisconnect: (edge) => C.canDisconnect(model, edge),
         disconnect: tracked('disconnect', (edge) => C.applyDisconnect(model, edge)),
+        // An end of a line dragged elsewhere: old line out, new line in — one step.
+        canReconnect: (edge, source, target) => C.canReconnect(model, edge, source, target),
+        reconnect: tracked('connect', (edge, source, target, { position = null, labelOf = null } = {}) => C.applyReconnect(model, edge, source, target, { position, labelOf, ctx })),
         isCoupledStart: (id) => C.isCoupledStart(model, id),
         addMenuEntries: (source) => A.addMenuEntries(model, source),
         checkAddAction: (source, entry) => A.checkAddAction(model, source, entry),
