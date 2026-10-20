@@ -80,10 +80,17 @@ export function useGraph(flow, { model, injected = () => null, showSystem = () =
         }
         if (add.length) flow.addNodes(add);
 
+        // Edges go through the store's change handler directly, not
+        // addEdges()/removeEdges(): those are for the AUTHOR's edits and filter
+        // accordingly — removeEdges() skips every edge marked `deletable: false`
+        // (all of ours), addEdges() runs each edge through the canvas's
+        // isValidConnection, which judges a line being DRAWN and so refuses the
+        // one just drawn ("exists"). Both left the canvas a step behind the
+        // model. The model's lines are what the model says, nothing to vet.
         const currentEdges = new Map(flow.getEdges.value.map((e) => [e.id, e]));
         const wantedEdges = new Set(edges.map((e) => e.id));
         const goneEdges = [...currentEdges.keys()].filter((id) => !wantedEdges.has(id));
-        if (goneEdges.length) flow.removeEdges(goneEdges);
+        if (goneEdges.length) flow.applyEdgeChanges(goneEdges.map((id) => ({ id, type: 'remove' })));
         const addEdges = [];
         for (const edge of edges) {
             const existing = currentEdges.get(edge.id);
@@ -94,7 +101,7 @@ export function useGraph(flow, { model, injected = () => null, showSystem = () =
             if (existing.class !== edge.class) existing.class = edge.class;
             if (!same(existing.data, edge.data)) existing.data = edge.data;
         }
-        if (addEdges.length) flow.addEdges(addEdges);
+        if (addEdges.length) addModelEdges(flow, addEdges);
 
         return { added: add.map((n) => n.id), missing };
     }
@@ -117,6 +124,19 @@ export function useGraph(flow, { model, injected = () => null, showSystem = () =
     });
 
     return { graph, elements, sync, belowBand };
+}
+
+// addEdges() without the connection rule: Vue Flow validates every edge it is
+// handed against the store's isValidConnection (the canvas sets it for drawing),
+// so the rule is lifted for this one synchronous call.
+function addModelEdges(flow, edges) {
+    const rule = flow.isValidConnection?.value ?? null;
+    if (rule) flow.isValidConnection.value = null;
+    try {
+        flow.addEdges(edges);
+    } finally {
+        if (rule) flow.isValidConnection.value = rule;
+    }
 }
 
 /**

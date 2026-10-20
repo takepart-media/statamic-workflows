@@ -591,6 +591,9 @@
     stroke-width: 2;
     stroke-dasharray: 6 4;
 }
+.wf-editor .vue-flow__connection-path.valid {
+    stroke: #16a34a;
+}
 
 /* The "+" beside a node's output: shown on hover, focus and selection. */
 .wf-transition {
