@@ -139,9 +139,9 @@ php artisan vendor:publish --tag=workflows --force
 ```
 
 The addon carries its own migrations; they run on each `workflows:install`.
-For an upgrade there's typically nothing extra to migrate, but running
-`workflows:install` again is safe — it aborts on existing definitions and
-never overwrites.
+When a release adds a migration (see [`CHANGELOG.md`](./CHANGELOG.md)), run
+`php artisan migrate` after the update. Running `workflows:install` again is
+safe too — it aborts on existing definitions and never overwrites.
 
 ---
 
@@ -246,6 +246,17 @@ Key metadata fields the addon reads:
 - `transition.metadata.label` — human-readable transition label
 - `transition.metadata.variant` — `default`, `primary`, `danger`, or `filled`
   for the transition button color
+
+### Content fields (Inhaltsfelder)
+
+`metadata.content_fields` lists, in reading order, the top-level blueprint
+fields that are a workflow's content. The instance summary, comment anchors
+and the plain-language rewrite read only these fields; nested structure inside
+them (Replicator, Grid, Group, Bard sets) is walked automatically. Leave it
+empty for auto-detection: `content_fields.intro` + `body` from the config if
+the blueprint has them, otherwise the first Bard, Markdown or Replicator field.
+Pick them in the graph editor (workflow settings, section **Content**) or in the "Create
+workflow" modal. Details: [`DOCS.md`](./DOCS.md) §§ 2 and 7.
 
 Any group handle referenced must exist in `resources/users/groups.yaml`. The
 install command does not seed groups — that's the project's responsibility.
@@ -419,11 +430,17 @@ The graph editor is a separate lazy chunk (`WorkflowEditor-*.js`); the main
 after a build, `grep -c 'from"vue"\|from "vue"' resources/dist/build/assets/*.js`
 must print 0 for every file.
 
-**Tests** — the editor's model and composables are covered by vitest:
+**Tests** — PHP (Pest on Orchestra Testbench, in-memory workflow DB and a
+temp Stache, never your real content) and the frontend model (vitest):
 
 ```bash
+composer install
+vendor/bin/pest      # or: composer test
 npm test
 ```
+
+Harness: `tests/TestCase.php`, `tests/Concerns/CreatesContent.php`,
+`tests/Support/TestDefinitionLoader.php` (DOCS.md § 11 → Tests).
 
 The bundle under `resources/dist/build/` is **committed** to the repo so
 consumers don't need Node. Include the resulting diff in your commit. If you

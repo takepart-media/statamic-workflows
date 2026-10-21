@@ -789,6 +789,7 @@ dieselbe Transition, weil er immer an der ersten stand.
 | `default_assignee_group` | Auto-Assignment, wenn ein Subjekt entsteht („Neuer Beitrag" bzw. eine neue Localization). Gated außerdem, wer einen Entry in eine andere Site überführen darf (`canTransfer()`) — ein früherer separater `transfer_group`-Key ist darin aufgegangen. |
 | `assign_creator: true` | Weist beim Entstehen eines Subjekts **zusätzlich** zu `default_assignee_group` dessen Ersteller zu. Wichtig, wenn der Ersteller nicht in dieser Gruppe ist (z. B. Super-Admin) — nur Assignees dürfen eine Transition ausführen. Gilt für **beide** Workflow-Arten: „Ersteller" ist beim Beitragsmanager wer den Beitrag anlegt (`storePost`), beim Übersetzungsmanager wer die Localization auslöst (`transfer` bzw. eine `site_modal`-Transition). Die Zuweisung endet mit der ersten Transition; ein reines „Speichern" des aktuellen Schritts ändert sie nicht. |
 | `history_fields: [...]` | Whitelist von **Inhalts**-Feld-Handles für den Diff-View des Verlaufs. Sidebar-Felder (Taxonomien, sticky …) und die Meta-Attribute Slug, Datum, Veröffentlichung erscheinen immer, auch wenn sie hier nicht stehen (§ 5.10). Leer/fehlend = alle geänderten. |
+| `content_fields: [...]` | Welche **Top-Level-Felder** der Einträge der Inhalt dieses Workflows sind — geordnete Liste, die Reihenfolge ist die Lesereihenfolge. Eine Antwort für alle Leser und Schreiber: Zusammenfassung, Kommentar-Anker und Einfache Sprache (`Content\ContentFieldResolver::for($entry, $raw)`). Pro Eintrag gefiltert auf die Felder, die **sein** Blueprint hat; bleibt nichts übrig oder fehlt der Key/ist leer → **Auto-Erkennung** (`ContentFieldCatalog::autoDetectAll()`): `config → content_fields.intro` + `body`, sofern das Blueprint sie hat, sonst das erste Bard-, Markdown- oder Replicator-Feld in Blueprint-Reihenfolge; sonst kein Inhalt. Darunter wird generisch durchlaufen (§ 7). Writer: Liste nicht-leerer Strings (`writer_content_fields_not_list`), keine Duplikate (`writer_content_fields_duplicate`), jedes Feld muss in **mindestens einem** Blueprint der Collections existieren (`writer_content_field_unknown`) und einen lesbaren Typ haben — `bard`, `replicator`, `grid`, `group`, `markdown`, `text`, `textarea`, `code`, `video`, `assets` (`writer_content_field_unsupported`). Linter-Warnungen: `lint_content_field_partial` (Feld fehlt in einem Teil der Collections — deren Einträge zeigen die Auto-Erkennung) und `lint_content_field_auto_none` (kein Feld gesetzt und eine Collection hat nichts Erkennbares). Im Graph-Editor: Einstellungen › „Inhalt"; beim Anlegen im Modal (§ 11). |
 | `detail: translation` | Markiert den Workflow als **Lokalisierungs-Workflow** — siehe unten. Aktiviert außerdem die alternative `TranslationInstanceDetail`-Ansicht (Quelle vs. Übersetzung nebeneinander). |
 | `progress_orientation` | `horizontal` (Standard) oder `vertical`. Bestimmt **Ausrichtung und Position** der Fortschrittsleiste auf der Detailseite: waagerecht über dem Inhalt der Zusammenfassung, senkrecht in einer Spalte links davon. Im Graph-Editor als Auswahl bei den Workflow-Metadaten. Ein Wert daneben wird beim Speichern abgelehnt; eine hand-editierte YAML mit Müll fällt beim Lesen auf `horizontal` zurück. Siehe `Workflow\ProgressSteps::ORIENTATION`. |
 | `post_creator_groups: [...]` | Nutzergruppen, die in diesem Workflow Beiträge anlegen dürfen. Im CP editierbar (Settings > Workflows > „Darf Beiträge anlegen"). Überschreibt `config → post_creator_groups`; eine **leere Liste ist eine Aussage** („nur Super-Admins") und wird deshalb geschrieben, nicht weggelassen. Fehlt der Key ganz, greift die Config. |
@@ -3019,22 +3020,95 @@ Speicherung nicht unterscheiden.
 
 ## 7. Content-Preview: `EntryContentPreview`
 
-Baut die read-only Vorschau der Editorial-Inhalte für die Detailseite. Datei:
-`src/Content/EntryContentPreview.php`.
+Baut die read-only Zusammenfassung der Inhalte für die Detailseite (beide
+Ansichten, inkl. Quellspalte der Übersetzung) und die Kommentar-Anker. Keine
+projektspezifische Set-Zuordnung mehr: was der Workflow als Inhalt nennt, wird
+**generisch** gelesen.
 
-- Reihenfolge: `intro` (Bard) → `content_sets` (Bard mit Sets) → `dd_title`/`dd_text`
-  („Sources"-Feld) → Podcast-Link/Embed.
-- Für Bard-Sets (`multisite_text`, `hintbox`, `heading`, `video`, `pdf`, `code`) wird
-  jeweils ein eigenes Block-Objekt gepusht.
-- Jedes Block hat:
-  - `kind`: `html` / `heading` / `text` / `video`
-  - `handle`: Fieldset-/Feldhandle (z. B. `hintbox`)
-  - `uuid`: **stabile** ID (Bard-Set-ID falls vorhanden, sonst `handle:i`) — genau die
-    ID, die als `passage_ref` in Kommentaren landet.
-- `videoEmbed($url)` erzeugt Player-URLs für Vimeo/YouTube (mit `youtube-nocookie`).
+- **Welche Felder:** `EntryContentPreview::fields($entry, $workflow)` →
+  `WorkflowResolver::contentFields()` → `ContentFieldResolver` (§ 2,
+  `metadata.content_fields`, sonst Auto-Erkennung). Alle Aufrufer reichen den
+  Workflow aus `?workflow=` mit (`blocks($entry, $workflow)`, Hash-Methoden);
+  ohne Workflow greift die Auto-Erkennung.
+- **Lesen:** `Content\ContentWalker::walk($entry, $handles)` geht über Statamics
+  Augmentation (Lokalisierung, Asset-URLs, deaktivierte Zeilen/Sets sind dort schon
+  erledigt) und macht aus jeder Struktur eine **flache Blockliste**. Pro Request per
+  Blink memoized (Entry-ID, Locale, `lastModified`, Feldliste).
+- **Feldtypen:** als Struktur/Prosa gelesen werden `bard`, `markdown`, `replicator`,
+  `grid`, `group`; als Werte (`items`) eines Knotens `text`, `textarea`, `code`,
+  `video`, `assets`. Alles andere (Toggle, Select, Link, Entries, Taxonomie …) sowie
+  `hidden`/`computed` Felder wird übersprungen.
+
+**Block-Format**
+
+```
+{ uuid, container, path, depth, handle, label, kind: 'html' | 'fields', html? | items? }
+```
+
+- `kind: html` — Bard-Text zwischen Sets, Bard ohne Sets, Markdown.
+- `kind: fields` — ein Strukturknoten (Bard-Set, Replicator-/Grid-Zeile, Group) mit
+  seinen skalaren Kindern als `items` (`text` | `code` | `video` | `media`, je mit
+  `label`, `handle` und Feldtyp `field`). Reiche Kinder folgen als eigene Blöcke eine
+  `depth` tiefer. Ein Knoten ohne Items und ohne Kind-Blöcke entfällt.
+- `container` — `uuid` des nächsten umschließenden Knotens bzw. das Top-Level-Feld;
+  danach gruppiert der Container-Hash. `path` (Datenpfad, z. B.
+  `sections.0.content.2`) dient nur der Orientierung, `depth` 0 = direkt im
+  Inhaltsfeld.
+
+**UUIDs** (= `workflow_comments.passage_ref`), stabil über Requests, eindeutig pro
+Eintrag:
+
+| Was | UUID |
+| --- | --- |
+| Bard-Set / Replicator- oder Grid-Zeile | gespeicherte Zeilen-`id`, sonst `<pfad>:<i>` |
+| Bard-Textstück auf Top-Level | `<handle>:<i>` (wie vor dem Walker — alte Kommentare bleiben verankert) |
+| Bard-Textstück verschachtelt | `<eltern-uuid>.<feld>:<i>` |
+| Bard/Markdown/Text als ein Block | `<handle>` bzw. `<eltern-uuid>.<feld>` |
+| Group | `<handle>` bzw. `<eltern-uuid>.<handle>` |
+
+Kollisionen (z. B. eine mitsamt `id` duplizierte Zeile) bekommen `~2`, `~3`.
+
+**Hashes.** `content_hash` (eine Passage) und `container_hash` (alle Blöcke desselben
+`container`) sind SHA-256 über `hashPayload()`: Position und Benennung (`uuid`,
+`container`, `path`, `depth`, `handle`, `label`, Item-`label`/`handle`/`field`) und
+abgeleitete Werte (Embed-URL, Provider, Thumbnails) fliegen raus. Verschieben einer
+Passage oder Umbenennen eines Felds im Blueprint ändert den Hash also nicht.
+
+**Nach dem Upgrade:** Kommentare von vor dem Walker tragen Hashes über das alte
+Block-Format. Ihre Passage wird (Top-Level-UUIDs sind unverändert) wiedergefunden,
+der Hash weicht aber ab — diese Bestandskommentare zeigen **einmalig** den
+Text-geändert-Hinweis („Bezieht sich auf eine ältere Version dieser Passage" bzw.
+„In diesem Bereich wurde … etwas geändert"). Kein Datenfehler, keine Migration;
+neue Kommentare speichern Hashes im neuen Format.
+
+**Darstellung: Lesefluss** (`ContentBlocks.vue`, von beiden Detailseiten benutzt).
+Die Blöcke werden als durchgehender Text gelesen, nicht als Baum: keine
+Strukturüberschriften, keine Karten, keine Einrückung. Leere Strukturknoten sind
+unsichtbar; kurze Werte (Button-Texte, Anker, Untertitel) bekommen ein dezentes
+Label. Für Super-Admins blendet ein Schalter „Technische Details" Chips mit
+Handle und UUID je Block ein. Kommentar-Aktion und Sprungziel
+(`passage-<uuid>`) hängen weiter an jedem Block.
 
 Diese Preview ist **nicht** editierbar — der Editor selbst öffnet sich via
 Deep-Link (`instance.subject.cp_url`).
+
+### Config `content_fields`
+
+`config/workflows.php → content_fields` sagt **nicht mehr, welche** Felder Inhalt
+sind (das ist `metadata.content_fields` pro Workflow), sondern nennt nur noch globale
+Rollen:
+
+| Key | Rolle |
+| --- | --- |
+| `title` | Titelfeld |
+| `intro`, `body` | Auto-Erkennung, wenn ein Workflow keine Inhaltsfelder nennt (Back-Compat); `intro` ist außerdem das Intro-Blatt der Einfachen Sprache |
+| `seo` | SEO-Feld (geht nie an den Einfache-Sprache-Dienst) |
+| `entity` | Entity/Modul des Eintrags, Kontext für den Dienst |
+| `scope` | Set-Feld, das einen Block auf Entities beschränkt |
+
+**Deprecated** (werden noch geladen, aber von der Zusammenfassung nicht mehr gelesen):
+`sets`, `sources_title`/`sources_text`, `podcast_link`/`podcast_code`. Was sie zeigten,
+gehört jetzt als Feld in `metadata.content_fields`.
 
 ---
 
@@ -3970,7 +4044,11 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
     „Status nachtragen", Aktivieren/Deaktivieren und Löschen (mit
     `ConfirmationModal`). Im Kopf „Workflow anlegen“ (`CreateWorkflowModal.vue`,
     Prüflogik in `createWorkflowForm.js`): leer, aus Vorlage oder als Kopie,
-    § 5.9. Alle Aktionen laufen über
+    § 5.9. Das Modal hat einen optionalen Inhaltsfeld-Picker (geordnet, folgt der
+    Collection-Auswahl; leer = automatisch, bei Vorlage/Kopie bleibt ohne Auswahl
+    deren Liste) und schickt `content_fields` mit; Fehler des Writers zu
+    `metadata.content_fields.*` landen an diesem Feld. Die CLI-Installation
+    (`workflows:install`) bleibt, eine Installations-UI im CP gibt es nicht mehr. Alle Aktionen laufen über
     zwei kleine Helper (`request()` liefert das `data`-Envelope,
     `errorMessage()` den Fallback-Text), damit der axios/fetch-Split an einer
     Stelle liegt.
@@ -4002,6 +4080,11 @@ Datei `resources/js/addon.js` registriert per `Statamic.booting`:
     Workflow-`ButtonGroup` (Punkt aus `dotClass()`, `variant="pressed"` für den
     aktiven), daneben ggf. der Preset-Chip der Kennzahlreihe, und
     `WorkflowListing` mit `bare` und `perPage`, nach Auswahl + Preset gekeyt.
+  - `ContentBlocks.vue` — die Inhalts-Zusammenfassung beider Detailseiten (§ 7):
+    rendert die Blöcke des `ContentWalker` als Lesefluss, je Block die
+    Kommentar-Aktion (`commentCount`/`hasNew` als Props, Emit `comment`), für
+    Super-Admins der Schalter „Technische Details" (Handle-/UUID-Chips). Reine
+    Helfer in `contentBlocks.js` (vitest).
   - `WorkflowHistory.vue` — History-Liste samt Diff-Panel und dem LCS-Wort-Diff.
     Von **beiden** Detailansichten benutzt (§ 5.10).
   - `workflows-queue-stats-widget` → `QueueStatsWidget.vue` — die Kennzahlreihe
@@ -4174,9 +4257,18 @@ auf einen anderen Knoten gezogen verlegt sie sie (ein Undo-Schritt).
 - **Workflow-Einstellungen** (`settings/WorkflowSettingsStack.vue` +
   `WorkflowSettingsSection.vue`): ein Stack mit Abschnitten Allgemein,
   Berechtigungen, Lokalisierung *oder* SLA (je nach Workflow-Art),
-  Collections, Reihenfolge (`OrderList`) und Erweitert (Positionen
+  Collections, **Inhalt**, Reihenfolge (`OrderList`) und Erweitert (Positionen
   zurücksetzen, Payload-Vorschau). Öffnen per Toolbar, Übersicht oder
   `Strg/⌘+,`; ein Problem auf Workflow-Ebene öffnet den passenden Abschnitt.
+  „Inhalt" pflegt `metadata.content_fields`: Multiselect über alle lesbaren
+  Felder der gewählten Collections (Hinweis „nur in …", nicht mehr vorhandene
+  Werte bleiben als „nicht verfügbar" sichtbar), Reihenfolge per Ziehen/Pfeilen
+  (`ContentFieldList.vue`); ohne Auswahl zeigt er je Collection das automatisch
+  erkannte Feld. Feldlisten und Auto-Erkennung liefert der Server für **alle**
+  Collections (`contentFieldOptions`/`contentFieldAuto` aus
+  `ContentFieldCatalog`), der Picker folgt der Collection-Auswahl also ohne
+  Round-Trip; Helfer in `editor/model/contentFields.js`, Client-Regeln in
+  `rules.js`.
 - **Dialoge** (`shared/`): `DeletePlaceDialog` (Löschen ist **verzögert** — der
   Place verschwindet von der Leinwand und wird erst beim Speichern als
   `removed_places` geschickt; hält er Einträge, verlangt der Dialog ein
@@ -4219,7 +4311,8 @@ Strg/⌘-Kürzel und Esc):
 
 **Tests.** `npm test` (vitest) prüft Modell und Composables:
 Round-Trip gegen die Beispiel-YAMLs, Graph-Mapping, Verbinden/Trennen, Regeln
-und Pfad-Mapping, Undo/Redo, Shortcuts, das Anlegen-Formular.
+und Pfad-Mapping, Undo/Redo, Shortcuts, das Anlegen-Formular, Inhaltsfelder.
+PHP-Tests siehe „Tests" unten.
 
 ### Kein Inline-Editor im Stack
 
@@ -4244,6 +4337,28 @@ weg — Transitionen laden die Seite ohnehin neu.
 **Wenn das je zurückkommen soll:** `component`, `componentProps` und `stackSize`
 gehören dann aus dem Server-Payload (wie Statamics Fieldtype-`meta` sie liefert),
 nicht als Konstante im Client.
+
+### Tests
+
+```bash
+vendor/bin/pest      # bzw. composer test — PHP (Pest + Orchestra Testbench)
+npm test             # vitest — Editor-Modell, Composables, Frontend-Helfer
+```
+
+Die PHP-Tests laufen gegen ein echtes Statamic, aber nie gegen echte Inhalte:
+
+- `tests/TestCase.php` — Basis jedes Tests (Statamics `AddonTestCase`). Die
+  `workflow`-Connection ist SQLite **in-memory**, pro Test frisch migriert; alle
+  Stache-Stores, Blueprint-/Fieldset-Verzeichnisse, Revisionen und
+  `resources/workflows` zeigen in ein Temp-Verzeichnis, das `tearDown()` löscht.
+  Statamic Pro an, Multisite aus. `refreshStache()` liest Gespeichertes neu.
+- `tests/Concerns/CreatesContent.php` — `makeCollection()`, `makeBlueprint()`,
+  `makeEntry()`, `writeWorkflow()`, `minimalWorkflow()`.
+- `tests/Support/TestDefinitionLoader.php` — `DefinitionLoader` auf dem
+  Temp-Verzeichnis, im Container gebunden; Writer, Resolver, Controller und
+  Commands sehen dieselben YAMLs.
+- `tests/Pest.php` hängt beides an alle Tests unter `tests/`. Vorhanden:
+  `HarnessTest`, `ContentWalkerTest`, `PlainLanguageLeafTest`.
 
 ---
 
@@ -4366,6 +4481,9 @@ Working-Copy publiziert (working-copy weg)
 - **Collections eines Workflows ändern** → Settings → Workflows → `<Workflow>` →
   „Collections". Achtung beim Entfernen: die Workflow-Daten der betroffenen
   Einträge werden gelöscht (§ 2 → Governed Collections).
+- **Welche Felder Zusammenfassung, Kommentare und Einfache Sprache lesen** →
+  `metadata.content_fields` (Editor: Einstellungen › „Inhalt"); leer = automatisch
+  (§ 2, § 7).
 - **Zusatz-Feld im Diff-View** → `metadata.history_fields` in der Workflow-YAML.
   Nur für Inhaltsfelder nötig; Sidebar und Meta sind ohnehin drin (§ 5.10).
 - **Feld-Label im Diff-View anpassen** → Blueprint-`display`, oder der Lang-Key
