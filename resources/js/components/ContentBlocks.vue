@@ -239,7 +239,7 @@ const CommentAction = defineComponent({
                     {
                         type: 'button',
                         class: [
-                            'fw-comment-btn',
+                            'fw-comment-btn cursor-pointer',
                             p.count
                                 ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800! dark:bg-blue-950! dark:text-blue-300! dark:hover:bg-blue-900!'
                                 : 'border-transparent text-gray-400 hover:border-gray-200 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-500! dark:hover:border-gray-700! dark:hover:bg-gray-800! dark:hover:text-gray-200!',
@@ -289,13 +289,13 @@ const CommentAction = defineComponent({
     flex-shrink: 0;
     width: 4rem;
     padding-inline-start: 0.75rem;
-    margin-top: -0.3rem; /* centre the 2rem button on the first text line */
+    padding-block: 0.25rem; /* keep the button off the passage's top and bottom edge */
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 0.25rem;
 }
-.fw-comment-btn {
+.fw-gutter :deep(.fw-comment-btn) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -309,8 +309,8 @@ const CommentAction = defineComponent({
     cursor: pointer;
     transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out;
 }
-.fw-comment-btn:focus-visible { outline: 2px solid rgb(59 130 246); outline-offset: 2px; }
-.fw-comment-plus {
+.fw-gutter :deep(.fw-comment-btn:focus-visible) { outline: 2px solid rgb(59 130 246); outline-offset: 2px; }
+.fw-gutter :deep(.fw-comment-plus) {
     position: absolute;
     inset-block-end: -0.2rem;
     inset-inline-end: -0.25rem;
@@ -324,7 +324,7 @@ const CommentAction = defineComponent({
 
 /* Anchoring: while the button is hovered / focused, its passage lights up with a
    light background and a left accent, so it is clear which text is meant. */
-.fw-passage-body { transition: background-color 120ms ease-out, border-color 120ms ease-out; }
+.fw-passage-body { padding-block: 0.5rem; transition: background-color 120ms ease-out, border-color 120ms ease-out; }
 .fw-passage:has(.fw-gutter :is(button, a):hover, .fw-gutter :is(button, a):focus-visible) > .fw-passage-body {
     background-color: rgb(239 246 255);
     border-inline-start-color: rgb(96 165 250) !important;
