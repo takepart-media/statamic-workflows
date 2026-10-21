@@ -26,6 +26,9 @@ return [
     // Tooltip des `+N`-Markers im Index (pro Site-Spalte bzw. am Titel).
     'new_comments_hint' => 'Neue Kommentare, die du noch nicht gelesen hast',
     'write_comment' => 'Kommentar schreiben…',
+    'comment_add' => 'Kommentar hinzufügen',
+    'comment_add_for' => 'Kommentar hinzufügen zu „:label“',
+    'comments_open_for' => 'Kommentare zu „:label“ anzeigen (:count)',
     'save' => 'Speichern',
     'delete_comment_confirm' => 'Diesen Kommentar löschen?',
     'comment_saved' => 'Kommentar gespeichert',

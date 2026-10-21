@@ -26,6 +26,9 @@ return [
     // Tooltip of the `+N` marker in the index (per site column or on the title).
     'new_comments_hint' => 'New comments you have not read yet',
     'write_comment' => 'Write a comment…',
+    'comment_add' => 'Add comment',
+    'comment_add_for' => 'Add a comment to “:label”',
+    'comments_open_for' => 'Show comments on “:label” (:count)',
     'save' => 'Save',
     'delete_comment_confirm' => 'Delete this comment?',
     'comment_saved' => 'Comment saved',

@@ -11,16 +11,16 @@
          set/row headers with handle + label + uuid, items under their field
          handle, child blocks nested below their parent with their path tail.
          Remove this branch + technicalTree() in contentBlocks.js to drop it. -->
-    <div v-if="technical" class="space-y-2">
+    <div v-if="technical" class="fw-flow space-y-2" :class="{ 'fw-flow--gutter': commentable }">
         <div
             v-for="(node, i) in treeNodes"
             :key="blockKey(node.block, i, keyPrefix)"
             :id="anchors ? passageId(node.block) : undefined"
             :data-ref="anchors ? node.block.uuid : undefined"
-            class="fw-passage group relative flex items-start gap-3 rounded-md"
+            class="fw-passage group relative flex items-start"
             :style="{ marginInlineStart: `${node.indent * 1.25}rem` }"
         >
-            <div class="min-w-0 flex-1 border-s-2 border-gray-200 ps-3 dark:border-gray-700!">
+            <div class="fw-passage-body min-w-0 flex-1 rounded-e-md border-s-2 border-gray-200 ps-3 dark:border-gray-700!">
                 <div class="flex flex-wrap items-baseline gap-2">
                     <code class="rounded bg-gray-100 px-1.5 py-0.5 text-2xs font-semibold text-gray-700 dark:bg-gray-800! dark:text-gray-300!">{{ node.block.handle }}</code>
                     <span v-if="node.pathTail && node.pathTail !== node.block.handle" class="font-mono text-2xs text-gray-500 dark:text-gray-400">{{ node.pathTail }}</span>
@@ -50,11 +50,7 @@
                 </dl>
             </div>
 
-            <div
-                v-if="commentable"
-                class="fw-comment flex shrink-0 items-center gap-1.5"
-                :class="{ 'fw-comment--active': count(node.block) || fresh(node.block) }"
-            >
+            <div v-if="commentable" class="fw-gutter">
                 <slot name="comment" :block="node.block">
                     <CommentAction :block="node.block" :count="count(node.block)" :fresh="fresh(node.block)" @comment="$emit('comment', node.block)" />
                 </slot>
@@ -64,15 +60,15 @@
         <slot v-if="!treeNodes.length" name="empty" />
     </div>
 
-    <div v-else class="space-y-6">
+    <div v-else class="fw-flow space-y-6" :class="{ 'fw-flow--gutter': commentable }">
         <div
             v-for="(block, i) in visibleBlocks"
             :key="blockKey(block, i, keyPrefix)"
             :id="anchors ? passageId(block) : undefined"
             :data-ref="anchors ? block.uuid : undefined"
-            class="fw-passage group relative flex items-start gap-3 rounded-md"
+            class="fw-passage group relative flex items-start"
         >
-            <div class="min-w-0 flex-1">
+            <div class="fw-passage-body min-w-0 flex-1 rounded-e-md border-s-2 border-transparent ps-3">
                 <!-- Developer metadata behind the "technical details" switch: the
                      handle (set type / field) and the passage ref. -->
                 <div v-if="technical" class="mb-1.5 flex flex-wrap items-center gap-2">
@@ -168,15 +164,11 @@
                 </div>
             </div>
 
-            <!-- Comment action in the right margin, out of the reading column.
-                 Quiet until the passage is hovered or focused (it stays in the tab
-                 order, so keyboard users reach it), always visible once there are
-                 comments. -->
-            <div
-                v-if="commentable"
-                class="fw-comment flex shrink-0 items-center gap-1.5"
-                :class="{ 'fw-comment--active': count(block) || fresh(block) }"
-            >
+            <!-- Comment gutter, like Word's margin: a column right of the
+                 reading flow with an always visible button on the passage's first
+                 line. Hovering / focusing it highlights the passage it belongs to.
+                 On narrow containers it collapses to the passage's top-right. -->
+            <div v-if="commentable" class="fw-gutter">
                 <slot name="comment" :block="block">
                     <CommentAction :block="block" :count="count(block)" :fresh="fresh(block)" @comment="$emit('comment', block)" />
                 </slot>
@@ -227,39 +219,136 @@ function fresh(block) {
     return !!props.hasNew(block.uuid);
 }
 
-// The default comment affordance: a quiet icon button, count, "new" pill.
+// The default comment affordance, Word-style: an always visible button in the
+// gutter. Without comments a quiet speech bubble with a small "+"; with comments
+// the count in a tinted pill-button, plus the "new" pill for unread ones.
 const CommentAction = defineComponent({
     props: { block: Object, count: Number, fresh: Boolean },
     emits: ['comment'],
     setup(p, { emit }) {
-        return () => [
-            h(Button, {
-                variant: 'ghost',
-                size: 'xs',
-                icon: 'mail-chat-bubble-text',
-                'aria-label': __('workflows::messages.comments'),
-                title: __('workflows::messages.comments'),
-                onClick: () => emit('comment', p.block),
-            }),
-            p.count
-                ? h('span', { class: 'rounded-full bg-gray-200 px-1.5 text-2xs font-semibold text-gray-700 dark:bg-gray-700! dark:text-gray-200!' }, String(p.count))
-                : null,
-            p.fresh
-                ? h('span', { class: 'rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white' }, __('workflows::messages.new'))
-                : null,
-        ];
+        return () => {
+            const label = blockTitle(p.block);
+            const add = __('workflows::messages.comment_add');
+            const aria = p.count
+                ? __('workflows::messages.comments_open_for', { label, count: p.count })
+                : __('workflows::messages.comment_add_for', { label });
+
+            return [
+                h(
+                    'button',
+                    {
+                        type: 'button',
+                        class: [
+                            'fw-comment-btn',
+                            p.count
+                                ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800! dark:bg-blue-950! dark:text-blue-300! dark:hover:bg-blue-900!'
+                                : 'border-transparent text-gray-400 hover:border-gray-200 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-500! dark:hover:border-gray-700! dark:hover:bg-gray-800! dark:hover:text-gray-200!',
+                        ],
+                        'aria-label': aria,
+                        title: p.count ? aria : add,
+                        onClick: () => emit('comment', p.block),
+                    },
+                    [
+                        h('span', { class: 'relative inline-flex' }, [
+                            h(Icon, { name: 'mail-chat-bubble-text', class: 'size-4' }),
+                            p.count
+                                ? null
+                                : h(
+                                      'span',
+                                      { class: 'fw-comment-plus bg-white text-gray-500 dark:bg-gray-900! dark:text-gray-400!', 'aria-hidden': 'true' },
+                                      [h(Icon, { name: 'plus', class: 'size-2' })],
+                                  ),
+                        ]),
+                        p.count ? h('span', { class: 'text-xs font-semibold tabular-nums' }, String(p.count)) : null,
+                    ],
+                ),
+                p.fresh
+                    ? h('span', { class: 'rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white' }, __('workflows::messages.new'))
+                    : null,
+            ];
+        };
     },
 });
 </script>
 
 <style scoped>
-/* Comment action: hidden until hover / keyboard focus, always with comments,
-   and always on touch screens, which have no hover. */
-.fw-comment { opacity: 0; transition: opacity 120ms ease-out; }
-.fw-passage:hover .fw-comment,
-.fw-passage:focus-within .fw-comment,
-.fw-comment--active { opacity: 1; }
-@media (hover: none) { .fw-comment { opacity: 1; } }
+/* Comment gutter (Word-style margin). The flow is a size container so the
+   gutter reacts to the column it sits in (the translation view is two columns),
+   not to the viewport. A faint rule separates the gutter from the text. */
+.fw-flow--gutter { container-type: inline-size; position: relative; }
+.fw-flow--gutter::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 4rem;
+    border-inline-start: 1px dashed rgb(229 231 235);
+    pointer-events: none;
+}
+:where(.dark) .fw-flow--gutter::after { border-color: rgb(55 65 81); }
+.fw-gutter {
+    flex-shrink: 0;
+    width: 4rem;
+    padding-inline-start: 0.75rem;
+    margin-top: -0.3rem; /* centre the 2rem button on the first text line */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+.fw-comment-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding-inline: 0.4rem;
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out;
+}
+.fw-comment-btn:focus-visible { outline: 2px solid rgb(59 130 246); outline-offset: 2px; }
+.fw-comment-plus {
+    position: absolute;
+    inset-block-end: -0.2rem;
+    inset-inline-end: -0.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 9999px;
+}
+
+/* Anchoring: while the button is hovered / focused, its passage lights up with a
+   light background and a left accent, so it is clear which text is meant. */
+.fw-passage-body { transition: background-color 120ms ease-out, border-color 120ms ease-out; }
+.fw-passage:has(.fw-gutter :is(button, a):hover, .fw-gutter :is(button, a):focus-visible) > .fw-passage-body {
+    background-color: rgb(239 246 255);
+    border-inline-start-color: rgb(96 165 250) !important;
+}
+:where(.dark) .fw-passage:has(.fw-gutter :is(button, a):hover, .fw-gutter :is(button, a):focus-visible) > .fw-passage-body {
+    background-color: rgb(30 58 138 / 0.25);
+    border-inline-start-color: rgb(96 165 250) !important;
+}
+
+/* Narrow column: no gutter; the button sits at the passage's top-right and the
+   text keeps clear of it. */
+@container (max-width: 30rem) {
+    .fw-flow--gutter::after { display: none; }
+    .fw-gutter {
+        position: absolute;
+        inset-block-start: 0;
+        inset-inline-end: 0;
+        width: auto;
+        margin-top: 0;
+        padding-inline-start: 0;
+        align-items: flex-end;
+    }
+    .fw-flow--gutter .fw-passage-body { padding-inline-end: 2.75rem; }
+}
 
 /* Jumping to a passage (comment link, history handoff): keep it clear of the
    sticky header and flash it briefly. */
