@@ -4,6 +4,7 @@ namespace TakepartMedia\Workflows\Workflow;
 
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Site;
+use TakepartMedia\Workflows\Content\ContentFieldResolver;
 use TakepartMedia\Workflows\Content\ContentTimestamp;
 
 /**
@@ -276,6 +277,23 @@ class WorkflowResolver
             (array) ($raw['metadata']['translation_exclude_fields'] ?? []),
             fn ($handle) => is_string($handle) && $handle !== '',
         ));
+    }
+
+    /**
+     * The top-level fields that are this entry's content under this workflow
+     * (`metadata.content_fields`, else auto-detection — see ContentFieldResolver).
+     *
+     * Per entry rather than per workflow: one workflow can govern collections
+     * with different blueprints, and only the entry's own blueprint says which
+     * of the configured fields exist.
+     *
+     * @param  array<string, mixed>  $raw
+     * @param  \Statamic\Contracts\Entries\Entry  $entry
+     * @return array<int, string>
+     */
+    public function contentFields(array $raw, $entry): array
+    {
+        return ContentFieldResolver::for($entry, $raw);
     }
 
     /**

@@ -832,6 +832,8 @@ return [
     'lint_place_dead_end' => 'Place [:place] has no outgoing transition – subjects that land here get stuck.',
     'lint_duplicate_edge' => 'Transition [:handle] leads from [:from] to [:to] like transition [:other].',
     'lint_collection_owned_elsewhere' => 'Collection [:collection] is owned by workflow [:owner] – this workflow does not create entries in it.',
+    'lint_content_field_partial' => 'Content field [:field] is missing from the blueprints of :collections – entries there read their automatically detected content instead.',
+    'lint_content_field_auto_none' => 'No content fields are set and collection [:collection] has no Bard, Markdown or Replicator field to detect – its entries show no content.',
 
     // Validation failures from the definition editor (Workflow\WorkflowDefinitionWriter).
     // These reach the CP as a toast, so they are translated — but the YAML keys,
@@ -882,6 +884,10 @@ return [
     'writer_site_fields_not_list' => 'metadata.site_fields must be a list of field handles.',
     'writer_clear_fields_not_list' => 'metadata.plain_language_clear_fields must be a list of field handles.',
     'writer_clear_fields_needs_site' => 'metadata.plain_language_clear_fields requires metadata.plain_language_site.',
+    'writer_content_fields_not_list' => 'metadata.content_fields must be a list of field handles.',
+    'writer_content_fields_duplicate' => 'metadata.content_fields lists the field [:field] more than once.',
+    'writer_content_field_unknown' => 'Content field [:field] does not exist in any blueprint of :collections.',
+    'writer_content_field_unsupported' => 'Content field [:field] has the type [:type], which cannot be read as content.',
     'writer_metadata_site_unknown' => 'metadata.:key [:site] is not a configured site.',
     'writer_translation_source_same_as_plain' => 'metadata.translation_source_site must differ from metadata.plain_language_site.',
     'writer_source_pick_not_boolean' => 'metadata.translation_source_pick must be a boolean.',

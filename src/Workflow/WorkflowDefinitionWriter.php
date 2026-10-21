@@ -7,6 +7,7 @@ use InvalidArgumentException;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Site;
 use Symfony\Component\Yaml\Yaml;
+use TakepartMedia\Workflows\Content\ContentFieldCatalog;
 use TakepartMedia\Workflows\Mail\MailTypes;
 use TakepartMedia\Workflows\Workflow\SourceViewRules;
 
@@ -1344,6 +1345,58 @@ class WorkflowDefinitionWriter
 
             if ($clearFields !== [] && ($definition['metadata']['plain_language_site'] ?? null) === null) {
                 $this->fail('clear_fields_needs_site');
+            }
+        });
+
+        // The top-level fields that are this workflow's content, in reading order.
+        // Absent or empty means "automatic" (ContentFieldCatalog::autoDetect()).
+        // Unlike site_fields and clear_fields above, these ARE checked against the
+        // blueprints: a typo here does not shadow a harmless field, it empties the
+        // summary, the comments and the plain-language rewrite. Loose on purpose,
+        // though — a handle must exist in at least ONE blueprint of the governed
+        // collections; that it is missing from others is only a linter warning.
+        // Without collections there is nothing to check against, so only the shape.
+        $this->at('metadata.content_fields', function () use ($definition) {
+            $contentFields = $definition['metadata']['content_fields'] ?? null;
+
+            if ($contentFields === null || $contentFields === []) {
+                return;
+            }
+
+            if (! is_array($contentFields) || ! array_is_list($contentFields)) {
+                $this->fail('content_fields_not_list');
+            }
+
+            foreach ($contentFields as $handle) {
+                if (! is_string($handle) || trim($handle) === '') {
+                    $this->fail('content_fields_not_list');
+                }
+            }
+
+            foreach (array_count_values($contentFields) as $handle => $count) {
+                if ($count > 1) {
+                    $this->fail('content_fields_duplicate', ['field' => $handle]);
+                }
+            }
+
+            $collections = array_values(array_filter((array) ($definition['collections'] ?? []), 'is_string'));
+
+            if ($collections === []) {
+                return;
+            }
+
+            $known = collect(ContentFieldCatalog::fieldsFor($collections))->flatten(1)->keyBy('handle');
+
+            foreach ($contentFields as $handle) {
+                $field = $known->get($handle);
+
+                if ($field === null) {
+                    $this->fail('content_field_unknown', ['field' => $handle, 'collections' => implode(', ', $collections)]);
+                }
+
+                if (! $field['supported']) {
+                    $this->fail('content_field_unsupported', ['field' => $handle, 'type' => $field['type']]);
+                }
             }
         });
 

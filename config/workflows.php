@@ -639,11 +639,23 @@ return [
     | plain-language rewrite and the content preview have to know about. Leave a
     | key out (or null) and the feature that needs it skips that field.
     |
+    | WHICH fields are an entry's content is no longer decided here but per
+    | workflow, in its `metadata.content_fields` (a sorted list of top-level
+    | fields, picked in the workflow settings). Below those fields the structure
+    | is walked generically — Replicator, Grid, Group, Bard sets — so no set
+    | mapping is needed. A workflow that names none detects its content: first
+    | `intro` + `body` from here if the blueprint has them, else the first
+    | Bard, Markdown or Replicator field.
+    |
     |   title, body, seo    the entry's title, main Bard field and SEO field
     |   intro               the Bard field with the opening paragraph
     |   entity              field naming the entity/module an entry belongs to;
     |                       sent to the rewriting service as request context
     |   scope               set field limiting a block to certain entities
+    |
+    | Deprecated — kept so existing configs still load, but the content preview
+    | stops reading them once it walks `metadata.content_fields`:
+    |
     |   sources_*, podcast_*  extra fields shown in the content preview
     |   sets                how the preview reads each Bard set type:
     |                       type => [kind, field, extra]; kind is html, heading

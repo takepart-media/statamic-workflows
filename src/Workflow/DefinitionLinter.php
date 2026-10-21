@@ -2,6 +2,8 @@
 
 namespace TakepartMedia\Workflows\Workflow;
 
+use TakepartMedia\Workflows\Content\ContentFieldCatalog;
+
 /**
  * Warnings about a workflow definition — things that are allowed but probably
  * not meant. Unlike WorkflowDefinitionWriter::collectErrors() nothing here ever
@@ -36,6 +38,7 @@ class DefinitionLinter
             $this->deadEnds($definition, $places, $edges),
             $this->duplicateEdges($edges),
             $this->foreignCollections($name, $definition),
+            $this->contentFields($definition),
         );
     }
 
@@ -254,6 +257,78 @@ class DefinitionLinter
 
                 break;
             }
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * Content fields that only some governed collections have, and collections
+     * where an unconfigured workflow would find no content at all.
+     *
+     * Both are legal: ContentFieldResolver filters per entry and falls back to
+     * auto-detection, so a field missing from a collection's blueprints just
+     * means that collection reads something else (or nothing). Worth a warning
+     * because the summary of those entries then looks different from what the
+     * author picked. A field no blueprint has at all is the writer's
+     * `content_field_unknown`, not repeated here.
+     *
+     * @param  array<string, mixed>  $definition
+     * @return array<int, array<string, mixed>>
+     */
+    private function contentFields(array $definition): array
+    {
+        $collections = array_values(array_filter(
+            (array) ($definition['collections'] ?? []),
+            fn ($handle) => is_string($handle) && $handle !== '',
+        ));
+
+        if ($collections === []) {
+            return [];
+        }
+
+        $configured = $definition['metadata']['content_fields'] ?? null;
+        $configured = is_array($configured)
+            // Keys kept, so a warning points at the entry's real position in the list.
+            ? array_unique(array_filter($configured, fn ($handle) => is_string($handle) && $handle !== ''))
+            : [];
+
+        try {
+            if ($configured === []) {
+                $warnings = [];
+
+                foreach (ContentFieldCatalog::autoDetectFor($collections) as $collection => $detected) {
+                    if ($detected === null) {
+                        $warnings[] = $this->warning('metadata.content_fields', 'content_field_auto_none', ['collection' => $collection]);
+                    }
+                }
+
+                return $warnings;
+            }
+
+            $handles = array_map(
+                fn (array $fields) => array_column($fields, 'handle'),
+                ContentFieldCatalog::fieldsFor($collections),
+            );
+        } catch (\Throwable) {
+            // A collection that does not exist is reported by the writer.
+            return [];
+        }
+
+        $warnings = [];
+
+        foreach ($configured as $index => $field) {
+            $missing = array_keys(array_filter($handles, fn (array $present) => ! in_array($field, $present, true)));
+
+            // Missing everywhere → the writer refuses it; missing nowhere → fine.
+            if ($missing === [] || count($missing) === count($handles)) {
+                continue;
+            }
+
+            $warnings[] = $this->warning("metadata.content_fields.{$index}", 'content_field_partial', [
+                'field' => $field,
+                'collections' => implode(', ', $missing),
+            ]);
         }
 
         return $warnings;

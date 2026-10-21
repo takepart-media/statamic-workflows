@@ -841,6 +841,8 @@ return [
     'lint_place_dead_end' => 'Place [:place] hat keine ausgehende Transition – was hier landet, kommt nicht weiter.',
     'lint_duplicate_edge' => 'Transition [:handle] führt wie Transition [:other] von [:from] nach [:to].',
     'lint_collection_owned_elsewhere' => 'Collection [:collection] gehört dem Workflow [:owner] – dieser Workflow legt dort keine Einträge an.',
+    'lint_content_field_partial' => 'Inhaltsfeld [:field] fehlt in den Blueprints von :collections – Einträge dort zeigen stattdessen den automatisch erkannten Inhalt.',
+    'lint_content_field_auto_none' => 'Keine Inhaltsfelder gesetzt und Collection [:collection] hat kein Bard-, Markdown- oder Replicator-Feld zum Erkennen – ihre Einträge zeigen keinen Inhalt.',
 
     // Validierungsfehler aus dem Definitions-Editor (Workflow\WorkflowDefinitionWriter).
     // Landen als Toast im CP, sind also übersetzt — die genannten YAML-Schlüssel,
@@ -891,6 +893,10 @@ return [
     'writer_site_fields_not_list' => 'metadata.site_fields muss eine Liste von Feld-Handles sein.',
     'writer_clear_fields_not_list' => 'metadata.plain_language_clear_fields muss eine Liste von Feld-Handles sein.',
     'writer_clear_fields_needs_site' => 'metadata.plain_language_clear_fields setzt metadata.plain_language_site voraus.',
+    'writer_content_fields_not_list' => 'metadata.content_fields muss eine Liste von Feld-Handles sein.',
+    'writer_content_fields_duplicate' => 'metadata.content_fields nennt das Feld [:field] mehrfach.',
+    'writer_content_field_unknown' => 'Inhaltsfeld [:field] gibt es in keinem Blueprint von :collections.',
+    'writer_content_field_unsupported' => 'Inhaltsfeld [:field] hat den Typ [:type], der nicht als Inhalt gelesen werden kann.',
     'writer_metadata_site_unknown' => 'metadata.:key [:site] ist keine konfigurierte Site.',
     'writer_translation_source_same_as_plain' => 'metadata.translation_source_site muss sich von metadata.plain_language_site unterscheiden.',
     'writer_source_pick_not_boolean' => 'metadata.translation_source_pick muss ein Boolean sein.',
