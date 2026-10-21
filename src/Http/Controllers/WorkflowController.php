@@ -5,6 +5,7 @@ namespace TakepartMedia\Workflows\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -34,6 +35,7 @@ use TakepartMedia\Workflows\Translation\TranslationRunner;
 use TakepartMedia\Workflows\Translation\TranslationService;
 use TakepartMedia\Workflows\Translation\Translator;
 use TakepartMedia\Workflows\Workflow\AssignmentCandidates;
+use TakepartMedia\Workflows\Workflow\CommentMentionNotifier;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\InstanceUrl;
 use TakepartMedia\Workflows\Workflow\FailedTranslationRetry;
@@ -2140,10 +2142,14 @@ class WorkflowController extends CpController
             ->map(fn ($uuid) => (string) $uuid)
             ->all();
 
-        return $this->newCommentCountCache[$id] = app(WorkflowCommentStore::class)
-            ->forSubject($id, $workflow)
+        $comments = app(WorkflowCommentStore::class)->forSubject($id, $workflow);
+        $resolvedRoots = $this->resolvedRootIds($comments);
+
+        // is_new is false for every comment in a resolved thread, so closed
+        // threads drop out here exactly as they do from the bulk counts.
+        return $this->newCommentCountCache[$id] = $comments
             ->filter(fn ($comment) => in_array((string) $comment->passage_ref, $validRefs, true)
-                && $this->commentResource($comment, $uid, $seen)['is_new'])
+                && $this->commentResource($comment, $uid, $seen, [], [], $resolvedRoots)['is_new'])
             ->count();
     }
 
@@ -2202,24 +2208,78 @@ class WorkflowController extends CpController
             }
         }
 
+        $resolvedRoots = $this->resolvedRootIds($comments);
+
         return $comments
-            ->map(fn ($comment) => $this->commentResource($comment, $uid, $seen, $currentHashes, $currentContainerHashes))
+            ->map(fn ($comment) => $this->commentResource($comment, $uid, $seen, $currentHashes, $currentContainerHashes, $resolvedRoots))
+            ->values()
             ->all();
     }
 
     /**
-     * Display shape for a single comment. `can_delete` is true for the author
-     * and for comment moderators (see canModerateComments()); `is_new` is true for comments by others created after the user
-     * last viewed that passage (per-user read state); `content_stale` is true
-     * when the passage this comment refers to has been edited since the
-     * comment was written; `container_changed` is true when anything else in
-     * the surrounding Bard-field container has been edited since — sibling
-     * sets added/removed/reordered/edited. The two flags are independent and
-     * may both be true.
+     * Ids of the RESOLVED roots among a subject's comments — what decides whether
+     * a reply sits in a closed thread without a query per reply.
+     *
+     * @param  \Illuminate\Support\Collection<int, WorkflowComment>  $comments
+     * @return array<int, int>
+     */
+    private function resolvedRootIds($comments): array
+    {
+        return $comments
+            ->filter(fn (WorkflowComment $comment) => $comment->isRoot() && $comment->isResolved())
+            ->map(fn (WorkflowComment $comment) => (int) $comment->id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Whether a comment sits in a resolved thread. `$resolvedRoots` from
+     * resolvedRootIds() when the caller has the whole subject loaded; otherwise
+     * a reply's root is read.
+     *
+     * @param  array<int, int>|null  $resolvedRoots
+     */
+    private function inResolvedThread(WorkflowComment $comment, ?array $resolvedRoots = null): bool
+    {
+        if ($comment->isRoot()) {
+            return $comment->isResolved();
+        }
+
+        if ($resolvedRoots !== null) {
+            return in_array((int) $comment->parent_id, $resolvedRoots, true);
+        }
+
+        return WorkflowComment::query()
+            ->where('id', $comment->parent_id)
+            ->whereNotNull('resolved_at')
+            ->exists();
+    }
+
+    /**
+     * Display shape for a single comment — the contract the detail pages and
+     * every comment endpoint share:
+     *
+     *   id, parent_id, at, edited_at, author{id,name,avatar,initials}, body,
+     *   mentions[{id,name}], ref{uuid,handle}|null, resolved{at,by{id,name}}|null,
+     *   can_edit, can_delete, can_resolve, is_new, content_stale, container_changed
+     *
+     * - `resolved` and `can_resolve` concern the THREAD and live on its root;
+     *   replies carry null / false.
+     * - `can_edit`: the author only (a system comment has none). `can_delete`:
+     *   the author or a moderator (canModerateComments()). `can_resolve`: see
+     *   canResolveThread().
+     * - `is_new`: by someone else, after the user last viewed that passage
+     *   (per-user read state) — and never inside a resolved thread, so a closed
+     *   discussion stops nagging.
+     * - `content_stale`: the referenced passage was edited since the comment was
+     *   written; `container_changed`: anything else in the surrounding Bard-field
+     *   container was. Independent; a reply inherits its root's hashes, so both
+     *   describe the passage as it was when the THREAD started.
      *
      * @param  array<string, Carbon>  $seen
      * @param  array<string, string|null>  $currentHashes           keyed by passage_ref
      * @param  array<string, string|null>  $currentContainerHashes  keyed by passage_ref
+     * @param  array<int, int>|null  $resolvedRoots  see resolvedRootIds()
      * @return array<string, mixed>
      */
     private function commentResource(
@@ -2228,13 +2288,17 @@ class WorkflowController extends CpController
         array $seen = [],
         array $currentHashes = [],
         array $currentContainerHashes = [],
+        ?array $resolvedRoots = null,
     ): array {
         $uid = $uid ?? User::current()?->id();
+        $uid = $uid === null ? null : (string) $uid;
         $seenAt = $comment->passage_ref ? ($seen[$comment->passage_ref] ?? null) : null;
+        $isAuthor = $comment->user_id !== null && (string) $comment->user_id === $uid;
 
-        $isNew = $comment->user_id !== $uid
+        $isNew = ! $isAuthor
             && $comment->passage_ref !== null
-            && ($seenAt === null || ($comment->created_at && $comment->created_at->gt($seenAt)));
+            && ($seenAt === null || ($comment->created_at && $comment->created_at->gt($seenAt)))
+            && ! $this->inResolvedThread($comment, $resolvedRoots);
 
         // Stale = we have a stored hash from write-time AND the current hash
         // for the same passage exists AND differs. If either side is null
@@ -2250,20 +2314,201 @@ class WorkflowController extends CpController
         $currentContainer = $comment->passage_ref ? ($currentContainerHashes[$comment->passage_ref] ?? null) : null;
         $containerChanged = $storedContainer !== null && $currentContainer !== null && $storedContainer !== $currentContainer;
 
+        $isRoot = $comment->isRoot();
+
         return [
-            'id' => $comment->id,
+            'id' => (int) $comment->id,
+            'parent_id' => $isRoot ? null : (int) $comment->parent_id,
             'at' => optional($comment->created_at)->toIso8601String(),
-            'author' => ['name' => $comment->author_name],
+            'edited_at' => optional($comment->edited_at)->toIso8601String(),
+            'author' => $this->commentAuthor($comment),
             'body' => $comment->body,
+            'mentions' => $this->commentMentions($comment),
             'ref' => $comment->passage_ref
                 ? ['uuid' => $comment->passage_ref, 'handle' => $comment->passage_handle]
                 : null,
-            'can_delete' => ($comment->user_id !== null && $comment->user_id === $uid)
-                || $this->canModerateComments(),
+            'resolved' => $isRoot && $comment->isResolved()
+                ? [
+                    'at' => $comment->resolved_at->toIso8601String(),
+                    'by' => [
+                        'id' => $comment->resolved_by,
+                        'name' => $comment->resolved_by_name
+                            ?? $this->userDisplayName($this->commentUser($comment->resolved_by))
+                            ?? '—',
+                    ],
+                ]
+                : null,
+            'can_edit' => $isAuthor,
+            'can_delete' => $isAuthor || $this->canModerateComments(),
+            'can_resolve' => $isRoot && $this->canResolveThread($comment, $uid),
             'is_new' => (bool) $isNew,
             'content_stale' => $contentStale,
             'container_changed' => $containerChanged,
         ];
+    }
+
+    /** @var array<string, \Statamic\Contracts\Auth\User|null> user id => user, per request */
+    private array $commentUserCache = [];
+
+    /** @var array<string, array<int, array<string, mixed>>> entry id => mentionable users, per request */
+    private array $mentionableCache = [];
+
+    private function commentUser(?string $id): ?\Statamic\Contracts\Auth\User
+    {
+        if ($id === null || $id === '') {
+            return null;
+        }
+
+        return array_key_exists($id, $this->commentUserCache)
+            ? $this->commentUserCache[$id]
+            : $this->commentUserCache[$id] = User::find($id);
+    }
+
+    private function userDisplayName(?\Statamic\Contracts\Auth\User $user): ?string
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $name = (string) ($user->name() ?: $user->email());
+
+        return $name !== '' ? $name : null;
+    }
+
+    /**
+     * `{id, name, avatar, initials}` — the one user shape the comment UI speaks
+     * (author, currentUser, mentionableUsers).
+     *
+     * @return array{id: string, name: string, avatar: string|null, initials: string}
+     */
+    private function commentUserSummary(\Statamic\Contracts\Auth\User $user): array
+    {
+        $name = $this->userDisplayName($user) ?? (string) $user->id();
+        $avatar = $user->avatar();
+
+        return [
+            'id' => (string) $user->id(),
+            'name' => $name,
+            'avatar' => is_string($avatar) && $avatar !== '' ? $avatar : null,
+            'initials' => $user->name() ? (string) $user->initials() : $this->initialsFrom($name),
+        ];
+    }
+
+    /**
+     * The author as stored: `author_name` is frozen at write time (a renamed or
+     * deleted account still reads as whoever wrote it), avatar and initials come
+     * from the live account when it still exists.
+     *
+     * @return array{id: string|null, name: string, avatar: string|null, initials: string}
+     */
+    private function commentAuthor(WorkflowComment $comment): array
+    {
+        $name = (string) $comment->author_name;
+        $user = $this->commentUser($comment->user_id === null ? null : (string) $comment->user_id);
+
+        if ($user === null) {
+            return [
+                'id' => $comment->user_id === null ? null : (string) $comment->user_id,
+                'name' => $name,
+                'avatar' => null,
+                'initials' => $this->initialsFrom($name),
+            ];
+        }
+
+        return ['name' => $name !== '' ? $name : $this->commentUserSummary($user)['name']]
+            + $this->commentUserSummary($user);
+    }
+
+    /**
+     * Up to two initials from a display name — Statamic's User::initials() rule
+     * (first letter of the first word and of the rest), for authors without a
+     * live account.
+     */
+    private function initialsFrom(string $name): string
+    {
+        $name = trim($name);
+
+        if ($name === '') {
+            return '?';
+        }
+
+        $parts = preg_split('/\s+/u', $name, 2) ?: [$name];
+
+        return mb_strtoupper(mb_substr($parts[0], 0, 1).(isset($parts[1]) ? mb_substr($parts[1], 0, 1) : ''));
+    }
+
+    /**
+     * Mentioned users that still exist, as `{id, name}`. A deleted account
+     * drops out; the `@Name` in the body text stays as written.
+     *
+     * @return array<int, array{id: string, name: string}>
+     */
+    private function commentMentions(WorkflowComment $comment): array
+    {
+        return collect((array) ($comment->mentions ?? []))
+            ->map(fn ($id) => $this->commentUser((string) $id))
+            ->filter()
+            ->map(fn ($user) => ['id' => (string) $user->id(), 'name' => $this->userDisplayName($user) ?? (string) $user->id()])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Who may resolve or reopen a thread (ROOT comments only): its author, a
+     * comment moderator, or anyone currently assigned to the entry in this
+     * workflow — the people whose job the discussion is about.
+     */
+    private function canResolveThread(WorkflowComment $root, ?string $uid): bool
+    {
+        if (! $root->isRoot() || $uid === null) {
+            return false;
+        }
+
+        if ($root->user_id !== null && (string) $root->user_id === $uid) {
+            return true;
+        }
+
+        if ($this->canModerateComments()) {
+            return true;
+        }
+
+        // Not memoised: assignments change between requests, and a controller
+        // instance can outlive one (it is cached on its route). One indexed
+        // query per ROOT, and only for users who are neither author nor moderator.
+        $assignees = array_map(
+            'strval',
+            app(WorkflowAssigneeStore::class)->idsFor((string) $root->subject_id, (string) $root->workflow),
+        );
+
+        return in_array($uid, $assignees, true);
+    }
+
+    /**
+     * Users who can be @-mentioned on this entry: everyone who could open its
+     * instance page — Control Panel access plus access to the entry's site (the
+     * same SitePolicy check canAccessEntrySite() makes for the current user).
+     * Sorted by name.
+     *
+     * @return array<int, array{id: string, name: string, avatar: string|null, initials: string}>
+     */
+    private function mentionableUsers($entry): array
+    {
+        $key = (string) $entry->id();
+
+        if (isset($this->mentionableCache[$key])) {
+            return $this->mentionableCache[$key];
+        }
+
+        $site = Site::get($entry->locale());
+
+        return $this->mentionableCache[$key] = User::all()
+            ->filter(fn ($user) => ($user->isSuper() || $user->hasPermission('access cp'))
+                && $site !== null
+                && (bool) $user->can('view', $site))
+            ->map(fn ($user) => $this->commentUserSummary($user))
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
     }
 
     // ---- Inertia pages -----------------------------------------------------
@@ -2606,6 +2851,13 @@ class WorkflowController extends CpController
             'watching' => app(WorkflowWatchStore::class)->isWatching(User::current()?->id(), $id, $workflow),
             'watchUrl' => cp_route('workflows.api.watch', ['id' => $id, 'workflow' => $workflow]),
             'commentDeleteUrlTemplate' => cp_route('workflows.api.comments.destroy', ['id' => $id, 'comment' => '__COMMENT__', 'workflow' => $workflow]),
+            'commentUpdateUrlTemplate' => cp_route('workflows.api.comments.update', ['id' => $id, 'comment' => '__COMMENT__', 'workflow' => $workflow]),
+            'commentResolveUrlTemplate' => cp_route('workflows.api.comments.resolve', ['id' => $id, 'comment' => '__COMMENT__', 'workflow' => $workflow]),
+            'commentReopenUrlTemplate' => cp_route('workflows.api.comments.reopen', ['id' => $id, 'comment' => '__COMMENT__', 'workflow' => $workflow]),
+            // Who is writing (avatar in the composer) and whom they may @-mention —
+            // the same list storeComment()/updateComment() validate `mentions` against.
+            'currentUser' => ($me = User::current()) ? $this->commentUserSummary($me) : null,
+            'mentionableUsers' => $this->mentionableUsers($entry),
             // Set only when this version is behind the post it belongs to — the same
             // predicate as the „veraltet" marker in the listings, so the notice and
             // the badge can never contradict each other. Carries both dates,
@@ -3097,11 +3349,11 @@ class WorkflowController extends CpController
     {
         $events = app(WorkflowEventStore::class)->forSubject($subjectId, $workflow);
 
-        // Batch-check which comment_ids referenced by comment_created events
-        // still exist in the comments table. Deleted comments still keep the
-        // audit event, but we mark them so the timeline can render "removed".
+        // Batch-check which comment_ids referenced by comment events still
+        // exist in the comments table. Deleted comments still keep the audit
+        // event, but we mark them so the timeline can render "removed".
         $commentIds = $events
-            ->filter(fn ($event) => $event->type === 'comment_created')
+            ->filter(fn ($event) => in_array($event->type, WorkflowEventStore::COMMENT_TYPES, true))
             ->map(fn ($event) => data_get($event->data_snapshot, 'comment_id'))
             ->filter(fn ($id) => $id !== null)
             ->unique()
@@ -3136,11 +3388,18 @@ class WorkflowController extends CpController
                     'note' => $event->note,
                 ];
 
-                if ($event->type === 'comment_created') {
+                // Every comment-layer event (created / edited / deleted /
+                // resolved / reopened) carries the same `comment` block; `type`
+                // says which, and the label is `history_event_<type>`.
+                // `parent_id` set = the comment is a reply; `auto` = a reopen
+                // caused by a reply rather than by the reopen button.
+                if (in_array($event->type, WorkflowEventStore::COMMENT_TYPES, true)) {
                     $snapshot = $event->data_snapshot ?? [];
                     $commentId = data_get($snapshot, 'comment_id');
                     $row['comment'] = [
                         'id' => $commentId,
+                        'parent_id' => data_get($snapshot, 'parent_id'),
+                        'auto' => (bool) data_get($snapshot, 'auto', false),
                         'passage_ref' => data_get($snapshot, 'passage_ref'),
                         'passage_handle' => data_get($snapshot, 'passage_handle'),
                         'body_preview' => data_get($snapshot, 'body_preview'),
@@ -3190,6 +3449,8 @@ class WorkflowController extends CpController
                     ! in_array($target->type, self::SAVE_TYPES, true),
                     fn ($q) => $q->whereNotIn('type', self::SAVE_TYPES),
                 )
+                // Comment events carry comment metadata, not an entry snapshot.
+                ->whereNotIn('type', WorkflowEventStore::COMMENT_TYPES)
                 ->where(function ($q) use ($target) {
                     $q->where('created_at', '<', $target->created_at)
                         ->orWhere(function ($q) use ($target) {
@@ -3203,6 +3464,7 @@ class WorkflowController extends CpController
             : WorkflowEvent::query()
                 ->where('subject_id', $target->subject_id)
                 ->where('workflow', $target->workflow)
+                ->whereNotIn('type', WorkflowEventStore::COMMENT_TYPES)
                 ->orderBy('created_at')
                 ->orderBy('id')
                 ->first();
@@ -4985,6 +5247,23 @@ class WorkflowController extends CpController
         return null;
     }
 
+    /**
+     * Create a comment — a new thread (root) or, with `parent_id`, a reply.
+     *
+     * A reply hangs off a ROOT of the same subject and workflow (one level deep;
+     * a reply id, or a comment elsewhere, is a 422) and inherits the root's
+     * passage and its write-time hashes, so the whole thread describes one
+     * passage at one moment. Replying to a RESOLVED thread is allowed and
+     * reopens it (logged as `comment_reopened`, snapshot `auto: true`): an
+     * answer is a sign the discussion is not over, and a reply nobody sees
+     * because its thread stays collapsed would be worse.
+     *
+     * `mentions`: user ids, each one of mentionableUsers() or the request is a
+     * 422. The mentioned users (never the author) get a `comment_mention` mail.
+     *
+     * Response: `{data: comment}`, plus `root` (the root's fresh resource) for
+     * a reply, so the client sees a reopen without a reload.
+     */
     public function storeComment(Request $request, string $id)
     {
         $workflow = $this->resolveWorkflow($id, $request->query('workflow'));
@@ -5002,38 +5281,64 @@ class WorkflowController extends CpController
             'body' => 'required|string',
             'passage_ref' => 'nullable|string',
             'passage_handle' => 'nullable|string',
+            'parent_id' => 'nullable|integer',
+            'mentions' => 'nullable|array',
+            'mentions.*' => 'string',
         ]);
 
-        $passageRef = $data['passage_ref'] ?? null;
+        $mentions = $this->validatedMentions($data['mentions'] ?? [], $entry);
+        $store = app(WorkflowCommentStore::class);
 
-        // Snapshot the passage's current content as a hash so later renders
-        // can detect that the referenced content has since been edited. If
-        // the entry or passage cannot be resolved right now, the hashes stay
-        // null and the comment is treated the same as older, pre-migration
-        // comments (never flagged as stale / container-changed).
-        // Two hashes are captured:
-        //   • content_hash  — only the specific passage's payload
-        //   • container_hash — the whole surrounding container (siblings,
-        //                      order, and their contents). Flips on "anything
-        //                      else in this area changed after the comment".
-        $contentHash = null;
-        $containerHash = null;
-        if ($entry && $passageRef !== null) {
-            $preview = app(EntryContentPreview::class);
-            $contentHash = $preview->contentHashForPassage($entry, $passageRef, $workflow);
-            $containerHash = $preview->containerHashForPassage($entry, $passageRef, $workflow);
+        $parent = null;
+        if (isset($data['parent_id'])) {
+            $parent = $store->findRoot((int) $data['parent_id'], $id, $workflow);
+
+            if ($parent === null) {
+                throw ValidationException::withMessages(['parent_id' => $this->t('comment_parent_invalid')]);
+            }
         }
 
-        $comment = app(WorkflowCommentStore::class)->add([
+        if ($parent !== null) {
+            // A reply is about its root's passage, as the root saw it.
+            $passageRef = $parent->passage_ref;
+            $passageHandle = $parent->passage_handle;
+            $contentHash = $parent->content_hash;
+            $containerHash = $parent->container_hash;
+        } else {
+            $passageRef = $data['passage_ref'] ?? null;
+            $passageHandle = $data['passage_handle'] ?? null;
+
+            // Snapshot the passage's current content as a hash so later renders
+            // can detect that the referenced content has since been edited. If
+            // the entry or passage cannot be resolved right now, the hashes stay
+            // null and the comment is treated the same as older, pre-migration
+            // comments (never flagged as stale / container-changed).
+            // Two hashes are captured:
+            //   • content_hash  — only the specific passage's payload
+            //   • container_hash — the whole surrounding container (siblings,
+            //                      order, and their contents). Flips on "anything
+            //                      else in this area changed after the comment".
+            $contentHash = null;
+            $containerHash = null;
+            if ($entry && $passageRef !== null) {
+                $preview = app(EntryContentPreview::class);
+                $contentHash = $preview->contentHashForPassage($entry, $passageRef, $workflow);
+                $containerHash = $preview->containerHashForPassage($entry, $passageRef, $workflow);
+            }
+        }
+
+        $comment = $store->add([
             'subject_id' => $id,
             'workflow' => $workflow,
+            'parent_id' => $parent?->id,
             'passage_ref' => $passageRef,
-            'passage_handle' => $data['passage_handle'] ?? null,
+            'passage_handle' => $passageHandle,
             'body' => $data['body'],
             'user_id' => User::current()?->id(),
             'author_name' => $this->currentUserName(),
             'content_hash' => $contentHash,
             'container_hash' => $containerHash,
+            'mentions' => $mentions === [] ? null : $mentions,
         ]);
 
         // Timeline audit trail: log a comment_created event so the workflow
@@ -5042,45 +5347,216 @@ class WorkflowController extends CpController
         // said something, when, in which state" trace is the point.
         // Metadata goes into `data_snapshot` (already a nullable JSON field)
         // instead of adding a new column just for this event type.
-        if ($entry) {
-            $currentState = app(WorkflowResolver::class)->stateFor($entry, $workflow);
-        } else {
-            $currentState = null;
+        $this->logCommentEvent($comment, 'comment_created');
+
+        if ($parent !== null && $parent->isResolved()) {
+            $this->setThreadResolved($parent, false);
+            $this->logCommentEvent($parent, 'comment_reopened', ['auto' => true, 'reply_id' => (int) $comment->id]);
         }
 
-        app(WorkflowEventStore::class)->log($id, $workflow, 'comment_created', [
-            'to' => $currentState,
-            'note' => Str::limit($data['body'], 120),
-            'snapshot' => [
-                'comment_id' => $comment->id,
-                'passage_ref' => $passageRef,
-                'passage_handle' => $data['passage_handle'] ?? null,
-                'body_preview' => Str::limit($data['body'], 120),
-            ],
-        ]);
+        app(CommentMentionNotifier::class)->queue($comment, $mentions, User::current()?->id());
 
-        return response()->json(['data' => $this->commentResource($comment)]);
+        $response = ['data' => $this->commentResource($comment)];
+
+        if ($parent !== null) {
+            $response['root'] = $this->commentResource($parent->fresh());
+        }
+
+        return response()->json($response);
     }
 
-    public function deleteComment(string $id, string $comment)
+    /**
+     * Edit a comment's body and mentions — the AUTHOR only (moderators may
+     * delete, not put words in someone's mouth). Sets `edited_at`. `mentions`
+     * omitted keeps the stored ones; given, it replaces them, and only the users
+     * it ADDS are mailed — nobody gets the same mention twice.
+     */
+    public function updateComment(Request $request, string $id, string $comment)
     {
+        [$model, $entry] = $this->findCommentForRequest($request, $id, $comment);
+
+        abort_unless($this->isCommentAuthor($model), 403);
+
+        $data = $request->validate([
+            'body' => 'required|string',
+            'mentions' => 'nullable|array',
+            'mentions.*' => 'string',
+        ]);
+
+        $before = array_map('strval', (array) ($model->mentions ?? []));
+        $mentions = $request->has('mentions')
+            ? $this->validatedMentions($data['mentions'] ?? [], $entry)
+            : $before;
+        $previousBody = (string) $model->body;
+
+        $model->body = $data['body'];
+        $model->mentions = $mentions === [] ? null : $mentions;
+        $model->edited_at = now();
+        $model->save();
+
+        $this->logCommentEvent($model, 'comment_edited', [
+            'previous_body_preview' => Str::limit($previousBody, 120),
+        ]);
+
+        $added = array_values(array_diff($mentions, $before));
+        app(CommentMentionNotifier::class)->queue($model, $added, User::current()?->id());
+
+        return response()->json(['data' => $this->commentResource($model)]);
+    }
+
+    /**
+     * Resolve a thread. ROOT comments only (a reply id is a 422); allowed for
+     * canResolveThread(). Idempotent — resolving a resolved thread keeps the
+     * original who/when and logs nothing. Returns the root.
+     */
+    public function resolveComment(Request $request, string $id, string $comment)
+    {
+        return $this->toggleThread($request, $id, $comment, true);
+    }
+
+    /** Reopen a resolved thread — the mirror of resolveComment(). */
+    public function reopenComment(Request $request, string $id, string $comment)
+    {
+        return $this->toggleThread($request, $id, $comment, false);
+    }
+
+    private function toggleThread(Request $request, string $id, string $comment, bool $resolve)
+    {
+        [$model] = $this->findCommentForRequest($request, $id, $comment);
+
+        if (! $model->isRoot()) {
+            throw ValidationException::withMessages(['comment' => $this->t('comment_resolve_root_only')]);
+        }
+
+        $uid = User::current()?->id();
+        abort_unless($this->canResolveThread($model, $uid === null ? null : (string) $uid), 403);
+
+        if ($model->isResolved() !== $resolve) {
+            $this->setThreadResolved($model, $resolve);
+            $this->logCommentEvent($model, $resolve ? 'comment_resolved' : 'comment_reopened');
+        }
+
+        return response()->json(['data' => $this->commentResource($model)]);
+    }
+
+    private function setThreadResolved(WorkflowComment $root, bool $resolved): void
+    {
+        $user = User::current();
+
+        $root->resolved_at = $resolved ? now() : null;
+        $root->resolved_by = $resolved && $user ? (string) $user->id() : null;
+        $root->resolved_by_name = $resolved ? $this->currentUserName() : null;
+        $root->save();
+    }
+
+    /**
+     * Delete a comment — the author or a moderator. A ROOT takes its whole
+     * thread with it (replies without their root have nowhere to be shown).
+     * Logged as `comment_deleted`. Response: `{deleted: [ids]}`, root first.
+     */
+    public function deleteComment(Request $request, string $id, string $comment)
+    {
+        [$model] = $this->findCommentForRequest($request, $id, $comment);
+
+        // The author, or a comment moderator — see canModerateComments().
+        abort_unless($this->isCommentAuthor($model) || $this->canModerateComments(), 403);
+
+        $snapshotSource = clone $model;
+        $deleted = app(WorkflowCommentStore::class)->deleteThread($model);
+
+        $this->logCommentEvent($snapshotSource, 'comment_deleted', [
+            'deleted_ids' => $deleted,
+        ]);
+
+        return response()->json(['deleted' => $deleted]);
+    }
+
+    /**
+     * The comment named in the URL, within the subject AND the workflow in
+     * scope (`?workflow=`), or a 404. Returns the entry alongside (null for a
+     * subject that is no entry).
+     *
+     * @return array{0: WorkflowComment, 1: mixed}
+     */
+    private function findCommentForRequest(Request $request, string $id, string $comment): array
+    {
+        $workflow = $this->resolveWorkflow($id, $request->query('workflow'));
+
         $model = WorkflowComment::query()
             ->where('id', $comment)
             ->where('subject_id', $id)
+            ->when($workflow !== null, fn ($q) => $q->where('workflow', $workflow))
             ->first();
 
         abort_if($model === null, 404);
 
-        // The author, or a comment moderator — see canModerateComments().
-        abort_unless(
-            ($model->user_id !== null && $model->user_id === User::current()?->id())
-                || $this->canModerateComments(),
-            403,
-        );
+        $entry = Entry::find($id);
 
-        $model->delete();
+        if ($entry) {
+            abort_unless($this->canAccessEntrySite($entry), 403);
+        }
 
-        return response()->json(['deleted' => true]);
+        return [$model, $entry];
+    }
+
+    private function isCommentAuthor(WorkflowComment $comment): bool
+    {
+        $uid = User::current()?->id();
+
+        return $comment->user_id !== null && $uid !== null && (string) $comment->user_id === (string) $uid;
+    }
+
+    /**
+     * `mentions` from a request, made safe: unique string ids, every one of them
+     * in mentionableUsers() — otherwise a 422 naming the field. A subject that
+     * is no entry has nobody to mention.
+     *
+     * @param  array<int, mixed>  $ids
+     * @return array<int, string>
+     */
+    private function validatedMentions(array $ids, $entry): array
+    {
+        $ids = collect($ids)->map(fn ($id) => (string) $id)->filter(fn ($id) => $id !== '')->unique()->values()->all();
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $allowed = $entry ? array_column($this->mentionableUsers($entry), 'id') : [];
+        $unknown = array_values(array_diff($ids, $allowed));
+
+        if ($unknown !== []) {
+            throw ValidationException::withMessages(['mentions' => $this->t('comment_mentions_invalid')]);
+        }
+
+        return $ids;
+    }
+
+    /**
+     * One history row for the comment layer. `to` is the state the subject was
+     * in at the time (the history shows it); the snapshot carries the comment's
+     * metadata — see WorkflowEventStore::COMMENT_TYPES for why readers of entry
+     * snapshots skip these rows.
+     *
+     * @param  array<string, mixed>  $extra
+     */
+    private function logCommentEvent(WorkflowComment $comment, string $type, array $extra = []): void
+    {
+        $entry = Entry::find($comment->subject_id);
+        $state = $entry ? app(WorkflowResolver::class)->stateFor($entry, $comment->workflow) : null;
+        $preview = Str::limit((string) $comment->body, 120);
+
+        app(WorkflowEventStore::class)->log((string) $comment->subject_id, (string) $comment->workflow, $type, [
+            'to' => $state,
+            'note' => $preview,
+            'snapshot' => array_merge([
+                'comment_id' => (int) $comment->id,
+                'parent_id' => $comment->parent_id === null ? null : (int) $comment->parent_id,
+                'passage_ref' => $comment->passage_ref,
+                'passage_handle' => $comment->passage_handle,
+                'body_preview' => $preview,
+            ], $extra),
+        ]);
     }
 
     public function markCommentsRead(Request $request, string $id)

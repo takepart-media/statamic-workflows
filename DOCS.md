@@ -1986,9 +1986,12 @@ angehängt.
 | `POST workflows/api/instances/{id}/state` | `setState` | State manuell setzen (nur Super/Admins). |
 | `POST workflows/api/posts` | `storePost` | Neuen Post anlegen (ein Klick, nur `collection`). |
 | `POST workflows/api/instances/{id}/transfer` | `transfer` | Localization in weitere Site(s) übertragen. |
-| `POST workflows/api/instances/{id}/comments` | `storeComment` | Kommentar anlegen. |
+| `POST workflows/api/instances/{id}/comments` | `storeComment` | Kommentar oder (mit `parent_id`) Antwort anlegen; `mentions` = User-IDs. |
 | `POST workflows/api/instances/{id}/comments/read` | `markCommentsRead` | Passage als „gesehen" markieren. |
-| `DELETE workflows/api/instances/{id}/comments/{comment}` | `deleteComment` | Kommentar löschen (nur Autor). |
+| `PATCH workflows/api/instances/{id}/comments/{comment}` | `updateComment` | Text/Erwähnungen ändern (nur Autor), setzt `edited_at`. |
+| `POST workflows/api/instances/{id}/comments/{comment}/resolve` | `resolveComment` | Thread abschließen (nur Root). |
+| `POST workflows/api/instances/{id}/comments/{comment}/reopen` | `reopenComment` | Thread wieder öffnen (nur Root). |
+| `DELETE workflows/api/instances/{id}/comments/{comment}` | `deleteComment` | Kommentar löschen (Autor oder Moderator); ein Root nimmt seine Antworten mit. |
 | `GET  workflows/api/definitions` | `definitions` | Rohdaten aller Definitions für Diagramme/Debug. |
 | `POST workflows/api/stats/retry-failed` | `retryFailedTranslations` | Sammel-Neustart aller geparkten Übersetzungen, die der Betrachter neu starten darf (Dashboard, § 9). |
 | `GET  workflows/api/stats/state-subjects` | `stateSubjects` | Die Beiträge in einem (Workflow, State)-Paar, seitenweise — lazy nachgeladen von der Statusreihe (§ 9). Read-only, `?workflow=&state=&page=`, Antwort `{items, meta, manager_url}`. |
@@ -2426,9 +2429,14 @@ Die Vue-Detailseite bekommt via Inertia diese Props (echter Entry-Pfad):
   Deep-Link (`entryVersions`).
 - `history` — chronologisches Event-Log (`entryHistory`).
 - `historyDiffUrlTemplate` — Templatstring, den die UI mit der Event-ID füllt.
-- `comments` — Kommentare inkl. `is_new`/`can_delete`. `is_new` markiert die Sets mit
-  ungelesenen Kommentaren (§ 5.9).
-- `commentUrl` — Endpoint zum Anlegen weiterer Kommentare.
+- `comments` — Kommentare (Roots und Antworten, flach, älteste zuerst) im
+  Resource-Format aus „Kommentar-Threads" (§ 5.9). `is_new` markiert die Sets mit
+  ungelesenen Kommentaren.
+- `commentUrl` — Endpoint zum Anlegen weiterer Kommentare; `commentReadUrl`,
+  `commentDeleteUrlTemplate`, `commentUpdateUrlTemplate`,
+  `commentResolveUrlTemplate`, `commentReopenUrlTemplate` (`__COMMENT__`).
+- `currentUser` / `mentionableUsers` — `{id, name, avatar, initials}`; wer schreibt
+  und wen er erwähnen darf.
 - `actions` — verfügbare Transitions (`entryActions`).
 - `applyUrls` — je Transition der Apply-Endpoint.
 - `assigneeUrl` / `assignableUsers` — Assignee-Drawer.
@@ -2557,8 +2565,9 @@ Reihenfolge im Server:
   - Collections mit `title_format` (`autoGeneratesTitles()`) bekommen keinen
     Platzhalter-Titel ins Data-Array geschrieben, der würde den berechneten
     Titel verdecken.
-- **`storeComment` / `deleteComment` / `markCommentsRead`** — Kommentar-Layer.
-  Löschen nur durch den Autor.
+- **`storeComment` / `updateComment` / `resolveComment` / `reopenComment` /
+  `deleteComment` / `markCommentsRead`** — Kommentar-Layer, siehe
+  „Kommentar-Threads" (§ 5.9).
 
 #### Workflows abschalten, löschen, Status nachtragen (Settings-Übersicht)
 
@@ -2701,6 +2710,49 @@ Install-Endpoint und bleibt reserviert, damit ein Handle nie mit einem
 Verb-Segment kollidiert), die Slug- und Editor-Routen ebenso
 `instances|api|settings`. Vorher war das ein Präfix-Ausschluss — ein Handle wie
 `apiary` oder ein Slug `settingsx` war damit unerreichbar.
+
+#### Kommentar-Threads (Antworten, Abschließen, Erwähnungen)
+
+Word-artig: ein **Root**-Kommentar an einer Passage, darunter **Antworten**
+(`workflow_comments.parent_id`, genau eine Ebene — eine Antwort auf eine Antwort
+oder auf einen Kommentar eines anderen Beitrags/Workflows ist ein 422). Eine
+Antwort erbt `passage_ref`/`passage_handle` **und** die Hashes des Roots: der
+ganze Thread beschreibt die Passage, wie sie bei seinem Start aussah.
+
+**Resource** (Payload `comments` und jede Antwort der Endpoints, `{data: …}`):
+`id, parent_id, at, edited_at, author{id,name,avatar,initials}, body,
+mentions[{id,name}], ref{uuid,handle}|null, resolved{at,by{id,name}}|null,
+can_edit, can_delete, can_resolve, is_new, content_stale, container_changed`.
+`resolved`/`can_resolve` nur am Root (Antworten: `null`/`false`).
+
+| Aktion | Wer | Verhalten |
+|---|---|---|
+| Bearbeiten (`PATCH`) | nur Autor (auch kein Moderator) | setzt `edited_at`; `mentions` weggelassen = unverändert |
+| Löschen | Autor oder `comment_moderator_groups` | Root löscht seine Antworten mit, Antwort `{deleted: [ids]}` |
+| Abschließen / Öffnen | Root-Autor, Moderatoren, aktuelle Assignees des Beitrags in diesem Workflow | nur Roots (Antwort-ID → 422), idempotent, Antwort = Root |
+| Antworten auf abgeschlossenen Thread | wie Kommentieren | erlaubt, **öffnet den Thread wieder** (Event `comment_reopened`, Snapshot `auto: true`); Antwort enthält zusätzlich `root` |
+
+**Zählen nur offene Threads.** `countBySubject()`, `newCountBySubject()`,
+`newCommentCount()`/`hasNewComments()` und `is_new` ignorieren abgeschlossene Roots
+samt Antworten (`WorkflowComment::scopeOpenThreads()`). Der Lesestand bleibt pro
+Passage.
+
+**Erwähnungen.** `mentions` = User-IDs, jede muss in `mentionableUsers` stehen
+(CP-Zugang + Zugriff auf die Site des Eintrags), sonst 422 auf `mentions`. Erwähnte
+bekommen die Mail `comment_mention` (`Mail\CommentMentionMail`, Template
+`workflows::mail.comment-mention`, Texte `mail_comment_mention_*`) — beim Anlegen
+alle, beim Bearbeiten nur neu hinzugekommene, nie der Autor. Link:
+Instanzseite `?comment=<id>#passage-<uuid>`. Versand wie alle Workflow-Mails über
+`mail_delivery`, abschaltbar mit `workflows.comment_mention_mail`. Kein
+`mail_type` für Definitionen (nicht in `MailTypes::BUILT_IN`).
+
+**Historie.** `comment_created` (Snapshot mit `parent_id`), `comment_edited`,
+`comment_deleted`, `comment_resolved`, `comment_reopened`; jede Zeile trägt einen
+`comment`-Block (`id, parent_id, auto, passage_ref, passage_handle, body_preview,
+deleted`), Label `history_event_<type>`. Diese Events
+(`WorkflowEventStore::COMMENT_TYPES`) tragen Kommentar-Metadaten statt eines
+Eintrags-Snapshots und werden deshalb von `latestSnapshot()`, dem History-Diff und
+der „in State X eingetreten"-Statistik übersprungen.
 
 #### Ungelesene Kommentare sichtbar machen
 

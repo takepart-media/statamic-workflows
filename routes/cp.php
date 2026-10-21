@@ -121,6 +121,12 @@ Route::post('workflows/api/posts', [WorkflowController::class, 'storePost'])->na
 Route::post('workflows/api/instances/{id}/comments', [WorkflowController::class, 'storeComment'])->name('workflows.api.comments');
 Route::post('workflows/api/instances/{id}/comments/read', [WorkflowController::class, 'markCommentsRead'])->name('workflows.api.comments.read');
 Route::delete('workflows/api/instances/{id}/comments/{comment}', [WorkflowController::class, 'deleteComment'])->name('workflows.api.comments.destroy');
+// Threads: edit (author only), resolve / reopen a ROOT (whole thread). Same
+// `?workflow=` handling as the routes above; the URLs reach the client as
+// `__COMMENT__` templates, never glued onto `commentUrl`.
+Route::patch('workflows/api/instances/{id}/comments/{comment}', [WorkflowController::class, 'updateComment'])->name('workflows.api.comments.update');
+Route::post('workflows/api/instances/{id}/comments/{comment}/resolve', [WorkflowController::class, 'resolveComment'])->name('workflows.api.comments.resolve');
+Route::post('workflows/api/instances/{id}/comments/{comment}/reopen', [WorkflowController::class, 'reopenComment'])->name('workflows.api.comments.reopen');
 // Watching: a personal bookmark for the "Watched" dashboard card. One URL, the
 // verb says which way.
 Route::post('workflows/api/instances/{id}/watch', [WorkflowController::class, 'watch'])->name('workflows.api.watch');

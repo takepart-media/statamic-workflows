@@ -14,6 +14,20 @@ use Statamic\Facades\User;
 class WorkflowEventStore
 {
     /**
+     * The comment-layer events. Their `data_snapshot` holds COMMENT metadata
+     * (comment id, passage, body preview), not entry field values — so every
+     * reader that treats a snapshot as "the entry at that moment" must skip
+     * them: latestSnapshot() here and WorkflowController::historyDiff().
+     */
+    public const COMMENT_TYPES = [
+        'comment_created',
+        'comment_edited',
+        'comment_deleted',
+        'comment_resolved',
+        'comment_reopened',
+    ];
+
+    /**
      * The two per-workflow AGGREGATES this store answers, memoized for the
      * lifetime of ONE request — the store is bound `scoped`
      * (ServiceProvider::register()), so nothing here outlives the response.
@@ -143,6 +157,7 @@ class WorkflowEventStore
             ->where('subject_id', $subjectId)
             ->where('workflow', $workflow)
             ->whereNotNull('data_snapshot')
+            ->whereNotIn('type', self::COMMENT_TYPES)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->first(['data_snapshot'])
@@ -277,6 +292,9 @@ class WorkflowEventStore
 
         $rows = WorkflowEvent::query()
             ->whereIn('to_state', array_values(array_unique($states)))
+            // Comment events record the state they were written IN as `to_state`
+            // (the history shows it); they are not arrivals.
+            ->whereNotIn('type', self::COMMENT_TYPES)
             ->whereBetween('created_at', [$from, $to])
             ->orderBy('created_at')
             ->distinct()

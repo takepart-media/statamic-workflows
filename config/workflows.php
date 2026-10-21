@@ -118,13 +118,29 @@ return [
     | Comment moderator groups
     |--------------------------------------------------------------------------
     |
-    | Groups allowed to delete ANY comment, not just their own. Everyone else can
-    | only delete what they wrote. Super Admins always may; an empty list means
-    | Super Admins only. Not covered by `privileged_groups`.
+    | Groups allowed to delete ANY comment, not just their own, and to resolve or
+    | reopen any thread. Everyone else can only delete what they wrote; resolving
+    | is also open to the thread's author and to the entry's current assignees.
+    | Super Admins always may; an empty list means Super Admins only. Not covered
+    | by `privileged_groups`.
     |
     */
 
     'comment_moderator_groups' => ['admins'],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Comment mention mails
+    |--------------------------------------------------------------------------
+    |
+    | Whether @-mentioned users get a mail (`comment_mention`). Sent like every
+    | other workflow mail — one per recipient, in their CP language, delivered
+    | per `mail_delivery` below. Never to the comment's author; on an edit only
+    | to the users the edit newly mentions.
+    |
+    */
+
+    'comment_mention_mail' => env('WORKFLOWS_COMMENT_MENTION_MAIL', true),
 
     /*
     |--------------------------------------------------------------------------

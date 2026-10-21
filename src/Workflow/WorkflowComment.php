@@ -16,6 +16,12 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $user_id
  * @property string      $author_name
  * @property string|null $kind
+ * @property int|null    $parent_id         the ROOT comment of a reply; null = root
+ * @property \Illuminate\Support\Carbon|null $resolved_at  roots only
+ * @property string|null $resolved_by
+ * @property string|null $resolved_by_name
+ * @property \Illuminate\Support\Carbon|null $edited_at
+ * @property array<int, string>|null $mentions  mentioned user ids
  */
 class WorkflowComment extends Model
 {
@@ -32,4 +38,40 @@ class WorkflowComment extends Model
     protected $table = 'workflow_comments';
 
     protected $guarded = [];
+
+    protected $casts = [
+        'parent_id' => 'integer',
+        'resolved_at' => 'datetime',
+        'edited_at' => 'datetime',
+        'mentions' => 'array',
+    ];
+
+    public function isRoot(): bool
+    {
+        return $this->parent_id === null;
+    }
+
+    public function isResolved(): bool
+    {
+        return $this->resolved_at !== null;
+    }
+
+    /**
+     * Only comments in OPEN threads: an unresolved root, or a reply whose root is
+     * unresolved. Replies never carry `resolved_at` themselves — resolving is a
+     * property of the thread, stored on its root.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     */
+    public function scopeOpenThreads($query)
+    {
+        return $query
+            ->whereNull('resolved_at')
+            ->where(fn ($q) => $q->whereNull('parent_id')->orWhereIn(
+                'parent_id',
+                fn ($sub) => $sub->select('id')->from('workflow_comments')
+                    ->whereNull('parent_id')
+                    ->whereNull('resolved_at'),
+            ));
+    }
 }

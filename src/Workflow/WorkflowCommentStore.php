@@ -33,6 +33,48 @@ class WorkflowCommentStore
     }
 
     /**
+     * A ROOT comment of this subject/workflow, or null — what a reply may hang
+     * off. A reply id here yields null: threads are one level deep.
+     */
+    public function findRoot(int $id, string $subjectId, string $workflow): ?WorkflowComment
+    {
+        return WorkflowComment::query()
+            ->where('id', $id)
+            ->where('subject_id', $subjectId)
+            ->where('workflow', $workflow)
+            ->whereNull('parent_id')
+            ->first();
+    }
+
+    /**
+     * Delete a comment; a ROOT takes its replies with it. Returns every deleted id
+     * (root first) so the client can drop them all.
+     *
+     * @return array<int, int>
+     */
+    public function deleteThread(WorkflowComment $comment): array
+    {
+        $ids = [(int) $comment->id];
+
+        if ($comment->isRoot()) {
+            $replyIds = WorkflowComment::query()
+                ->where('parent_id', $comment->id)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            if ($replyIds !== []) {
+                WorkflowComment::query()->whereIn('id', $replyIds)->delete();
+                $ids = array_merge($ids, $replyIds);
+            }
+        }
+
+        $comment->delete();
+
+        return $ids;
+    }
+
+    /**
      * The most recent comment of one kind for a subject, or null.
      *
      * Newest wins because a rewrite can be repeated (`plain_language_resubmit`),
@@ -79,7 +121,8 @@ class WorkflowCommentStore
      * user-independent and aggregated in SQL — it runs for every row that has
      * comments, not just the ones with something unread.
      *
-     * Counts only comments with a `passage_ref`, matching what the UI can actually
+     * Counts only comments in OPEN threads (see WorkflowComment::scopeOpenThreads)
+     * and only comments with a `passage_ref`, matching what the UI can actually
      * show. It does NOT exclude comments whose passage has since disappeared: that
      * needs the entry's parsed content per subject, which is far too expensive for
      * every row. A removed set can therefore leave the total one too high until its
@@ -93,6 +136,8 @@ class WorkflowCommentStore
         return WorkflowComment::query()
             ->where('workflow', $workflow)
             ->whereNotNull('passage_ref')
+            // Resolved threads are done — root and replies drop out of every count.
+            ->openThreads()
             ->groupBy('subject_id')
             ->selectRaw('subject_id, count(*) as aggregate')
             ->pluck('aggregate', 'subject_id')
@@ -137,6 +182,7 @@ class WorkflowCommentStore
         return WorkflowComment::query()
             ->where('workflow', $workflow)
             ->whereNotNull('passage_ref')
+            ->openThreads()
             // A comment you wrote yourself is never new to you. Null authors are
             // somebody else, same as commentResource()'s `user_id !== $uid`.
             ->where(fn ($q) => $q->whereNull('user_id')->orWhere('user_id', '!=', $userId))

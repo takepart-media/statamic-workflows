@@ -35,6 +35,9 @@ return [
     'comment_deleted' => 'Kommentar gelöscht',
     'comment_save_error' => 'Kommentar konnte nicht gespeichert werden.',
     'comment_delete_error' => 'Kommentar konnte nicht gelöscht werden.',
+    'comment_parent_invalid' => 'Antworten sind nur auf einen Kommentar dieses Beitrags möglich, der selbst keine Antwort ist.',
+    'comment_mentions_invalid' => 'Mindestens eine erwähnte Person hat keinen Zugriff auf diesen Beitrag.',
+    'comment_resolve_root_only' => 'Nur eine ganze Diskussion kann abgeschlossen oder wieder geöffnet werden, keine einzelne Antwort.',
     'transition_error' => 'Übergang konnte nicht angewendet werden.',
     'transition_not_allowed' => 'Dieser Schritt ist aus dem aktuellen Status nicht erlaubt.',
     'actions_load_error' => 'Workflow-Aktionen konnten nicht geladen werden.',
@@ -61,6 +64,10 @@ return [
     'history_show_diff' => 'Änderungen anzeigen',
     'history_hide_diff' => 'Änderungen ausblenden',
     'history_event_comment_created' => 'hat kommentiert',
+    'history_event_comment_edited' => 'hat einen Kommentar bearbeitet',
+    'history_event_comment_deleted' => 'hat einen Kommentar gelöscht',
+    'history_event_comment_resolved' => 'hat eine Diskussion abgeschlossen',
+    'history_event_comment_reopened' => 'hat eine Diskussion wieder geöffnet',
     'history_comment_deleted' => 'Kommentar entfernt',
     'comment_content_stale' => 'Bezieht sich auf eine ältere Version dieser Passage',
     'comment_container_changed' => 'In diesem Bereich wurde seit dem Kommentar etwas geändert',
@@ -836,6 +843,18 @@ return [
     // Die Zeile „Erinnerung" in jeder Mail, deren Status eine `reminder`-Action
     // trägt (Mail\WorkflowNotification::reminder()). Kein Du/Sie, siehe oben.
     'mail_reminder_notice' => '{1} täglich, solange der Beitrag in diesem Status steht|[2,*] alle :days Tage, solange der Beitrag in diesem Status steht',
+
+    // "Mentioned in a comment." Not a workflow mail (no definition can pick it,
+    // see Mail\MailTypes::COMMENT_MENTION) and the one mail that goes to a
+    // specific person rather than to whoever is assigned — so `:actor` is named.
+    // Still no salutation and no du/Sie. Missing keys inherit from `assigned`.
+    'mail_comment_mention_subject' => 'Erwähnung von :actor: :title',
+    'mail_comment_mention_heading' => 'Neue Erwähnung in einem Kommentar',
+    'mail_comment_mention_intro' => ':actor hat in einem Kommentar zum Beitrag :title eine Erwähnung hinterlassen.',
+    'mail_comment_mention_intro_reply' => ':actor hat in einer Antwort auf einen Kommentar zum Beitrag :title eine Erwähnung hinterlassen.',
+    'mail_comment_mention_field_passage' => 'Abschnitt',
+    'mail_comment_mention_field_workflow' => 'Bereich',
+    'mail_comment_mention_button' => 'Kommentar öffnen',
     // Der Hinweiskasten jeder Mail, deren Status eine `auto_transition` trägt
     // (Mail\WorkflowNotification::autoTransition()). `:transition` ist das Label
     // der automatischen Transition, `:options` die Labels aller Wege hinaus.
@@ -1176,4 +1195,34 @@ return [
     'create_content_fields_label' => 'Inhaltsfelder',
     'create_content_fields_hint' => 'Optional. In Lesereihenfolge; leer = je Collection automatisch erkannt.',
     'create_content_fields_keep' => 'Von der Quelle übernommen.',
+
+    // Kommentar-Seitenleiste.
+    'comments_filter_open' => 'Offen',
+    'comments_filter_resolved' => 'Erledigt',
+    'comments_filter_all' => 'Alle',
+    'comments_empty_open' => 'Keine offenen Kommentare.',
+    'comments_empty_resolved' => 'Keine erledigten Kommentare.',
+    'comments_general' => 'Allgemein',
+    'comment_prev' => 'Vorheriger Kommentar',
+    'comment_next' => 'Nächster Kommentar',
+    'comment_actions' => 'Aktionen',
+    'comment_edited' => 'bearbeitet',
+    'comment_resolve' => 'Als erledigt markieren',
+    'comment_reopen' => 'Wieder öffnen',
+    'comment_resolved_by' => 'Erledigt von :name · :time',
+    'comment_replies_count' => 'Antworten: :count',
+    'comment_expand' => 'Anzeigen',
+    'comment_collapse' => 'Einklappen',
+    'comment_jump_to_passage' => 'Zur Passage springen',
+    'comment_reply_placeholder' => 'Antworten …',
+    'comment_reply' => 'Antworten',
+    'comment_submit' => 'Kommentieren',
+    'comment_shortcut_hint' => 'Strg/⌘ + Enter zum Senden · @ für Erwähnungen',
+    'comment_mention_none' => 'Keine passenden Personen',
+    'comment_delete_thread_confirm' => 'Diesen Kommentar und alle Antworten löschen?',
+    'comment_updated' => 'Kommentar aktualisiert',
+    'comment_update_error' => 'Kommentar konnte nicht aktualisiert werden.',
+    'comment_resolved_toast' => 'Diskussion als erledigt markiert',
+    'comment_reopened_toast' => 'Diskussion wieder geöffnet',
+    'comment_resolve_error' => 'Status der Diskussion konnte nicht geändert werden.',
 ];

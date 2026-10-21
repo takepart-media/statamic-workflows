@@ -109,6 +109,17 @@ class MailTypes
     public const REMINDER = 'reminder';
 
     /**
+     * "Somebody mentioned you in a comment." NOT a workflow mail: no definition
+     * can pick it, so it is deliberately absent from BUILT_IN (and therefore from
+     * the editor's dropdown and from the writer's list of valid `mail_type`s). It
+     * only borrows this class's language mechanics — `mail_comment_mention_*`,
+     * inheriting missing keys from `assigned` through text(). Sent by
+     * Workflow\CommentMentionNotifier with its own Mailable and template
+     * (Mail\CommentMentionMail, `workflows::mail.comment-mention`).
+     */
+    public const COMMENT_MENTION = 'comment_mention';
+
+    /**
      * What a mail action without a `mail_type` means, and the type every other
      * type borrows its missing words from.
      */

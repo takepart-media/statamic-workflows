@@ -35,6 +35,9 @@ return [
     'comment_deleted' => 'Comment deleted',
     'comment_save_error' => 'Could not save comment.',
     'comment_delete_error' => 'Could not delete comment.',
+    'comment_parent_invalid' => 'Replies are only possible to a comment on this entry that is not itself a reply.',
+    'comment_mentions_invalid' => 'At least one mentioned person has no access to this entry.',
+    'comment_resolve_root_only' => 'Only a whole discussion can be resolved or reopened, not a single reply.',
     'transition_error' => 'Could not apply transition.',
     'transition_not_allowed' => 'Transition not allowed from the current state.',
     'actions_load_error' => 'Could not load workflow actions.',
@@ -61,6 +64,10 @@ return [
     'history_show_diff' => 'Show changes',
     'history_hide_diff' => 'Hide changes',
     'history_event_comment_created' => 'commented',
+    'history_event_comment_edited' => 'edited a comment',
+    'history_event_comment_deleted' => 'deleted a comment',
+    'history_event_comment_resolved' => 'resolved a discussion',
+    'history_event_comment_reopened' => 'reopened a discussion',
     'history_comment_deleted' => 'Comment removed',
     'comment_content_stale' => 'Refers to an older version of this passage',
     'comment_container_changed' => 'Something in this area changed after the comment was written',
@@ -828,6 +835,18 @@ return [
     // The "Reminder" line in every mail whose state carries a `reminder` action
     // (Mail\WorkflowNotification::reminder()).
     'mail_reminder_notice' => '{1} daily, while the post stays in this state|[2,*] every :days days, while the post stays in this state',
+
+    // "Mentioned in a comment." Not a workflow mail (no definition can pick it,
+    // see Mail\MailTypes::COMMENT_MENTION) and the one mail that goes to a
+    // specific person rather than to whoever is assigned — so `:actor` is named.
+    // Still no salutation. Missing keys inherit from `assigned`.
+    'mail_comment_mention_subject' => 'Mention by :actor: :title',
+    'mail_comment_mention_heading' => 'New mention in a comment',
+    'mail_comment_mention_intro' => ':actor left a mention in a comment on the entry :title.',
+    'mail_comment_mention_intro_reply' => ':actor left a mention in a reply to a comment on the entry :title.',
+    'mail_comment_mention_field_passage' => 'Section',
+    'mail_comment_mention_field_workflow' => 'Area',
+    'mail_comment_mention_button' => 'Open the comment',
     // The notice panel of every mail whose state carries an `auto_transition`
     // (Mail\WorkflowNotification::autoTransition()).
     'mail_auto_transition_heading' => 'Automatically :transition on :date',
@@ -1167,4 +1186,34 @@ return [
     'create_content_fields_label' => 'Content fields',
     'create_content_fields_hint' => 'Optional. In reading order; empty = detected automatically per collection.',
     'create_content_fields_keep' => 'Taken over from the source.',
+
+    // Comment sidebar.
+    'comments_filter_open' => 'Open',
+    'comments_filter_resolved' => 'Resolved',
+    'comments_filter_all' => 'All',
+    'comments_empty_open' => 'No open comments.',
+    'comments_empty_resolved' => 'No resolved comments.',
+    'comments_general' => 'General',
+    'comment_prev' => 'Previous comment',
+    'comment_next' => 'Next comment',
+    'comment_actions' => 'Actions',
+    'comment_edited' => 'edited',
+    'comment_resolve' => 'Resolve',
+    'comment_reopen' => 'Reopen',
+    'comment_resolved_by' => 'Resolved by :name · :time',
+    'comment_replies_count' => 'Replies: :count',
+    'comment_expand' => 'Show',
+    'comment_collapse' => 'Collapse',
+    'comment_jump_to_passage' => 'Jump to passage',
+    'comment_reply_placeholder' => 'Reply …',
+    'comment_reply' => 'Reply',
+    'comment_submit' => 'Comment',
+    'comment_shortcut_hint' => 'Ctrl/⌘ + Enter to send · @ to mention',
+    'comment_mention_none' => 'No matching people',
+    'comment_delete_thread_confirm' => 'Delete this comment and all its replies?',
+    'comment_updated' => 'Comment updated',
+    'comment_update_error' => 'The comment could not be updated.',
+    'comment_resolved_toast' => 'Thread resolved',
+    'comment_reopened_toast' => 'Thread reopened',
+    'comment_resolve_error' => 'The thread status could not be changed.',
 ];
