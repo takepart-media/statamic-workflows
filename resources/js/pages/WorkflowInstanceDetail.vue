@@ -159,74 +159,15 @@
 
             <section v-if="content.length" :class="progressLayout.content">
                 <h2 class="mb-2.5 text-base font-semibold text-gray-700 dark:text-gray-200">{{ __('workflows::messages.content') }}</h2>
-                <div class="space-y-4">
-                    <div
-                        v-for="(block, i) in content"
-                        :key="block.uuid || i"
-                        :id="`passage-${block.uuid}`"
-                        :data-ref="block.uuid"
-                        class="rounded-lg border border-gray-100 p-3 dark:border-gray-800"
-                    >
-                        <!-- Passage header: fieldset handle + reference uuid. Developer
-                             metadata — it only helps when mapping a passage back to the
-                             blueprint or a comment ref, so it is super-admin-only, and the
-                             whole row goes with it rather than leaving an empty strip above
-                             the text. -->
-                        <div v-if="isSuper" class="mb-2 flex items-center gap-2">
-                            <code class="rounded bg-gray-100 px-1.5 py-0.5 text-2xs text-gray-500 dark:bg-gray-800! dark:text-gray-400!">{{ block.handle }}</code>
-                            <span class="select-all font-mono text-2xs text-gray-300 dark:text-gray-600">{{ block.uuid }}</span>
-                        </div>
-
-                        <div
-                            v-if="block.kind === 'html'"
-                            class="fw-prose text-sm text-gray-700 dark:text-gray-300"
-                            :class="block.note ? 'rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700 dark:bg-amber-950/30' : ''"
-                            v-html="block.html"
-                        />
-                        <h3 v-else-if="block.kind === 'heading'" class="text-base font-semibold text-gray-900 dark:text-gray-100">
-                            {{ block.text }}
-                        </h3>
-                        <div v-else-if="block.kind === 'video'">
-                            <div v-if="block.embedUrl" class="relative aspect-video overflow-hidden rounded-lg bg-black">
-                                <iframe
-                                    :src="block.embedUrl"
-                                    class="absolute inset-0 h-full w-full"
-                                    frameborder="0"
-                                    allow="autoplay; fullscreen; picture-in-picture"
-                                    allowfullscreen
-                                />
-                            </div>
-                            <a v-else :href="block.url" :class="link" target="_blank" rel="noopener">{{ block.url }}</a>
-                        </div>
-                        <p v-else-if="block.kind === 'text'" class="text-sm text-gray-600 dark:text-gray-400">
-                            <span v-if="block.label" class="font-medium text-gray-700 dark:text-gray-300">{{ block.label }}: </span>{{ block.text }}
-                        </p>
-
-                        <!-- Comment button below the passage, not above it: you read first
-                             and comment second, and an action bar above the text pushed the
-                             content itself down the page. Still right-aligned, so it stays
-                             out of the reading column. Count and "new" pill travel with the
-                             button. -->
-                        <div class="mt-2 flex items-center justify-end gap-1.5">
-                            <Button
-                                variant="default"
-                                size="xs"
-                                icon="mail-chat-bubble-text"
-                                :text="__('workflows::messages.comments')"
-                                :title="__('workflows::messages.comments')"
-                                @click="openDrawer(block)"
-                            />
-                            <span
-                                v-if="commentCount(block.uuid)"
-                                class="rounded-full bg-gray-200 px-1.5 text-2xs font-semibold text-gray-700 dark:bg-gray-700! dark:text-gray-200!"
-                            >{{ commentCount(block.uuid) }}</span>
-                            <span
-                                v-if="hasNew(block.uuid)"
-                                class="rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white"
-                            >{{ __('workflows::messages.new') }}</span>
-                        </div>
-                    </div>
-                </div>
+                <ContentBlocks
+                    :blocks="content"
+                    commentable
+                    :show-handle="isSuper"
+                    :show-uuid="isSuper"
+                    :comment-count="commentCount"
+                    :has-new="hasNew"
+                    @comment="openDrawer"
+                />
             </section>
         </div>
 
@@ -634,6 +575,7 @@ import { Head } from '@statamic/cms/inertia';
 import WorkflowProgress from '../components/WorkflowProgress.vue';
 import VersionListing from '../components/VersionListing.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';
+import ContentBlocks from '../components/ContentBlocks.vue';
 // Only the registration is still needed here: it seeds the module-level colour
 // cache that WorkflowProgress reads through stateColor(). The page itself no
 // longer resolves a colour or a label — the bar does.
@@ -736,7 +678,6 @@ const progressLayout = computed(() =>
 );
 
 // Shared utility-class strings reused across the template.
-const link = 'text-blue-600 no-underline hover:underline';
 const row = 'border-b border-slate-100 py-2.5 text-sm';
 
 const pending = ref(null);
@@ -933,7 +874,7 @@ function closeHistory() {
 const drawer = ref({ open: false, block: null });
 const drawerComments = computed(() => (drawer.value.block ? commentsFor(drawer.value.block.uuid) : []));
 const drawerTitle = computed(() =>
-    drawer.value.block ? `${__('workflows::messages.comments')} — ${drawer.value.block.handle}` : __('workflows::messages.comments')
+    drawer.value.block ? `${__('workflows::messages.comments')} — ${drawer.value.block.label || drawer.value.block.handle}` : __('workflows::messages.comments')
 );
 
 // "New" = unread by the current user; the server computes `is_new` from the
@@ -1188,23 +1129,6 @@ async function submitComment() {
 </script>
 
 <style scoped>
-/* Minimal prose styling for the augmented Bard HTML rendered via v-html. */
-.fw-prose :deep(p) { margin: 0 0 0.75rem; line-height: 1.6; }
-.fw-prose :deep(p:last-child) { margin-bottom: 0; }
-.fw-prose :deep(h2),
-.fw-prose :deep(h3),
-.fw-prose :deep(h4) { margin: 1rem 0 0.5rem; font-weight: 600; line-height: 1.3; }
-.fw-prose :deep(ul),
-.fw-prose :deep(ol) { margin: 0 0 0.75rem; padding-inline-start: 1.25rem; }
-.fw-prose :deep(ul) { list-style: disc; }
-.fw-prose :deep(ol) { list-style: decimal; }
-.fw-prose :deep(li) { margin: 0.15rem 0; }
-.fw-prose :deep(a) { color: #2563eb; text-decoration: underline; }
-.fw-prose :deep(img) { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.5rem 0; }
-.fw-prose :deep(table) { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
-.fw-prose :deep(th),
-.fw-prose :deep(td) { border: 1px solid #e5e7eb; padding: 0.4rem 0.6rem; text-align: start; }
-
 /* Brief highlight when jumping to a referenced passage. */
 .fw-flash { animation: fw-flash 1.2s ease-out; }
 @keyframes fw-flash {

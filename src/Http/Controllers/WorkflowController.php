@@ -2135,7 +2135,7 @@ class WorkflowController extends CpController
 
         $uid = User::current()?->id();
         $seen = app(WorkflowCommentStore::class)->seenAt($uid, $id, $workflow);
-        $validRefs = collect(app(EntryContentPreview::class)->blocks($entry))
+        $validRefs = collect(app(EntryContentPreview::class)->blocks($entry, $workflow))
             ->pluck('uuid')
             ->map(fn ($uuid) => (string) $uuid)
             ->all();
@@ -2197,8 +2197,8 @@ class WorkflowController extends CpController
 
             if ($passageRefs !== []) {
                 $preview = app(EntryContentPreview::class);
-                $currentHashes = $preview->contentHashesForPassages($entry, $passageRefs);
-                $currentContainerHashes = $preview->containerHashesForPassages($entry, $passageRefs);
+                $currentHashes = $preview->contentHashesForPassages($entry, $passageRefs, $workflow);
+                $currentContainerHashes = $preview->containerHashesForPassages($entry, $passageRefs, $workflow);
             }
         }
 
@@ -2588,7 +2588,7 @@ class WorkflowController extends CpController
 
         $props = [
             'instance' => $instance,
-            'content' => app(EntryContentPreview::class)->blocks($entry),
+            'content' => app(EntryContentPreview::class)->blocks($entry, $workflow),
             'versions' => $this->entryVersions($entry, $workflow, $id),
             'canViewHistory' => $canViewHistory,
             'history' => $canViewHistory ? $this->entryHistory($id, $workflow) : [],
@@ -2695,7 +2695,7 @@ class WorkflowController extends CpController
             // reading view, so it is left alone.)
             $props['source'] = ($props['isSource'] || $sourceView === SourceViewRules::HIDDEN)
                 ? []
-                : app(EntryContentPreview::class)->blocks($source);
+                : app(EntryContentPreview::class)->blocks($source, $workflow);
             $props['sourceName'] = $this->siteName($source->locale());
             $props['sourceLang'] = strtoupper($this->siteGroup($source->locale())[1]);
             // Where the client falls back to if THIS version disappears from under
@@ -4993,15 +4993,15 @@ class WorkflowController extends CpController
         // comments (never flagged as stale / container-changed).
         // Two hashes are captured:
         //   • content_hash  — only the specific passage's payload
-        //   • container_hash — the whole surrounding Bard-field (siblings,
+        //   • container_hash — the whole surrounding container (siblings,
         //                      order, and their contents). Flips on "anything
         //                      else in this area changed after the comment".
         $contentHash = null;
         $containerHash = null;
         if ($entry && $passageRef !== null) {
             $preview = app(EntryContentPreview::class);
-            $contentHash = $preview->contentHashForPassage($entry, $passageRef);
-            $containerHash = $preview->containerHashForPassage($entry, $passageRef);
+            $contentHash = $preview->contentHashForPassage($entry, $passageRef, $workflow);
+            $containerHash = $preview->containerHashForPassage($entry, $passageRef, $workflow);
         }
 
         $comment = app(WorkflowCommentStore::class)->add([

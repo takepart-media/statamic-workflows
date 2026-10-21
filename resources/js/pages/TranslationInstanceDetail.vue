@@ -183,25 +183,9 @@
                             {{ __('workflows::messages.source') }}
                             <span class="ml-1 text-2xs font-medium uppercase text-gray-400">{{ sourceName }} · {{ sourceLang }}</span>
                         </h2>
-                        <div class="space-y-4">
-                            <div v-for="(block, i) in source" :key="`s-${block.uuid || i}`" class="rounded-lg border border-gray-100 p-3 dark:border-gray-800">
-                                <div class="mb-2 flex items-center gap-2">
-                                    <code class="rounded bg-gray-100 px-1.5 py-0.5 text-2xs text-gray-500 dark:bg-gray-800! dark:text-gray-400!">{{ block.handle }}</code>
-                                </div>
-                                <div v-if="block.kind === 'html'" class="fw-prose text-sm text-gray-700 dark:text-gray-300" v-html="block.html" />
-                                <h3 v-else-if="block.kind === 'heading'" class="text-base font-semibold text-gray-900 dark:text-gray-100">{{ block.text }}</h3>
-                                <div v-else-if="block.kind === 'video'">
-                                    <div v-if="block.embedUrl" class="relative aspect-video overflow-hidden rounded-lg bg-black">
-                                        <iframe :src="block.embedUrl" class="absolute inset-0 h-full w-full" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen />
-                                    </div>
-                                    <a v-else :href="block.url" class="text-blue-600 hover:underline" target="_blank" rel="noopener">{{ block.url }}</a>
-                                </div>
-                                <p v-else-if="block.kind === 'text'" class="text-sm text-gray-600 dark:text-gray-400">
-                                    <span v-if="block.label" class="font-medium text-gray-700 dark:text-gray-300">{{ block.label }}: </span>{{ block.text }}
-                                </p>
-                            </div>
-                            <p v-if="!source.length" class="text-sm text-gray-400">—</p>
-                        </div>
+                        <ContentBlocks :blocks="source" :anchors="false" show-handle key-prefix="s-">
+                            <template #empty><p class="text-sm text-gray-400">—</p></template>
+                        </ContentBlocks>
                     </div>
 
                     <div>
@@ -253,42 +237,17 @@
                             </p>
                         </div>
 
-                        <div v-else class="space-y-4">
-                            <div
-                                v-for="(block, i) in content"
-                                :key="block.uuid || i"
-                                :id="`passage-${block.uuid}`"
-                                :data-ref="block.uuid"
-                                class="rounded-lg border border-gray-100 p-3 dark:border-gray-800"
-                            >
-                                <div class="mb-2 flex items-center gap-2">
-                                    <code class="rounded bg-gray-100 px-1.5 py-0.5 text-2xs text-gray-500 dark:bg-gray-800! dark:text-gray-400!">{{ block.handle }}</code>
-                                    <button
-                                        type="button"
-                                        class="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-gray-200 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700! dark:text-gray-300! dark:hover:bg-gray-800!"
-                                        :title="__('workflows::messages.comments')"
-                                        @click="openDrawer(block)"
-                                    >
-                                        <Icon name="mail-chat-bubble-text" class="size-3.5" />
-                                        {{ __('workflows::messages.comments') }}
-                                        <span v-if="commentCount(block.uuid)" class="rounded-full bg-gray-200 px-1.5 text-2xs font-semibold text-gray-700 dark:bg-gray-700! dark:text-gray-200!">{{ commentCount(block.uuid) }}</span>
-                                        <span v-if="hasNew(block.uuid)" class="rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white">{{ __('workflows::messages.new') }}</span>
-                                    </button>
-                                </div>
-                                <div v-if="block.kind === 'html'" class="fw-prose text-sm text-gray-700 dark:text-gray-300" v-html="block.html" />
-                                <h3 v-else-if="block.kind === 'heading'" class="text-base font-semibold text-gray-900 dark:text-gray-100">{{ block.text }}</h3>
-                                <div v-else-if="block.kind === 'video'">
-                                    <div v-if="block.embedUrl" class="relative aspect-video overflow-hidden rounded-lg bg-black">
-                                        <iframe :src="block.embedUrl" class="absolute inset-0 h-full w-full" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen />
-                                    </div>
-                                    <a v-else :href="block.url" class="text-blue-600 hover:underline" target="_blank" rel="noopener">{{ block.url }}</a>
-                                </div>
-                                <p v-else-if="block.kind === 'text'" class="text-sm text-gray-600 dark:text-gray-400">
-                                    <span v-if="block.label" class="font-medium text-gray-700 dark:text-gray-300">{{ block.label }}: </span>{{ block.text }}
-                                </p>
-                            </div>
-                            <p v-if="!content.length" class="text-sm italic text-gray-400">—</p>
-                        </div>
+                        <ContentBlocks
+                            v-else
+                            :blocks="content"
+                            commentable
+                            show-handle
+                            :comment-count="commentCount"
+                            :has-new="hasNew"
+                            @comment="openDrawer"
+                        >
+                            <template #empty><p class="text-sm italic text-gray-400">—</p></template>
+                        </ContentBlocks>
                     </div>
                 </div>
             </section>
@@ -605,6 +564,7 @@ import { Alert, Avatar, Badge, Button, Icon, Input, Modal, ModalTitle, Select, S
 import { Head } from '@statamic/cms/inertia';
 import WorkflowProgress from '../components/WorkflowProgress.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';
+import ContentBlocks from '../components/ContentBlocks.vue';
 // Only the registration is still needed here: it seeds the module-level colour
 // cache that WorkflowProgress reads through stateColor(). The page itself no
 // longer resolves a colour or a label — the bar does.
@@ -880,7 +840,7 @@ const items = ref([...props.comments]);
 const draft = ref({ ref: null, body: '', saving: false });
 const drawer = ref({ open: false, block: null });
 const drawerComments = computed(() => (drawer.value.block ? commentsFor(drawer.value.block.uuid) : []));
-const drawerTitle = computed(() => (drawer.value.block ? `${__('workflows::messages.comments')} — ${drawer.value.block.handle}` : __('workflows::messages.comments')));
+const drawerTitle = computed(() => (drawer.value.block ? `${__('workflows::messages.comments')} — ${drawer.value.block.label || drawer.value.block.handle}` : __('workflows::messages.comments')));
 function isNew(comment) { return !!comment.is_new; }
 function commentsFor(uuid) { return items.value.filter((c) => c.ref?.uuid === uuid); }
 function commentCount(uuid) { return commentsFor(uuid).length; }
@@ -1069,13 +1029,3 @@ async function del(url) {
 }
 </script>
 
-<style scoped>
-.fw-prose :deep(p) { margin: 0 0 0.75rem; line-height: 1.6; }
-.fw-prose :deep(p:last-child) { margin-bottom: 0; }
-.fw-prose :deep(h2), .fw-prose :deep(h3), .fw-prose :deep(h4) { margin: 1rem 0 0.5rem; font-weight: 600; line-height: 1.3; }
-.fw-prose :deep(ul), .fw-prose :deep(ol) { margin: 0 0 0.75rem; padding-inline-start: 1.25rem; }
-.fw-prose :deep(ul) { list-style: disc; }
-.fw-prose :deep(ol) { list-style: decimal; }
-.fw-prose :deep(a) { color: #2563eb; text-decoration: underline; }
-.fw-prose :deep(img) { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.5rem 0; }
-</style>
