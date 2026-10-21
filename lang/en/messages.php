@@ -18,6 +18,8 @@ return [
     'history_open' => 'Show history',
     'no_history' => 'No history yet.',
     'comments' => 'Comments',
+    'content_technical_details' => 'Technical details',
+    'content_structure_comments' => 'Comments on the section “:label”',
     'new' => 'new',
     'delete' => 'Delete',
     'no_comments' => 'No comments yet.',

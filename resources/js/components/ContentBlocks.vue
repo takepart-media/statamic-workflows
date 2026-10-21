@@ -1,135 +1,147 @@
 <template>
-    <!-- Read-only content preview of an entry: the flat block list from
-         EntryContentPreview, nested by `depth`. A `fields` block is a structural
-         node (Bard set, Replicator/Grid row, Group) with its own short values;
-         its rich children (Bard text, Markdown, nested rows) follow as blocks one
-         level deeper, indented with a rule on the left — the tree reads at a
-         glance without boxes in boxes. Every block keeps `id="passage-<uuid>"`
-         and `data-ref`: comment links and the history handoff jump there. -->
-    <div class="space-y-3">
+    <!-- Read-only content preview of an entry, as a reading flow: it should look
+         like the page, not like the blueprint. No boxes, no set headers, no
+         indentation — passages follow each other separated by space only, and
+         `depth` is ignored for display (readingBlocks() drops structural nodes
+         that frame nothing). Every passage keeps `id="passage-<uuid>"` and
+         `data-ref`: comment links and the history handoff jump there. -->
+    <div class="space-y-6">
         <div
-            v-for="(block, i) in blocks"
+            v-for="(block, i) in visibleBlocks"
             :key="blockKey(block, i, keyPrefix)"
             :id="anchors ? passageId(block) : undefined"
             :data-ref="anchors ? block.uuid : undefined"
-            :style="indentStyle(block)"
-            class="rounded-lg border border-gray-100 dark:border-gray-800"
-            :class="[
-                blockDepth(block) > 0 ? 'border-s-2 border-s-gray-300 dark:border-s-gray-600' : '',
-                isHeaderOnly(block) ? 'px-3 py-2' : 'p-3',
-            ]"
+            class="fw-passage group relative flex items-start gap-3 rounded-md"
         >
-            <!-- Developer metadata: the handle (set type / field) and the passage
-                 ref. Only helps when mapping a passage back to the blueprint or a
-                 comment, so the parent decides who sees it. -->
-            <div v-if="showHandle || showUuid" class="mb-2 flex items-center gap-2">
-                <code v-if="showHandle" class="rounded bg-gray-100 px-1.5 py-0.5 text-2xs text-gray-500 dark:bg-gray-800! dark:text-gray-400!">{{ block.handle }}</code>
-                <span v-if="showUuid" class="select-all font-mono text-2xs text-gray-300 dark:text-gray-600">{{ block.uuid }}</span>
-            </div>
-
-            <!-- Structural node: its label heads the block (and, without own
-                 values, is all there is — the children below carry the content). -->
-            <div v-if="block.kind === 'fields'" class="flex items-center gap-2">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ blockTitle(block) }}</h3>
-                <div v-if="commentable && isHeaderOnly(block)" class="ml-auto">
-                    <slot name="comment" :block="block">
-                        <CommentAction :block="block" :count="count(block)" :fresh="fresh(block)" @comment="$emit('comment', block)" />
-                    </slot>
+            <div class="min-w-0 flex-1">
+                <!-- Developer metadata behind the "technical details" switch: the
+                     handle (set type / field) and the passage ref. -->
+                <div v-if="technical" class="mb-1.5 flex flex-wrap items-center gap-2">
+                    <code class="rounded bg-gray-100 px-1.5 py-0.5 text-2xs text-gray-500 dark:bg-gray-800! dark:text-gray-400!">{{ block.handle }}</code>
+                    <span class="select-all font-mono text-2xs text-gray-400 dark:text-gray-500">{{ block.uuid }}</span>
                 </div>
-            </div>
 
-            <div
-                v-if="block.kind === 'html'"
-                class="fw-prose text-sm text-gray-700 dark:text-gray-300"
-                v-html="block.html"
-            />
+                <!-- A structural node without own values, kept only because it
+                     carries comments: a quiet anchor so they stay reachable. -->
+                <p v-if="isHeaderOnly(block)" class="text-xs italic text-gray-400 dark:text-gray-500">
+                    {{ __('workflows::messages.content_structure_comments', { label: blockTitle(block) }) }}
+                </p>
 
-            <div v-else-if="block.kind === 'fields' && !isHeaderOnly(block)" class="mt-2 space-y-2.5">
-                <div v-for="(item, j) in blockItems(block)" :key="j" class="text-sm">
-                    <p v-if="item.kind === 'text'" class="text-gray-600 dark:text-gray-400">
-                        <span v-if="item.label" class="font-medium text-gray-700 dark:text-gray-300">{{ item.label }}: </span>
-                        <span class="whitespace-pre-line">{{ item.text }}</span>
-                    </p>
+                <div
+                    v-else-if="block.kind === 'html'"
+                    class="fw-prose text-sm text-gray-800 dark:text-gray-200"
+                    v-html="block.html"
+                />
 
-                    <template v-else>
-                        <div v-if="item.label" class="mb-1 font-medium text-gray-700 dark:text-gray-300">{{ item.label }}</div>
+                <div v-else-if="block.kind === 'fields'" class="space-y-3">
+                    <div v-for="(item, j) in blockItems(block)" :key="j" class="text-sm">
+                        <h3
+                            v-if="itemDisplay(item) === 'heading'"
+                            class="text-base font-semibold leading-snug text-gray-900 dark:text-gray-100"
+                        >
+                            <span v-if="technical" class="me-1.5 font-mono text-2xs font-normal text-gray-400">{{ item.handle }}</span>{{ item.text }}
+                        </h3>
 
-                        <pre
-                            v-if="item.kind === 'code'"
-                            class="max-h-60 overflow-auto rounded-md bg-gray-50 p-2 font-mono text-xs text-gray-700 dark:bg-gray-900! dark:text-gray-300!"
-                        ><code>{{ item.code }}</code></pre>
+                        <p
+                            v-else-if="itemDisplay(item) === 'paragraph'"
+                            class="whitespace-pre-line leading-relaxed text-gray-800 dark:text-gray-200"
+                        >
+                            <span v-if="technical" class="me-1.5 font-mono text-2xs text-gray-400">{{ item.handle }}</span>{{ item.text }}
+                        </p>
 
-                        <div v-else-if="item.kind === 'video'">
-                            <div v-if="item.embedUrl" class="relative aspect-video overflow-hidden rounded-lg bg-black">
-                                <iframe
-                                    :src="item.embedUrl"
-                                    class="absolute inset-0 h-full w-full"
-                                    frameborder="0"
-                                    allow="autoplay; fullscreen; picture-in-picture"
-                                    allowfullscreen
-                                />
+                        <p v-else-if="itemDisplay(item) === 'labelled'" class="text-gray-800 dark:text-gray-200">
+                            <span class="text-xs text-gray-400 dark:text-gray-500">{{ itemLabel(item) }}:</span>
+                            <span v-if="technical" class="ms-1 font-mono text-2xs text-gray-400">{{ item.handle }}</span>
+                            {{ ' ' }}<span class="whitespace-pre-line">{{ item.text }}</span>
+                        </p>
+
+                        <template v-else>
+                            <div v-if="itemLabel(item) || technical" class="mb-1 text-xs text-gray-400 dark:text-gray-500">
+                                {{ itemLabel(item) }}
+                                <span v-if="technical" class="font-mono text-2xs">{{ item.handle }}</span>
                             </div>
-                            <a v-else :href="item.url" :class="link" target="_blank" rel="noopener">{{ item.url }}</a>
-                        </div>
 
-                        <div v-else-if="item.kind === 'media'" class="flex flex-wrap gap-2">
-                            <template v-for="(asset, k) in item.assets || []" :key="k">
-                                <a
-                                    v-if="assetThumb(asset)"
-                                    :href="asset.url || undefined"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="block w-32 overflow-hidden rounded-md border border-gray-100 dark:border-gray-800"
-                                    :title="asset.basename"
-                                >
-                                    <img :src="assetThumb(asset)" :alt="asset.basename" class="h-20 w-full object-cover" loading="lazy" />
-                                    <span class="block truncate px-1.5 py-0.5 text-2xs text-gray-500 dark:text-gray-400">{{ asset.basename }}</span>
-                                </a>
-                                <component
-                                    :is="asset.url ? 'a' : 'span'"
-                                    v-else
-                                    :href="asset.url || undefined"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2 py-0.5 text-xs text-gray-600 dark:border-gray-700! dark:text-gray-300!"
-                                >
-                                    <Icon name="file-content-list" class="size-3.5" />
-                                    {{ asset.basename }}
-                                </component>
-                            </template>
-                        </div>
-                    </template>
+                            <pre
+                                v-if="item.kind === 'code'"
+                                class="max-h-60 overflow-auto rounded-md bg-gray-50 p-2 font-mono text-xs text-gray-700 dark:bg-gray-900! dark:text-gray-300!"
+                            ><code>{{ item.code }}</code></pre>
+
+                            <div v-else-if="item.kind === 'video'">
+                                <div v-if="item.embedUrl" class="relative aspect-video overflow-hidden rounded-lg bg-black">
+                                    <iframe
+                                        :src="item.embedUrl"
+                                        class="absolute inset-0 h-full w-full"
+                                        frameborder="0"
+                                        allow="autoplay; fullscreen; picture-in-picture"
+                                        allowfullscreen
+                                    />
+                                </div>
+                                <a v-else :href="item.url" :class="link" target="_blank" rel="noopener">{{ item.url }}</a>
+                            </div>
+
+                            <div v-else-if="item.kind === 'media'" class="flex flex-wrap gap-2">
+                                <template v-for="(asset, k) in item.assets || []" :key="k">
+                                    <a
+                                        v-if="assetThumb(asset)"
+                                        :href="asset.url || undefined"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="block max-w-xs overflow-hidden rounded-md"
+                                        :title="asset.basename"
+                                    >
+                                        <img :src="assetThumb(asset)" :alt="asset.basename" class="max-h-48 w-auto rounded-md object-cover" loading="lazy" />
+                                    </a>
+                                    <component
+                                        :is="asset.url ? 'a' : 'span'"
+                                        v-else
+                                        :href="asset.url || undefined"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2 py-0.5 text-xs text-gray-600 dark:border-gray-700! dark:text-gray-300!"
+                                    >
+                                        <Icon name="file-content-list" class="size-3.5" />
+                                        {{ asset.basename }}
+                                    </component>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             </div>
 
-            <!-- Comment button below the passage, not above it: you read first
-                 and comment second. Right-aligned, out of the reading column. A
-                 header-only node has it in its header row instead. -->
-            <div v-if="commentable && !isHeaderOnly(block)" class="mt-2 flex items-center justify-end gap-1.5">
+            <!-- Comment action in the right margin, out of the reading column.
+                 Quiet until the passage is hovered or focused (it stays in the tab
+                 order, so keyboard users reach it), always visible once there are
+                 comments. -->
+            <div
+                v-if="commentable"
+                class="fw-comment flex shrink-0 items-center gap-1.5"
+                :class="{ 'fw-comment--active': count(block) || fresh(block) }"
+            >
                 <slot name="comment" :block="block">
                     <CommentAction :block="block" :count="count(block)" :fresh="fresh(block)" @comment="$emit('comment', block)" />
                 </slot>
             </div>
         </div>
 
-        <slot v-if="!blocks.length" name="empty" />
+        <slot v-if="!visibleBlocks.length" name="empty" />
     </div>
 </template>
 
 <script setup>
-import { defineComponent, h } from 'vue';
+import { computed, defineComponent, h } from 'vue';
 import { Button, Icon } from '@statamic/cms/ui';
-import { assetThumb, blockDepth, blockItems, blockKey, blockTitle, indentStyle, isHeaderOnly, passageId } from './contentBlocks.js';
+import { assetThumb, blockItems, blockKey, blockTitle, isHeaderOnly, itemDisplay, itemLabel, passageId, readingBlocks } from './contentBlocks.js';
 
 const props = defineProps({
     blocks: { type: Array, default: () => [] },
-    // Show the comment button (+ count and "new" pill) on every block.
+    // Show the comment action (+ count and "new" pill) on every passage.
     commentable: { type: Boolean, default: false },
     // Render `id="passage-<uuid>"` / `data-ref` — off for a second column
     // showing another version, whose uuids would collide with this one's.
     anchors: { type: Boolean, default: true },
-    showHandle: { type: Boolean, default: false },
-    showUuid: { type: Boolean, default: false },
+    // Super-admin "technical details": field/set handles and passage uuids.
+    technical: { type: Boolean, default: false },
     // (uuid) => number / boolean — the page owns the comment list.
     commentCount: { type: Function, default: () => 0 },
     hasNew: { type: Function, default: () => false },
@@ -140,24 +152,30 @@ defineEmits(['comment']);
 
 const link = 'text-blue-600 no-underline hover:underline';
 
+// Structural nodes only survive with comments — and only where comments are
+// shown at all; the source column has none.
+const visibleBlocks = computed(() =>
+    readingBlocks(props.blocks, props.commentable ? (uuid) => props.commentCount(uuid) : () => 0),
+);
+
 function count(block) {
-    return props.commentCount(block.uuid) || 0;
+    return Number(props.commentCount(block.uuid)) || 0;
 }
 function fresh(block) {
     return !!props.hasNew(block.uuid);
 }
 
-// The default comment affordance: button, count, "new" pill.
+// The default comment affordance: a quiet icon button, count, "new" pill.
 const CommentAction = defineComponent({
     props: { block: Object, count: Number, fresh: Boolean },
     emits: ['comment'],
     setup(p, { emit }) {
         return () => [
             h(Button, {
-                variant: 'default',
+                variant: 'ghost',
                 size: 'xs',
                 icon: 'mail-chat-bubble-text',
-                text: __('workflows::messages.comments'),
+                'aria-label': __('workflows::messages.comments'),
                 title: __('workflows::messages.comments'),
                 onClick: () => emit('comment', p.block),
             }),
@@ -173,12 +191,38 @@ const CommentAction = defineComponent({
 </script>
 
 <style scoped>
+/* Comment action: hidden until hover / keyboard focus, always with comments,
+   and always on touch screens, which have no hover. */
+.fw-comment { opacity: 0; transition: opacity 120ms ease-out; }
+.fw-passage:hover .fw-comment,
+.fw-passage:focus-within .fw-comment,
+.fw-comment--active { opacity: 1; }
+@media (hover: none) { .fw-comment { opacity: 1; } }
+
+/* Jumping to a passage (comment link, history handoff): keep it clear of the
+   sticky header and flash it briefly. */
+.fw-passage { scroll-margin-top: 6rem; }
+.fw-passage:target,
+.fw-passage.fw-flash { animation: fw-passage-flash 1.6s ease-out; }
+@keyframes fw-passage-flash {
+    0% { background-color: rgb(254 240 138 / 0.7); }
+    100% { background-color: transparent; }
+}
+
 /* Minimal prose styling for the augmented Bard / Markdown HTML rendered via v-html. */
-.fw-prose :deep(p) { margin: 0 0 0.75rem; line-height: 1.6; }
+.fw-prose :deep(p) { margin: 0 0 0.75rem; line-height: 1.65; }
 .fw-prose :deep(p:last-child) { margin-bottom: 0; }
+.fw-prose :deep(h1),
 .fw-prose :deep(h2),
 .fw-prose :deep(h3),
 .fw-prose :deep(h4) { margin: 1rem 0 0.5rem; font-weight: 600; line-height: 1.3; }
+.fw-prose :deep(h1:first-child),
+.fw-prose :deep(h2:first-child),
+.fw-prose :deep(h3:first-child),
+.fw-prose :deep(h4:first-child) { margin-top: 0; }
+.fw-prose :deep(h1) { font-size: 1.25rem; }
+.fw-prose :deep(h2) { font-size: 1.125rem; }
+.fw-prose :deep(h3) { font-size: 1rem; }
 .fw-prose :deep(ul),
 .fw-prose :deep(ol) { margin: 0 0 0.75rem; padding-inline-start: 1.25rem; }
 .fw-prose :deep(ul) { list-style: disc; }

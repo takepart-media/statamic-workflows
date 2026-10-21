@@ -240,13 +240,18 @@ class ContentWalker
     {
         $label = $this->label($value, $handle);
         $augmented = $value->value();
+        $type = $value->fieldtype()->handle();
+        // Field handle + fieldtype: naming, not content. The reading view uses
+        // them to tell a headline from a button text from body copy; hashPayload()
+        // strips them, so they never mark a passage as changed.
+        $meta = ['handle' => $handle, 'field' => $type];
 
-        switch ($value->fieldtype()->handle()) {
+        switch ($type) {
             case 'text':
             case 'textarea':
                 $text = trim((string) $this->plain($augmented));
 
-                return $text === '' ? null : ['label' => $label, 'kind' => 'text', 'text' => $text];
+                return $text === '' ? null : ['label' => $label, 'kind' => 'text', 'text' => $text] + $meta;
 
             case 'code':
                 $code = is_object($augmented) && method_exists($augmented, 'toArray')
@@ -254,7 +259,7 @@ class ContentWalker
                     : (is_array($augmented) ? ($augmented['code'] ?? '') : $augmented);
                 $code = rtrim((string) $code);
 
-                return trim($code) === '' ? null : ['label' => $label, 'kind' => 'code', 'code' => $code];
+                return trim($code) === '' ? null : ['label' => $label, 'kind' => 'code', 'code' => $code] + $meta;
 
             case 'video':
                 $url = trim((string) $this->plain($augmented));
@@ -265,12 +270,12 @@ class ContentWalker
 
                 [$embedUrl, $provider] = $this->videoEmbed($url);
 
-                return ['label' => $label, 'kind' => 'video', 'url' => $url, 'embedUrl' => $embedUrl, 'provider' => $provider];
+                return ['label' => $label, 'kind' => 'video', 'url' => $url, 'embedUrl' => $embedUrl, 'provider' => $provider] + $meta;
 
             case 'assets':
                 $assets = $this->assets($augmented);
 
-                return $assets === [] ? null : ['label' => $label, 'kind' => 'media', 'assets' => $assets];
+                return $assets === [] ? null : ['label' => $label, 'kind' => 'media', 'assets' => $assets] + $meta;
         }
 
         return null;

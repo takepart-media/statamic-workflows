@@ -18,6 +18,8 @@ return [
     'history_open' => 'Verlauf anzeigen',
     'no_history' => 'Noch kein Verlauf.',
     'comments' => 'Kommentare',
+    'content_technical_details' => 'Technische Details',
+    'content_structure_comments' => 'Kommentare zum Abschnitt „:label“',
     'new' => 'neu',
     'delete' => 'Löschen',
     'no_comments' => 'Noch keine Kommentare.',

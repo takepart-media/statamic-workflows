@@ -158,12 +158,19 @@
             <WorkflowProgress :steps="steps" :orientation="progressOrientation" :class="progressLayout.bar" />
 
             <section v-if="content.length" :class="progressLayout.content">
-                <h2 class="mb-2.5 text-base font-semibold text-gray-700 dark:text-gray-200">{{ __('workflows::messages.content') }}</h2>
+                <div class="mb-2.5 flex items-center gap-2">
+                    <h2 class="text-base font-semibold text-gray-700 dark:text-gray-200">{{ __('workflows::messages.content') }}</h2>
+                    <!-- Super admins only: field handles + passage uuids, remembered
+                         per browser. Off by default — editors read the content. -->
+                    <label v-if="isSuper" class="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <Switch size="xs" v-model="technical" />
+                        {{ __('workflows::messages.content_technical_details') }}
+                    </label>
+                </div>
                 <ContentBlocks
                     :blocks="content"
                     commentable
-                    :show-handle="isSuper"
-                    :show-uuid="isSuper"
+                    :technical="isSuper && technical"
                     :comment-count="commentCount"
                     :has-new="hasNew"
                     @comment="openDrawer"
@@ -569,13 +576,14 @@
 </template>
 
 <script setup>
-import { ref, computed, getCurrentInstance, onUnmounted } from 'vue';
-import { Avatar, Badge, Button, Icon, Input, Modal, ModalTitle, Select, SplitterGroup, SplitterPanel, SplitterResizeHandle, Stack } from '@statamic/cms/ui';
+import { ref, computed, getCurrentInstance, onUnmounted, watch } from 'vue';
+import { Avatar, Badge, Button, Icon, Input, Modal, ModalTitle, Select, SplitterGroup, SplitterPanel, SplitterResizeHandle, Stack, Switch } from '@statamic/cms/ui';
 import { Head } from '@statamic/cms/inertia';
 import WorkflowProgress from '../components/WorkflowProgress.vue';
 import VersionListing from '../components/VersionListing.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';
 import ContentBlocks from '../components/ContentBlocks.vue';
+import { readTechnical, writeTechnical } from '../components/contentBlocks.js';
 // Only the registration is still needed here: it seeds the module-level colour
 // cache that WorkflowProgress reads through stateColor(). The page itself no
 // longer resolves a colour or a label — the bar does.
@@ -605,8 +613,8 @@ const props = defineProps({
     assigneeUrl: { type: String, default: '' },
     assignableUsers: { type: Array, default: () => [] },
     canSetState: { type: Boolean, default: false },
-    // Strict super admin. Gates the developer metadata in the passage headers
-    // (fieldset handle, passage uuid) — defaults to false so a caller that
+    // Strict super admin. Gates the "technical details" switch over the content
+    // (field handles, passage uuids) — defaults to false so a caller that
     // forgets the prop hides it rather than leaking it.
     isSuper: { type: Boolean, default: false },
     // Whether the assignee picker is offered — `metadata.assigner_groups`.
@@ -629,6 +637,11 @@ const props = defineProps({
     refreshAfterMinutes: { type: Number, default: null },
     statusUrl: { type: String, default: '' },
 });
+
+// Super-admin "technical details" over the content (field handles, passage
+// uuids). Remembered per browser; storage failures just mean "off".
+const technical = ref(readTechnical());
+watch(technical, (value) => writeTechnical(value));
 
 const preview = computed(() => previewPresentation(props.instance.subject.preview_mode));
 

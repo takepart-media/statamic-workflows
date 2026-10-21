@@ -183,7 +183,7 @@
                             {{ __('workflows::messages.source') }}
                             <span class="ml-1 text-2xs font-medium uppercase text-gray-400">{{ sourceName }} · {{ sourceLang }}</span>
                         </h2>
-                        <ContentBlocks :blocks="source" :anchors="false" show-handle key-prefix="s-">
+                        <ContentBlocks :blocks="source" :anchors="false" :technical="isSuper && technical" key-prefix="s-">
                             <template #empty><p class="text-sm text-gray-400">—</p></template>
                         </ContentBlocks>
                     </div>
@@ -203,12 +203,18 @@
                                  back. Session-only on purpose — the rule says how the page
                                  STARTS, what happens after is the reader's. Under `hidden` there
                                  is no source to reveal, so no button either. -->
+                            <!-- Super admins only: field handles + passage uuids in both
+                                 columns, remembered per browser. Off by default. -->
+                            <label v-if="isSuper" class="ml-auto flex cursor-pointer items-center gap-1.5 text-xs font-normal text-gray-500 dark:text-gray-400">
+                                <Switch size="xs" v-model="technical" />
+                                {{ __('workflows::messages.content_technical_details') }}
+                            </label>
                             <Button
                                 v-if="sourceView === 'collapsed' && sourceAvailable"
                                 :icon="sourceOpen ? 'eye-slash' : 'eye'"
                                 variant="ghost"
                                 size="xs"
-                                class="ml-auto"
+                                :class="{ 'ml-auto': !isSuper }"
                                 :text="sourceOpen ? __('workflows::messages.source_hide') : __('workflows::messages.source_show')"
                                 @click="sourceOpen = !sourceOpen"
                             />
@@ -241,7 +247,7 @@
                             v-else
                             :blocks="content"
                             commentable
-                            show-handle
+                            :technical="isSuper && technical"
                             :comment-count="commentCount"
                             :has-new="hasNew"
                             @comment="openDrawer"
@@ -559,12 +565,13 @@
 </template>
 
 <script setup>
-import { ref, computed, getCurrentInstance, onUnmounted } from 'vue';
-import { Alert, Avatar, Badge, Button, Icon, Input, Modal, ModalTitle, Select, SplitterGroup, SplitterPanel, SplitterResizeHandle, Stack } from '@statamic/cms/ui';
+import { ref, computed, getCurrentInstance, onUnmounted, watch } from 'vue';
+import { Alert, Avatar, Badge, Button, Icon, Input, Modal, ModalTitle, Select, SplitterGroup, SplitterPanel, SplitterResizeHandle, Stack, Switch } from '@statamic/cms/ui';
 import { Head } from '@statamic/cms/inertia';
 import WorkflowProgress from '../components/WorkflowProgress.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';
 import ContentBlocks from '../components/ContentBlocks.vue';
+import { readTechnical, writeTechnical } from '../components/contentBlocks.js';
 // Only the registration is still needed here: it seeds the module-level colour
 // cache that WorkflowProgress reads through stateColor(). The page itself no
 // longer resolves a colour or a label — the bar does.
@@ -634,6 +641,9 @@ const props = defineProps({
     assigneeUrl: { type: String, default: '' },
     assignableUsers: { type: Array, default: () => [] },
     canSetState: { type: Boolean, default: false },
+    // Strict super admin. Gates the "technical details" switch over the content
+    // (field handles, passage uuids) — false hides it.
+    isSuper: { type: Boolean, default: false },
     // Whether the assignee picker is offered — `metadata.assigner_groups`.
     canAssign: { type: Boolean, default: false },
     stateUrl: { type: String, default: '' },
@@ -657,6 +667,11 @@ const props = defineProps({
     refreshAfterMinutes: { type: Number, default: null },
     statusUrl: { type: String, default: '' },
 });
+
+// Super-admin "technical details" over the content (field handles, passage
+// uuids). Remembered per browser; storage failures just mean "off".
+const technical = ref(readTechnical());
+watch(technical, (value) => writeTechnical(value));
 
 const preview = computed(() => previewPresentation(props.instance.subject.preview_mode));
 

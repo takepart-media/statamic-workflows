@@ -2742,12 +2742,15 @@ class WorkflowController extends CpController
             $props['qsNotes'] = $this->qsNotesFor($id, $workflow);
             $props['qsNotesHighlight'] = $this->qsNotesHighlight($raw, $current);
             $props['plainLanguageFailure'] = $this->plainLanguageFailureFor($id, $workflow, $raw, $current);
+            // Gates the "technical details" switch (field handle + passage uuid)
+            // in the content columns — see the default summary below.
+            $props['isSuper'] = $this->isSuperAdmin();
 
             return ['WorkflowsTranslationInstance', $props];
         }
 
-        // Only the default summary uses this: it gates the developer metadata in
-        // the passage headers (fieldset handle + passage uuid). Deliberately the
+        // Gates the "technical details" switch over the content (field handle +
+        // passage uuid). Deliberately the
         // strict isSuperAdmin() and not isPrivilegedUser() — an admins-group
         // editor has no use for a blueprint handle either.
         $props['isSuper'] = $this->isSuperAdmin();

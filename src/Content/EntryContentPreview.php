@@ -165,7 +165,7 @@ class EntryContentPreview
 
     /**
      * The content-carrying part of a block. Position and naming (uuid,
-     * container, path, depth, handle, labels) stay out, so moving a passage or
+     * container, path, depth, handles, fieldtypes, labels) stay out, so moving a passage or
      * renaming a field in the blueprint keeps the hash; so do values derived
      * from the content (embed URLs, thumbnails), which can change with the
      * addon's own code.
@@ -179,7 +179,7 @@ class EntryContentPreview
 
         if (isset($block['items']) && is_array($block['items'])) {
             $block['items'] = array_map(function ($item) {
-                unset($item['label'], $item['embedUrl'], $item['provider'], $item['thumb']);
+                unset($item['label'], $item['handle'], $item['field'], $item['embedUrl'], $item['provider'], $item['thumb']);
 
                 if (isset($item['assets']) && is_array($item['assets'])) {
                     $item['assets'] = array_map(function ($asset) {

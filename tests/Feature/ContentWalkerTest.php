@@ -129,7 +129,7 @@ it('walks nested replicators, groups and bard into a flat list with depths', fun
 
     // The section's select and hidden anchor are no items; the group carries its text.
     expect($byUuid['sec-1']['items'])->toBe([])
-        ->and($byUuid['row-teaser.box']['items'])->toBe([['label' => 'Box title', 'kind' => 'text', 'text' => 'Teaser title']])
+        ->and($byUuid['row-teaser.box']['items'])->toBe([['label' => 'Box title', 'kind' => 'text', 'text' => 'Teaser title', 'handle' => 'title', 'field' => 'text']])
         ->and($byUuid['row-code']['items'][0])->toMatchArray(['kind' => 'code', 'code' => '<b>hi</b>'])
         ->and($byUuid['row-video']['items'][0])->toMatchArray([
             'kind' => 'video',
@@ -195,6 +195,17 @@ it('hashes passages stably and flips only the edited one', function () {
         ->and($after['sec-1'])->toBe($first['sec-1'])
         ->and($preview->containerHashForPassage($edited, 'row-teaser.box', 'simple'))->toBe($containerBefore)
         ->and($preview->contentHashForPassage($edited, 'missing', 'simple'))->toBeNull();
+});
+
+it('keeps item handle and fieldtype out of the passage hash', function () {
+    $preview = app(EntryContentPreview::class);
+    $block = ['uuid' => 'x', 'kind' => 'fields', 'items' => [['label' => 'Title', 'kind' => 'text', 'text' => 'Hello']]];
+    $withMeta = $block;
+    $withMeta['items'][0] += ['handle' => 'headline', 'field' => 'text'];
+
+    // Hashes stored before items carried `handle`/`field` stay valid.
+    expect($preview->hashPayload($withMeta))->toBe($preview->hashPayload($block))
+        ->and($preview->hashPayload($withMeta)['items'][0])->toBe(['kind' => 'text', 'text' => 'Hello']);
 });
 
 it('reads the workflow content fields, else auto-detects', function () {
