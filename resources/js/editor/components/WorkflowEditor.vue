@@ -250,6 +250,11 @@ const props = defineProps({
     progressOrientationOptions: { type: Array, default: () => [] },
     collectionOptions: { type: Array, default: () => [] },
     collectionOwners: { type: Object, default: () => ({}) },
+    // The "content" section: {collection: [{handle, label, type, supported,
+    // blueprints}]} and {collection: auto-detected handle|null}, for every
+    // collection of the project (ContentFieldCatalog).
+    contentFieldOptions: { type: Object, default: () => ({}) },
+    contentFieldAuto: { type: Object, default: () => ({}) },
     groupOptions: { type: Array, default: () => [] },
     roleOptions: { type: Array, default: () => [] },
     userOptions: { type: Array, default: () => [] },
@@ -306,6 +311,7 @@ const validation = useValidation(api, {
     t: (key, replace) => __(`workflows::messages.${key}`, replace),
     get reservedPlaces() { return props.reservedPlaces; },
     get reservedTransitions() { return props.reservedTransitions; },
+    get contentFieldOptions() { return props.contentFieldOptions; },
 }, { server: serverValidation });
 
 watch(() => api.dirty.value, (dirty) => emit('dirty-change', dirty), { immediate: true });

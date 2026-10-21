@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handleProblem, mapCreateErrors, slugifyHandle, uniqueHandle } from '../createWorkflowForm.js';
+import { buildCreatePayload, handleProblem, mapCreateErrors, picksContentFields, slugifyHandle, uniqueHandle } from '../createWorkflowForm.js';
 
 const opts = { pattern: '^[a-z][a-z0-9_]*$', max: 20, reserved: ['create', 'install'], taken: new Set(['posts']) };
 
@@ -56,5 +56,54 @@ describe('mapCreateErrors', () => {
         expect(mapCreateErrors({ errors: { 'definition.places': ['bad'] } }).general)
             .toEqual([{ path: 'places', message: 'bad' }]);
         expect(mapCreateErrors({ message: 'boom' }).general).toEqual([{ path: '', message: 'boom' }]);
+    });
+});
+
+describe('content_fields', () => {
+    const form = (patch = {}) => ({
+        from: 'blank',
+        template: 'postmanager',
+        copy_of: 'news',
+        label: ' News ',
+        handle: ' news_2 ',
+        keepCollections: true,
+        collections: ['pages'],
+        contentFields: [],
+        ...patch,
+    });
+
+    it('offers the picker for blank, and for a source only with changed collections', () => {
+        expect(picksContentFields(form())).toBe(true);
+        expect(picksContentFields(form({ from: 'example' }))).toBe(false);
+        expect(picksContentFields(form({ from: 'copy', keepCollections: false }))).toBe(true);
+    });
+
+    it('blank: sends a picked list in order, omits an empty one', () => {
+        expect(buildCreatePayload(form())).toEqual({ handle: 'news_2', label: 'News', from: 'blank', collections: ['pages'] });
+        expect(buildCreatePayload(form({ contentFields: ['sections', 'intro'] })).content_fields).toEqual(['sections', 'intro']);
+    });
+
+    it('template/copy: omitted while the source collections stay, always sent once they change', () => {
+        const kept = buildCreatePayload(form({ from: 'example', contentFields: ['sections'] }));
+        expect(kept).toEqual({ handle: 'news_2', label: 'News', from: 'example', template: 'postmanager' });
+        expect(buildCreatePayload(form({ from: 'copy', keepCollections: false })))
+            .toEqual({ handle: 'news_2', label: 'News', from: 'copy', copy_of: 'news', collections: ['pages'], content_fields: [] });
+        expect(buildCreatePayload(form({ from: 'copy', keepCollections: false, contentFields: ['intro'] })).content_fields).toEqual(['intro']);
+    });
+
+    it('maps content_fields errors onto the picker', () => {
+        const out = mapCreateErrors({
+            message: 'x',
+            errors: {
+                'content_fields.1': ['duplicate'],
+                content_fields: ['unknown field'],
+            },
+            definition_errors: [
+                { path: 'metadata.content_fields', message: 'unknown field' },
+                { path: 'places', message: 'other' },
+            ],
+        });
+        expect(out.fields).toEqual({ content_fields: ['duplicate', 'unknown field'] });
+        expect(out.general).toEqual([{ path: 'places', message: 'other' }]);
     });
 });

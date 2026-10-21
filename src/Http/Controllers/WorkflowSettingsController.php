@@ -13,6 +13,7 @@ use Statamic\Facades\Role;
 use Statamic\Facades\User;
 use Statamic\Facades\UserGroup;
 use Statamic\Http\Controllers\CP\CpController;
+use TakepartMedia\Workflows\Content\ContentFieldCatalog;
 use TakepartMedia\Workflows\Http\Controllers\Concerns\WorkflowControllerHelpers;
 use TakepartMedia\Workflows\Mail\MailTypes;
 use TakepartMedia\Workflows\Translation\DeeplConfig;
@@ -130,6 +131,11 @@ class WorkflowSettingsController extends CpController
                     ->values()
                     ->all(),
                 'collections' => $installer->projectCollections(),
+                // The content-field picker: top-level fields and the
+                // auto-detected one per collection, for EVERY collection so the
+                // picker follows the collection choice without a round trip.
+                'contentFieldOptions' => (object) ContentFieldCatalog::fieldsFor($installer->projectCollections()),
+                'contentFieldAuto' => (object) ContentFieldCatalog::autoDetectFor($installer->projectCollections()),
                 // So the modal can check a handle before sending it; the
                 // endpoint checks again (and alone knows what is taken).
                 'handle_pattern' => '^[a-z][a-z0-9_]*$',
@@ -144,7 +150,7 @@ class WorkflowSettingsController extends CpController
      * a copy of an existing one (`copy_of`). Super-admin-only.
      *
      * Body: `{handle, label?, from?: blank|example|copy, template?, copy_of?,
-     * collections?: [], backfill?: bool}`. Validation problems come back
+     * collections?: [], content_fields?: [], backfill?: bool}`. Validation problems come back
      * Laravel-style — 422 `{message, errors: {field: [messages]}}` — with the
      * definition's own problems (should a template not validate in this
      * project, e.g. an example naming a site the project lacks) under
@@ -231,15 +237,47 @@ class WorkflowSettingsController extends CpController
             }
         }
 
+        // `metadata.content_fields`. Null keeps a template's or a copy's own
+        // list; an empty one means "automatic". Only the shape is checked
+        // here — whether the fields exist in the collections is the writer's
+        // call, and its answer is pinned to this field below.
+        $contentFields = null;
+
+        if ($request->has('content_fields')) {
+            $input = $request->input('content_fields');
+
+            if (! is_array($input) || ! array_is_list($input)) {
+                $errors['content_fields'][] = $this->t('writer_content_fields_not_list');
+            } else {
+                $contentFields = [];
+
+                foreach ($input as $index => $field) {
+                    if (! is_string($field) || trim($field) === '') {
+                        $errors["content_fields.{$index}"][] = $this->t('writer_content_fields_not_list');
+
+                        continue;
+                    }
+
+                    if (in_array(trim($field), $contentFields, true)) {
+                        $errors["content_fields.{$index}"][] = $this->t('writer_content_fields_duplicate', ['field' => trim($field)]);
+
+                        continue;
+                    }
+
+                    $contentFields[] = trim($field);
+                }
+            }
+        }
+
         if ($errors !== []) {
             return $this->createErrorResponse($errors);
         }
 
         try {
             $definition = match ($from) {
-                'example' => $scaffolder->fromExample($template, $handle, $label, $collections),
-                'copy' => $scaffolder->copyOf($copyOf, $handle, $label, $collections),
-                default => $scaffolder->blank($handle, $label, $collections ?? []),
+                'example' => $scaffolder->fromExample($template, $handle, $label, $collections, $contentFields),
+                'copy' => $scaffolder->copyOf($copyOf, $handle, $label, $collections, $contentFields),
+                default => $scaffolder->blank($handle, $label, $collections ?? [], $contentFields),
             };
 
             app(WorkflowDefinitionWriter::class)->create($handle, $definition);
@@ -250,7 +288,13 @@ class WorkflowSettingsController extends CpController
             foreach ($list as $error) {
                 // A name clash found by the writer (a race with another
                 // request) is a handle problem, not a definition one.
-                $field = $error['path'] === 'name' ? 'handle' : 'definition.'.$error['path'];
+                // Likewise an unknown or unsupported content field is a
+                // problem of the modal's content-field picker.
+                $field = match (true) {
+                    $error['path'] === 'name' => 'handle',
+                    str_starts_with((string) $error['path'], 'metadata.content_fields') => 'content_fields',
+                    default => 'definition.'.$error['path'],
+                };
                 $byPath[$field][] = $error['message'];
             }
 
@@ -475,6 +519,12 @@ class WorkflowSettingsController extends CpController
                 ->sortBy('label')
                 ->values()
                 ->all(),
+            // The "content" section: top-level fields per collection and what
+            // auto-detection picks when the workflow names none — for EVERY
+            // collection, so the picker follows the collection list in the
+            // editor without a round trip.
+            'contentFieldOptions' => (object) ContentFieldCatalog::fieldsFor(Collection::handles()->all()),
+            'contentFieldAuto' => (object) ContentFieldCatalog::autoDetectFor(Collection::handles()->all()),
             // handle => name of the workflow that OWNS the collection under the
             // first-wins rule of WorkflowResolver::forCollection(). Overlap is
             // legitimate, but a workflow that isn't the owner only governs

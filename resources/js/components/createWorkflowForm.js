@@ -63,21 +63,58 @@ export function handleProblem(handle, { pattern, max, reserved = [], taken = new
 }
 
 /**
- * Laravel-style 422 errors → the modal's fields. `collections.N` collapses onto
- * `collections`; `definition.<path>` and anything the modal has no field for
- * end up in `general` (definition problems preferably from the richer
- * `definition_errors` list, which carries the path).
+ * Whether the modal offers its own content-field choice: always for a blank
+ * workflow, for a template or a copy only once the collections are changed —
+ * until then the source's content fields come along with its collections.
+ */
+export function picksContentFields(form) {
+    return form.from === 'blank' || !form.keepCollections;
+}
+
+/**
+ * The modal's form → the request body of `POST workflows/api/settings/create`.
+ *
+ * `collections`: omitted = keep the template's/copy's own list; a blank one
+ * always sends its (possibly empty) choice.
+ *
+ * `content_fields`: blank — only when something is picked (none = automatic,
+ * which is no key at all). Template/copy with changed collections — always,
+ * even empty: the source's content fields belong to ITS collections, and the
+ * picker says that an empty choice means automatic. Template/copy keeping
+ * their collections — omitted, the source's list stays.
+ */
+export function buildCreatePayload(form) {
+    const body = { handle: String(form.handle ?? '').trim(), label: String(form.label ?? '').trim(), from: form.from };
+    if (form.from === 'example') body.template = form.template;
+    if (form.from === 'copy') body.copy_of = form.copy_of;
+    if (form.from === 'blank' || !form.keepCollections) body.collections = [...(form.collections ?? [])];
+
+    const contentFields = [...(form.contentFields ?? [])];
+    if (picksContentFields(form) && (form.from !== 'blank' || contentFields.length)) {
+        body.content_fields = contentFields;
+    }
+
+    return body;
+}
+
+/**
+ * Laravel-style 422 errors → the modal's fields. `collections.N` and
+ * `content_fields.N` collapse onto their list; `definition.<path>` and anything
+ * the modal has no field for end up in `general` (definition problems
+ * preferably from the richer `definition_errors` list, which carries the
+ * path). The writer's content-field problems come as `content_fields` already
+ * (the server pins them to the picker) and are left out of `general`.
  */
 export function mapCreateErrors(body) {
     const fields = {};
     const general = [];
-    const known = ['handle', 'label', 'from', 'template', 'copy_of', 'collections'];
+    const known = ['handle', 'label', 'from', 'template', 'copy_of', 'collections', 'content_fields'];
     const errors = body?.errors && typeof body.errors === 'object' ? body.errors : {};
     const definitionList = Array.isArray(body?.definition_errors) ? body.definition_errors : null;
 
     for (const [key, messages] of Object.entries(errors)) {
         const list = Array.isArray(messages) ? messages : [messages];
-        const field = key.startsWith('collections.') ? 'collections' : key;
+        const field = key.startsWith('collections.') ? 'collections' : (key.startsWith('content_fields.') ? 'content_fields' : key);
 
         if (known.includes(field)) {
             (fields[field] ??= []).push(...list);
@@ -93,8 +130,9 @@ export function mapCreateErrors(body) {
 
     if (definitionList) {
         definitionList
-            // A name clash the writer found is mapped to `handle` server-side.
-            .filter((e) => e?.path !== 'name')
+            // A name clash the writer found is mapped to `handle` server-side,
+            // a content-field problem to `content_fields`.
+            .filter((e) => e?.path !== 'name' && !String(e?.path ?? '').startsWith('metadata.content_fields'))
             .forEach((e) => general.push({ path: e?.path ?? '', message: e?.message ?? '' }));
     }
 

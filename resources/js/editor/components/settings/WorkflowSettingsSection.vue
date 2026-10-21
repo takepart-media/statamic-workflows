@@ -296,6 +296,65 @@
             </div>
         </template>
 
+        <!-- Which fields of the entries are this workflow's content, in reading
+             order (`metadata.content_fields`). The choice is the union of the
+             readable fields of the selected collections; nothing picked means
+             each collection reads its auto-detected field. -->
+        <template v-if="section === 'content'">
+            <div class="space-y-5">
+                <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('workflows::messages.content_fields_intro') }}</p>
+                <ProblemField
+                    :label="__('workflows::messages.content_fields_label')"
+                    :instructions="__('workflows::messages.content_fields_hint')"
+                    path="metadata.content_fields"
+                >
+                    <div class="space-y-3">
+                        <Select
+                            adaptive-width
+                            multiple
+                            close-on-select
+                            clearable
+                            :model-value="contentFields"
+                            :options="contentFieldOptions"
+                            :placeholder="__('workflows::messages.content_fields_placeholder')"
+                            @update:model-value="(v) => setMeta('content_fields', [...(v ?? [])])"
+                        />
+                        <ContentFieldList
+                            v-if="contentFields.length"
+                            :model-value="contentFields"
+                            :choices="contentFieldChoiceList"
+                            @update:model-value="(v) => setMeta('content_fields', v)"
+                        />
+                    </div>
+                </ProblemField>
+                <p v-if="!(model.workflow.collections ?? []).length" class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('workflows::messages.content_fields_no_collections') }}
+                </p>
+                <!-- Empty choice: what each collection reads instead. -->
+                <div v-else-if="!contentFields.length" class="space-y-1">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.content_fields_auto_intro') }}</p>
+                    <ul class="space-y-1">
+                        <li v-for="item in autoFields" :key="item.collection" class="flex items-start gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                            <Icon
+                                :name="item.handle ? 'magic-wand-action' : 'alert-warning-exclamation-mark'"
+                                class="mt-0.5 size-3.5 shrink-0"
+                                :class="item.handle ? 'text-gray-400' : 'text-amber-600 dark:text-amber-400'"
+                            />
+                            <span>
+                                <span class="font-medium">{{ collectionLabel(item.collection) }}</span> —
+                                <template v-if="item.handle">
+                                    {{ __('workflows::messages.content_fields_auto', { field: item.label }) }}
+                                    <code class="font-mono text-2xs text-gray-500">{{ item.handle }}</code>
+                                </template>
+                                <span v-else class="text-amber-700 dark:text-amber-300">{{ __('workflows::messages.content_fields_auto_none') }}</span>
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+                <p v-else class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.content_fields_order_hint') }}</p>
+            </div>
+        </template>
+
         <!-- Ageing belongs to the workflow that owns the posts; a localization
              workflow reacts to that one's deadline instead. -->
         <template v-if="section === 'sla' && !isLocalization">
@@ -393,9 +452,11 @@ import { EDITOR_CONTEXT } from '../context.js';
 import AudiencePicker from '../shared/AudiencePicker.vue';
 import ProblemField from '../shared/ProblemField.vue';
 import OrderList from '../panels/OrderList.vue';
+import ContentFieldList from './ContentFieldList.vue';
+import { autoContentFields, contentFieldChoices, contentFieldSelectOptions } from '../../model/contentFields.js';
 
 const props = defineProps({
-    // 'general' | 'permissions' | 'localization' | 'collections' | 'sla' | 'order' | 'advanced'
+    // 'general' | 'permissions' | 'localization' | 'collections' | 'content' | 'sla' | 'order' | 'advanced'
     section: { type: String, default: 'general' },
 });
 
@@ -489,6 +550,27 @@ const foreignCollections = computed(() => (model.workflow.collections ?? [])
         label: editor.options.collectionOptions.find((o) => o.value === handle)?.label ?? handle,
         owner: editor.options.collectionOwners[handle],
     })));
+
+const collectionLabel = (handle) => editor.options.collectionOptions.find((o) => o.value === handle)?.label ?? handle;
+
+// The content section. A hand-written non-list value shows as nothing picked;
+// the rule (rules.js) says what is wrong with it.
+const contentFields = computed(() => (Array.isArray(meta.value.content_fields) ? meta.value.content_fields : []));
+const contentFieldChoiceList = computed(() => contentFieldChoices(editor.options.contentFieldOptions ?? {}, model.workflow.collections));
+const contentFieldOptions = computed(() => contentFieldSelectOptions(
+    editor.options.contentFieldOptions ?? {},
+    model.workflow.collections,
+    contentFields.value,
+    {
+        onlyInText: (collections) => __('workflows::messages.content_fields_only_in', { collections: collections.map(collectionLabel).join(', ') }),
+        staleText: (handle) => `${handle} — ${__('workflows::messages.content_fields_stale')}`,
+    },
+));
+const autoFields = computed(() => autoContentFields(
+    editor.options.contentFieldOptions ?? {},
+    editor.options.contentFieldAuto ?? {},
+    model.workflow.collections,
+));
 
 const sourceViewModeOptions = computed(() => [
     { value: 'hidden', label: __('workflows::messages.translation_source_view_mode_hidden') },

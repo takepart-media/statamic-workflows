@@ -1147,4 +1147,22 @@ return [
     'editor_save_with_errors_title' => 'Es gibt :count Fehler – trotzdem speichern?',
     'editor_save_with_errors_body' => 'Der Server prüft beim Speichern noch einmal und lehnt ab, was nicht geht; deine Änderungen bleiben dann im Editor erhalten.',
     'editor_save_anyway' => 'Trotzdem speichern',
+
+    // Inhaltsfelder (Editor + Anlegen).
+    'editor_tab_content' => 'Inhalt',
+    'content_fields_label' => 'Inhaltsfelder',
+    'content_fields_intro' => 'Welche Felder der Einträge der Inhalt dieses Workflows sind – in Lesereihenfolge. Zusammenfassung, Kommentare und Einfache Sprache lesen nur diese Felder; Verschachteltes darin (Replicator, Grid, Bard-Sets) wird automatisch durchlaufen.',
+    'content_fields_hint' => 'Leer lassen = automatisch erkennen.',
+    'content_fields_placeholder' => 'Automatisch',
+    'content_fields_only_in' => 'nur in :collections',
+    'content_fields_stale' => 'nicht verfügbar',
+    'content_fields_remove' => '[:field] entfernen',
+    'content_fields_auto_intro' => 'Keine Felder gewählt – jede Collection liest ihr automatisch erkanntes Feld:',
+    'content_fields_auto' => 'automatisch: :field',
+    'content_fields_auto_none' => 'keins gefunden',
+    'content_fields_no_collections' => 'Wähle zuerst Collections – die Felder kommen aus ihren Blueprints.',
+    'content_fields_order_hint' => 'Die Reihenfolge ist die Lesereihenfolge – ziehen oder die Pfeile nutzen.',
+    'create_content_fields_label' => 'Inhaltsfelder',
+    'create_content_fields_hint' => 'Optional. In Lesereihenfolge; leer = je Collection automatisch erkannt.',
+    'create_content_fields_keep' => 'Von der Quelle übernommen.',
 ];

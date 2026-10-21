@@ -132,6 +132,14 @@ export function serializeMetadata(source) {
         delete metadata.default_assignee_group;
     }
     metadata.assigner_groups = [...(metadata.assigner_groups ?? [])];
+    // The content fields in reading order. None picked means "automatic"
+    // (ContentFieldCatalog::autoDetect()), which is an absent key — an empty
+    // list would say the same in a noisier YAML.
+    if (Array.isArray(metadata.content_fields) && metadata.content_fields.length) {
+        metadata.content_fields = [...metadata.content_fields];
+    } else if (Array.isArray(metadata.content_fields) || metadata.content_fields == null) {
+        delete metadata.content_fields;
+    }
 
     return metadata;
 }

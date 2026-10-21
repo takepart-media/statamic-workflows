@@ -161,12 +161,16 @@ class WorkflowScaffolder
      * `required_group` anywhere — which groups exist is the project's business,
      * and a guessed one would gate every step on a group that may not be there.
      *
+     * `$contentFields` empty or null leaves `metadata.content_fields` out —
+     * the workflow reads its auto-detected content field.
+     *
      * @param  array<int, string>  $collections
+     * @param  array<int, string>|null  $contentFields
      * @return array<string, mixed>
      */
-    public function blank(string $handle, string $label, array $collections = []): array
+    public function blank(string $handle, string $label, array $collections = [], ?array $contentFields = null): array
     {
-        return [
+        $definition = [
             'name' => $handle,
             'type' => 'state_machine',
             'marking_store' => ['type' => 'method', 'property' => 'current_state'],
@@ -198,6 +202,8 @@ class WorkflowScaffolder
                 'unpublish' => ['from' => 'published', 'to' => 'draft'],
             ],
         ];
+
+        return $this->withContentFields($definition, $contentFields);
     }
 
     /**
@@ -208,10 +214,14 @@ class WorkflowScaffolder
      * definition. The commented original stays in the addon's
      * `resources/workflows/examples/` as the reference.
      *
+     * `$contentFields` null keeps the example's own `metadata.content_fields`;
+     * an empty list switches it to automatic.
+     *
      * @param  array<int, string>|null  $collections
+     * @param  array<int, string>|null  $contentFields
      * @return array<string, mixed>
      */
-    public function fromExample(string $type, string $handle, string $label, ?array $collections = null): array
+    public function fromExample(string $type, string $handle, string $label, ?array $collections = null, ?array $contentFields = null): array
     {
         if (! in_array($type, $this->installer->availableTypes(), true)) {
             throw new InvalidArgumentException((string) __('workflows::messages.install_unknown_type', ['type' => $type]));
@@ -219,19 +229,21 @@ class WorkflowScaffolder
 
         $definition = Yaml::parseFile($this->loader->examplesDirectory().'/'.$type.'.yaml') ?: [];
 
-        return $this->rebrand($definition, $handle, $label, $collections);
+        return $this->rebrand($definition, $handle, $label, $collections, $contentFields);
     }
 
     /**
      * An existing workflow as it is stored (not as the loader serves it — the
      * auto-injected revision step stays out) under a new handle, slug and
      * label. Editor positions come along; `$collections` null keeps the
-     * source's list.
+     * source's list, `$contentFields` null its content fields (empty list =
+     * automatic).
      *
      * @param  array<int, string>|null  $collections
+     * @param  array<int, string>|null  $contentFields
      * @return array<string, mixed>
      */
-    public function copyOf(string $existingHandle, string $handle, string $label, ?array $collections = null): array
+    public function copyOf(string $existingHandle, string $handle, string $label, ?array $collections = null, ?array $contentFields = null): array
     {
         $path = $this->loader->path($existingHandle);
 
@@ -249,18 +261,20 @@ class WorkflowScaffolder
             unset($definition['transitions'][$reserved], $definition['metadata']['editor']['transitions'][$reserved]);
         }
 
-        return $this->rebrand($definition, $handle, $label, $collections);
+        return $this->rebrand($definition, $handle, $label, $collections, $contentFields);
     }
 
     /**
      * Give a definition its new identity: name, label (long form and nav), a
-     * fresh nav slug, optionally collections — and switch it off.
+     * fresh nav slug, optionally collections and content fields — and switch
+     * it off.
      *
      * @param  array<string, mixed>  $definition
      * @param  array<int, string>|null  $collections
+     * @param  array<int, string>|null  $contentFields
      * @return array<string, mixed>
      */
-    private function rebrand(array $definition, string $handle, string $label, ?array $collections): array
+    private function rebrand(array $definition, string $handle, string $label, ?array $collections, ?array $contentFields = null): array
     {
         $metadata = is_array($definition['metadata'] ?? null) ? $definition['metadata'] : [];
         $nav = is_array($metadata['nav'] ?? null) ? $metadata['nav'] : [];
@@ -278,6 +292,27 @@ class WorkflowScaffolder
         if ($collections !== null) {
             $definition['collections'] = array_values($collections);
         }
+
+        return $contentFields === null ? $definition : $this->withContentFields($definition, $contentFields);
+    }
+
+    /**
+     * Set `metadata.content_fields`, or drop it for an empty/null list — no
+     * key at all is how a definition says "automatic".
+     *
+     * @param  array<string, mixed>  $definition
+     * @param  array<int, string>|null  $contentFields
+     * @return array<string, mixed>
+     */
+    private function withContentFields(array $definition, ?array $contentFields): array
+    {
+        if ($contentFields === null || $contentFields === []) {
+            unset($definition['metadata']['content_fields']);
+
+            return $definition;
+        }
+
+        $definition['metadata']['content_fields'] = array_values($contentFields);
 
         return $definition;
     }

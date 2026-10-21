@@ -1138,4 +1138,22 @@ return [
     'editor_save_with_errors_title' => 'There are :count errors — save anyway?',
     'editor_save_with_errors_body' => 'The server checks again when saving and refuses what cannot work; your changes stay in the editor then.',
     'editor_save_anyway' => 'Save anyway',
+
+    // Content fields (editor + create).
+    'editor_tab_content' => 'Content',
+    'content_fields_label' => 'Content fields',
+    'content_fields_intro' => 'Which fields of the entries are this workflow\'s content – in reading order. Summary, comments and plain language read only these fields; anything nested inside (Replicator, Grid, Bard sets) is walked automatically.',
+    'content_fields_hint' => 'Leave empty to detect automatically.',
+    'content_fields_placeholder' => 'Automatic',
+    'content_fields_only_in' => 'only in :collections',
+    'content_fields_stale' => 'not available',
+    'content_fields_remove' => 'Remove [:field]',
+    'content_fields_auto_intro' => 'No fields chosen – each collection reads its automatically detected field:',
+    'content_fields_auto' => 'automatic: :field',
+    'content_fields_auto_none' => 'none found',
+    'content_fields_no_collections' => 'Choose collections first – the fields come from their blueprints.',
+    'content_fields_order_hint' => 'The order is the reading order – drag or use the arrows.',
+    'create_content_fields_label' => 'Content fields',
+    'create_content_fields_hint' => 'Optional. In reading order; empty = detected automatically per collection.',
+    'create_content_fields_keep' => 'Taken over from the source.',
 ];

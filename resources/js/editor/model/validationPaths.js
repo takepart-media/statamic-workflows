@@ -179,6 +179,7 @@ const SECTIONS = {
     source_draft_place: 'localization',
     site_fields: 'localization',
     plain_language_clear_fields: 'localization',
+    content_fields: 'content',
     sla: 'sla',
 };
 

@@ -22,6 +22,7 @@
 //   ctx = {
 //       t(key, replace) → string,   // key without the `workflows::messages.` prefix
 //       reservedPlaces, reservedTransitions,
+//       contentFieldOptions,         // {collection: [{handle, label, type, supported}]}
 //   }
 
 import { SLA_STAGES } from './constants.js';
@@ -312,6 +313,8 @@ export function validate(model, ctx = {}) {
         }
     }
 
+    contentFieldProblem(meta.content_fields, model.workflow?.collections, ctx.contentFieldOptions, error);
+
     if (meta.plain_language_completed_place && !plainLanguageSite) {
         error('completed_place_needs_site', 'metadata.plain_language_completed_place', null, 'writer_completed_place_needs_site');
     }
@@ -368,6 +371,48 @@ export function validate(model, ctx = {}) {
     }
 
     return out;
+}
+
+// `metadata.content_fields` like WorkflowDefinitionWriter: one unit, so at most
+// one error — the first the writer would fail with. Shape first (a list of
+// distinct, non-empty strings), then — only when every selected collection is
+// in `options` — that each handle exists in one of them and can be read.
+// Without collections the writer checks the shape only, and so does this.
+function contentFieldProblem(fields, collections, options, error) {
+    const path = 'metadata.content_fields';
+    if (fields === null || fields === undefined || (Array.isArray(fields) && !fields.length)) return;
+    if (!Array.isArray(fields) || fields.some((f) => typeof f !== 'string' || f.trim() === '')) {
+        error('content_fields_not_list', path, null, 'writer_content_fields_not_list');
+        return;
+    }
+    const seen = new Set();
+    for (const field of fields) {
+        if (seen.has(field)) {
+            error('content_fields_duplicate', path, null, 'writer_content_fields_duplicate', { field });
+            return;
+        }
+        seen.add(field);
+    }
+
+    const selected = (collections ?? []).filter((c) => typeof c === 'string');
+    if (!selected.length || !options || selected.some((c) => !Array.isArray(options[c]))) return;
+    const known = new Map();
+    for (const collection of selected) {
+        for (const option of options[collection]) {
+            if (!known.has(option.handle)) known.set(option.handle, option);
+        }
+    }
+    for (const field of fields) {
+        const option = known.get(field);
+        if (!option) {
+            error('content_field_unknown', path, null, 'writer_content_field_unknown', { field, collections: selected.join(', ') });
+            return;
+        }
+        if (!option.supported) {
+            error('content_field_unsupported', path, null, 'writer_content_field_unsupported', { field, type: option.type });
+            return;
+        }
+    }
 }
 
 // The places the addon moves subjects into without a transition.

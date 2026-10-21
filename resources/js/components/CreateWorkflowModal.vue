@@ -159,6 +159,54 @@
                 </p>
             </Field>
 
+            <!-- Which fields of the entries are the workflow's content
+                 (`metadata.content_fields`). Optional — empty means each
+                 collection reads its auto-detected field. A template or a copy
+                 brings its own as long as its collections stay. -->
+            <Field
+                v-if="create.collections.length"
+                :id="ids.contentFields"
+                :label="t('create_content_fields_label', 'Content fields')"
+                :instructions="picksContent ? t('create_content_fields_hint', 'Optional. In reading order; empty = detected automatically per collection.') : null"
+                instructions-below
+                :errors="fieldErrors.content_fields"
+            >
+                <p v-if="!picksContent" class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('create_content_fields_keep', 'Taken over from the source.') }}
+                </p>
+                <p v-else-if="!selectedCollections.length" class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('content_fields_no_collections', 'Choose collections first — the fields come from their blueprints.') }}
+                </p>
+                <div v-else class="space-y-2">
+                    <Select
+                        :id="ids.contentFields"
+                        :model-value="form.contentFields"
+                        :options="contentFieldOptions"
+                        multiple
+                        close-on-select
+                        clearable
+                        :placeholder="t('content_fields_placeholder', 'Automatic')"
+                        @update:model-value="setContentFields"
+                    />
+                    <ContentFieldList
+                        v-if="form.contentFields.length > 1"
+                        :model-value="form.contentFields"
+                        :choices="contentFieldChoiceList"
+                        @update:model-value="setContentFields"
+                    />
+                    <ul v-if="!form.contentFields.length" class="space-y-0.5">
+                        <li v-for="item in autoFields" :key="item.collection" class="text-xs text-gray-500 dark:text-gray-400">
+                            <span class="font-medium">{{ item.collection }}</span> —
+                            <template v-if="item.handle">
+                                {{ t('content_fields_auto', 'automatic: :field', { field: item.label }) }}
+                                <code class="font-mono text-2xs">{{ item.handle }}</code>
+                            </template>
+                            <span v-else class="text-amber-700 dark:text-amber-300!">{{ t('content_fields_auto_none', 'none found') }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </Field>
+
             <!-- Unlike the old installer there is no backfill here: the new
                  workflow is inactive, and the seeder only seeds active ones. -->
             <div class="flex gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900! dark:bg-blue-950/40! dark:text-blue-200!">
@@ -202,14 +250,17 @@
 </template>
 
 <script setup>
-import { computed, getCurrentInstance, reactive, ref } from 'vue';
+import { computed, getCurrentInstance, reactive, ref, watch } from 'vue';
 import { Badge, Button, Checkbox, Field, Icon, Input, Modal, ModalTitle, Select } from '@statamic/cms/ui';
 import { router } from '@statamic/cms/inertia';
-import { handleProblem, mapCreateErrors, slugifyHandle, uniqueHandle } from './createWorkflowForm.js';
+import { buildCreatePayload, handleProblem, mapCreateErrors, picksContentFields, slugifyHandle, uniqueHandle } from './createWorkflowForm.js';
+import { autoContentFields, contentFieldChoices, contentFieldSelectOptions } from '../editor/model/contentFields.js';
+import ContentFieldList from '../editor/components/settings/ContentFieldList.vue';
 
 const props = defineProps({
     // settingsIndex's `create` block: {submit_url, templates, workflows,
-    // collections, handle_pattern, handle_max, reserved_handles}.
+    // collections, contentFieldOptions, contentFieldAuto, handle_pattern,
+    // handle_max, reserved_handles}.
     create: { type: Object, required: true },
     // The index rows, for the copied workflow's current collections (hint only).
     rows: { type: Array, default: () => [] },
@@ -226,6 +277,7 @@ const ids = {
     handle: `${formId}-handle`,
     copyOf: `${formId}-copy-of`,
     collections: `${formId}-collections`,
+    contentFields: `${formId}-content-fields`,
 };
 
 // A lang key that does not exist yet comes back as the key itself — fall back
@@ -247,6 +299,7 @@ const form = reactive({
     handleTouched: false,
     keepCollections: true,
     collections: [],
+    contentFields: [],
 });
 
 const saving = ref(false);
@@ -277,6 +330,31 @@ const keepCollectionsHint = computed(() => {
     }
 
     return t('create_collections_keep_hint', 'Untick to choose different ones — an empty choice means none.');
+});
+
+// --- Content fields -----------------------------------------------------------
+
+const picksContent = computed(() => picksContentFields(form));
+const selectedCollections = computed(() => (picksContent.value ? form.collections : []));
+const contentFieldChoiceList = computed(() => contentFieldChoices(props.create.contentFieldOptions ?? {}, selectedCollections.value));
+const contentFieldOptions = computed(() => contentFieldSelectOptions(
+    props.create.contentFieldOptions ?? {},
+    selectedCollections.value,
+    form.contentFields,
+    { onlyInText: (collections) => t('content_fields_only_in', 'only in :collections', { collections: collections.join(', ') }) },
+));
+const autoFields = computed(() => autoContentFields(props.create.contentFieldOptions ?? {}, props.create.contentFieldAuto ?? {}, selectedCollections.value));
+
+function setContentFields(value) {
+    clearServer('content_fields');
+    form.contentFields = [...(value ?? [])];
+}
+
+// A field none of the chosen collections has any more is dropped — there is
+// no history here to keep it for, and the server would refuse it.
+watch(contentFieldChoiceList, (choices) => {
+    const next = form.contentFields.filter((h) => choices.some((c) => c.handle === h));
+    if (next.length !== form.contentFields.length) form.contentFields = next;
 });
 
 function cardClass(active, disabled = false) {
@@ -329,7 +407,8 @@ function pickSource(value) {
     form.from = value;
     form.keepCollections = true;
     form.collections = [];
-    clearServer('from', 'template', 'copy_of', 'collections');
+    form.contentFields = [];
+    clearServer('from', 'template', 'copy_of', 'collections', 'content_fields');
     if (value === 'example') {
         const tpl = props.create.templates.find((x) => x.value === form.template);
         suggestLabel(tpl?.label);
@@ -380,6 +459,7 @@ const fieldErrors = computed(() => ({
     template: serverErrors.template ?? [],
     copy_of: serverErrors.copy_of ?? [],
     collections: serverErrors.collections ?? [],
+    content_fields: serverErrors.content_fields ?? [],
 }));
 
 const sourceReady = computed(() => {
@@ -396,15 +476,8 @@ const canSubmit = computed(() => !saving.value
 
 // --- Submit -----------------------------------------------------------------
 
-function payload() {
-    const body = { handle: form.handle.trim(), label: form.label.trim(), from: form.from };
-    if (form.from === 'example') body.template = form.template;
-    if (form.from === 'copy') body.copy_of = form.copy_of;
-    // Omitted = keep the template's/copy's own list; a blank one starts empty.
-    if (form.from === 'blank' || !form.keepCollections) body.collections = [...form.collections];
-
-    return body;
-}
+// See buildCreatePayload() for what is sent when.
+const payload = () => buildCreatePayload(form);
 
 async function post(body) {
     if (axios) {

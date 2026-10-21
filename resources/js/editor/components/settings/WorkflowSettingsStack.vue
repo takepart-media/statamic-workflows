@@ -103,6 +103,7 @@ const sections = computed(() => [
     { name: 'permissions', icon: 'key', label: __('workflows::messages.editor_tab_permissions') },
     isLocalization.value && { name: 'localization', icon: 'globe-world-wide-web', label: __('workflows::messages.editor_tab_localization') },
     { name: 'collections', icon: 'collections', label: __('workflows::messages.collections') },
+    { name: 'content', icon: 'file-content-list', label: __('workflows::messages.editor_tab_content') },
     !isLocalization.value && { name: 'sla', icon: 'time-clock', label: __('workflows::messages.editor_tab_sla') },
     { name: 'order', icon: 'list-ol', label: __('workflows::messages.editor_tab_order') },
     { name: 'advanced', icon: 'code-block', label: __('workflows::messages.editor_tab_advanced') },
