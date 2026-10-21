@@ -160,8 +160,8 @@ const props = defineProps({
 });
 
 // `open-comment` fires when the user clicks a comment_created row. The parent
-// page (WorkflowInstanceDetail / TranslationInstanceDetail) opens the passage
-// drawer scoped to that passage_ref so the full thread comes into view.
+// page (WorkflowInstanceDetail / TranslationInstanceDetail) opens the comment
+// sidebar at that comment (falling back to its passage_ref if it is gone).
 const emit = defineEmits(['open-comment']);
 
 // Event types that record a plain save rather than a workflow step. Kept in sync
@@ -189,13 +189,15 @@ function hasDiffButton(event) {
 }
 
 function commentClickable(event) {
-    return isComment(event) && !event.comment?.deleted && event.comment?.passage_ref;
+    // Passage-less comments (QA notes, general ones) open in the sidebar too —
+    // it shows every comment of the page, not only one passage's.
+    return isComment(event) && !event.comment?.deleted && (event.comment?.passage_ref || event.comment?.id);
 }
 
 function onCommentClick(event) {
     if (!commentClickable(event)) return;
     emit('open-comment', {
-        passageRef: event.comment.passage_ref,
+        passageRef: event.comment.passage_ref ?? null,
         commentId: event.comment.id,
     });
 }

@@ -18,6 +18,7 @@
             :id="anchors ? passageId(node.block) : undefined"
             :data-ref="anchors ? node.block.uuid : undefined"
             class="fw-passage group relative flex items-start"
+            :class="{ 'fw-passage--active': isActive(node.block) }"
             :style="{ marginInlineStart: `${node.indent * 1.25}rem` }"
         >
             <div class="fw-passage-body min-w-0 flex-1 rounded-e-md border-s-2 border-gray-200 ps-3 dark:border-gray-700!">
@@ -67,6 +68,7 @@
             :id="anchors ? passageId(block) : undefined"
             :data-ref="anchors ? block.uuid : undefined"
             class="fw-passage group relative flex items-start"
+            :class="{ 'fw-passage--active': isActive(block) }"
         >
             <div class="fw-passage-body min-w-0 flex-1 rounded-e-md border-s-2 border-transparent ps-3">
                 <!-- Developer metadata behind the "technical details" switch: the
@@ -196,6 +198,9 @@ const props = defineProps({
     // (uuid) => number / boolean — the page owns the comment list.
     commentCount: { type: Function, default: () => 0 },
     hasNew: { type: Function, default: () => false },
+    // Passage whose comment thread is active in the sidebar — kept highlighted
+    // (accent + tint) for as long as the thread is, unlike the brief fw-flash.
+    activeUuid: { type: String, default: null },
     keyPrefix: { type: String, default: '' },
 });
 
@@ -214,6 +219,9 @@ const treeNodes = computed(() => (props.technical ? technicalTree(props.blocks) 
 
 function count(block) {
     return Number(props.commentCount(block.uuid)) || 0;
+}
+function isActive(block) {
+    return props.commentable && !!props.activeUuid && block?.uuid === props.activeUuid;
 }
 function fresh(block) {
     return !!props.hasNew(block.uuid);
@@ -332,6 +340,19 @@ const CommentAction = defineComponent({
 :where(.dark) .fw-passage:has(.fw-gutter :is(button, a):hover, .fw-gutter :is(button, a):focus-visible) > .fw-passage-body {
     background-color: rgb(30 58 138 / 0.25);
     border-inline-start-color: rgb(96 165 250) !important;
+}
+
+/* The passage of the thread active in the comment sidebar: a persistent accent,
+   same language as the hover anchor above but a touch stronger. */
+.fw-passage--active > .fw-passage-body {
+    background-color: rgb(239 246 255);
+    border-inline-start-color: rgb(59 130 246) !important;
+    box-shadow: inset 0 0 0 1px rgb(191 219 254);
+}
+:where(.dark) .fw-passage--active > .fw-passage-body {
+    background-color: rgb(30 58 138 / 0.3);
+    border-inline-start-color: rgb(96 165 250) !important;
+    box-shadow: inset 0 0 0 1px rgb(30 64 175 / 0.6);
 }
 
 /* Narrow column: no gutter; the button sits at the passage's top-right and the

@@ -105,6 +105,15 @@
                             aria-hidden="true"
                         />
                     </div>
+                    <!-- All comments of the page (incl. passage-less ones such as QA
+                         notes) in the Word-style sidebar; count = open threads. -->
+                    <Button
+                        icon="mail-chat-bubble-text"
+                        variant="ghost"
+                        size="sm"
+                        :text="commentButtonText"
+                        @click="commentSidebar.openSidebar()"
+                    />
                     <Button
                         v-if="canViewHistory"
                         icon="time-clock"
@@ -248,9 +257,10 @@
                             :blocks="content"
                             commentable
                             :technical="isSuper && technical"
-                            :comment-count="commentCount"
-                            :has-new="hasNew"
-                            @comment="openDrawer"
+                            :comment-count="commentSidebar.commentCount"
+                            :has-new="commentSidebar.hasNew"
+                            :active-uuid="commentSidebar.activeUuid.value"
+                            @comment="commentSidebar.openForPassage"
                         >
                             <template #empty><p class="text-sm italic text-gray-400">—</p></template>
                         </ContentBlocks>
@@ -300,48 +310,9 @@
             <Button size="sm" :text="__('workflows::messages.set')" :disabled="settingState || manualState === instance.current_state" @click="setState" />
         </div>
 
-        <!-- Comment side drawer for the active fieldset. -->
-        <Stack :open="drawer.open" @update:open="(v) => v || closeDrawer()" @opened="focusComposer" :title="drawerTitle" icon="mail-chat-bubble-text" size="narrow">
-            <div class="space-y-3">
-                <div
-                    v-for="c in drawerComments"
-                    :key="c.id"
-                    :class="[
-                        'rounded-lg border p-3 text-sm transition-opacity duration-150',
-                        (c.content_stale || c.container_changed)
-                            ? 'border-dashed border-gray-300 bg-gray-100/60 opacity-60 hover:opacity-100 dark:border-gray-600! dark:bg-gray-800/60!'
-                            : 'border-blue-200 bg-blue-50/60 dark:border-blue-800! dark:bg-blue-950/30!',
-                    ]"
-                >
-                    <div class="mb-1 flex items-center gap-2 text-xs text-gray-400">
-                        <span>{{ formatDate(c.at) }} · {{ c.author.name }}</span>
-                        <span v-if="isNew(c)" class="rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white">{{ __('workflows::messages.new') }}</span>
-                        <button v-if="c.can_delete" type="button" class="ml-auto inline-flex cursor-pointer items-center text-gray-400 hover:text-red-600 dark:hover:text-red-400" :title="__('workflows::messages.delete')" @click="removeComment(c)">
-                            <Icon name="trash" class="size-3.5" />
-                        </button>
-                    </div>
-                    <div class="whitespace-pre-line text-gray-700 dark:text-gray-200!">{{ c.body }}</div>
-                    <div v-if="c.content_stale || c.container_changed" class="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
-                        <span v-if="c.content_stale" class="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300!">
-                            <Icon name="warning-diamond" class="size-3" />
-                            {{ __('workflows::messages.comment_content_stale') }}
-                        </span>
-                        <span v-if="c.container_changed" class="inline-flex items-center gap-1 text-blue-700 dark:text-blue-300!">
-                            <Icon name="pencil" class="size-3" />
-                            {{ __('workflows::messages.comment_container_changed') }}
-                        </span>
-                    </div>
-                </div>
-                <p v-if="!drawerComments.length" class="text-sm text-gray-400">{{ __('workflows::messages.no_comments') }}</p>
-
-                <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700!">
-                    <textarea data-comment-composer v-model="draft.body" rows="3" class="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm dark:border-gray-600! dark:bg-gray-900! dark:text-gray-200!" :placeholder="__('workflows::messages.write_comment')" />
-                    <button type="button" class="mt-2 cursor-pointer rounded-md border border-blue-600 bg-blue-600 px-3 py-1 text-sm text-white disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-200 disabled:text-gray-400" :disabled="draft.saving || !draft.body.trim()" @click="submitComment">
-                        {{ __('workflows::messages.save') }}
-                    </button>
-                </div>
-            </div>
-        </Stack>
+        <!-- Word-style comment sidebar, shared with WorkflowInstanceDetail. Only the
+             translation column is commentable; the source column has no comments. -->
+        <CommentsSidebar :comments="commentSidebar" />
 
         <!-- Assignee editor drawer. -->
         <Stack :open="assigneeDrawer.open" @update:open="(v) => v || closeAssignees()" :title="__('workflows::messages.edit_assignees')" icon="users" size="narrow" inset>
@@ -571,6 +542,8 @@ import { Head } from '@statamic/cms/inertia';
 import WorkflowProgress from '../components/WorkflowProgress.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';
 import ContentBlocks from '../components/ContentBlocks.vue';
+import CommentsSidebar from '../components/comments/CommentsSidebar.vue';
+import { useComments } from '../components/comments/useComments.js';
 import { readTechnical, writeTechnical } from '../components/contentBlocks.js';
 // Only the registration is still needed here: it seeds the module-level colour
 // cache that WorkflowProgress reads through stateColor(). The page itself no
@@ -636,6 +609,13 @@ const props = defineProps({
     watching: { type: Boolean, default: false },
     watchUrl: { type: String, default: '' },
     commentDeleteUrlTemplate: { type: String, default: '' },
+    // PATCH {body, mentions}; resolve / reopen are POSTs on the thread's root.
+    commentUpdateUrlTemplate: { type: String, default: '' },
+    commentResolveUrlTemplate: { type: String, default: '' },
+    commentReopenUrlTemplate: { type: String, default: '' },
+    // The viewer (composer avatar, "your" mentions) and who can be @mentioned.
+    currentUser: { type: Object, default: null },
+    mentionableUsers: { type: Array, default: () => [] },
     actions: { type: Array, default: () => [] },
     applyUrls: { type: Object, default: () => ({}) },
     assigneeUrl: { type: String, default: '' },
@@ -851,67 +831,34 @@ function openHistory() { historyDrawer.value.open = true; }
 function closeHistory() { historyDrawer.value.open = false; }
 
 // --- comments ---
-const items = ref([...props.comments]);
-const draft = ref({ ref: null, body: '', saving: false });
-const drawer = ref({ open: false, block: null });
-const drawerComments = computed(() => (drawer.value.block ? commentsFor(drawer.value.block.uuid) : []));
-const drawerTitle = computed(() => (drawer.value.block ? `${__('workflows::messages.comments')} — ${drawer.value.block.label || drawer.value.block.handle}` : __('workflows::messages.comments')));
-function isNew(comment) { return !!comment.is_new; }
-function commentsFor(uuid) { return items.value.filter((c) => c.ref?.uuid === uuid); }
-function commentCount(uuid) { return commentsFor(uuid).length; }
-function hasNew(uuid) { return commentsFor(uuid).some(isNew); }
-async function openDrawer(block) {
-    drawer.value = { open: true, block };
-    draft.value = { ref: { uuid: block.uuid, handle: block.handle }, body: '', saving: false };
-    await markRead(block.uuid);
-}
+// The Word-style sidebar (components/comments), same as on the summary page.
+// This page has no version listing, so there is no "NEW" badge to clear.
+const commentSidebar = useComments({
+    comments: props.comments,
+    blocks: () => props.content,
+    urls: {
+        create: props.commentUrl,
+        read: props.commentReadUrl,
+        deleteTemplate: props.commentDeleteUrlTemplate,
+        updateTemplate: props.commentUpdateUrlTemplate,
+        resolveTemplate: props.commentResolveUrlTemplate,
+        reopenTemplate: props.commentReopenUrlTemplate,
+    },
+    currentUser: props.currentUser,
+    mentionableUsers: props.mentionableUsers,
+    axios,
+});
+
+const commentButtonText = computed(() => {
+    const open = commentSidebar.counts.value.open;
+
+    return open ? `${__('workflows::messages.comments')} (${open})` : __('workflows::messages.comments');
+});
 
 // Timeline handoff — see WorkflowInstanceDetail::openCommentFromHistory().
-function openCommentFromHistory({ passageRef }) {
-    if (!passageRef) return;
-    const live = (props.content || []).find((b) => b?.uuid === passageRef);
-    const historyEvent = (props.history || []).find(
-        (e) => e.type === 'comment_created' && e.comment?.passage_ref === passageRef,
-    );
-    const block = live ?? {
-        uuid: passageRef,
-        handle: historyEvent?.comment?.passage_handle ?? passageRef,
-    };
-    // Hand over rather than stack — see WorkflowInstanceDetail.
+function openCommentFromHistory({ passageRef, commentId }) {
     closeHistory();
-    openDrawer(block);
-}
-async function markRead(uuid) {
-    if (!props.commentReadUrl) return;
-    try { await post(props.commentReadUrl, { passage_ref: uuid }); } catch (e) { /* non-critical */ }
-    items.value.forEach((c) => { if (c.ref?.uuid === uuid) c.is_new = false; });
-}
-function closeDrawer() { drawer.value.open = false; }
-function focusComposer() { document.querySelector('[data-comment-composer]')?.focus(); }
-async function removeComment(comment) {
-    if (!comment.can_delete || !window.confirm(__('workflows::messages.delete_comment_confirm'))) return;
-    try {
-        await del(props.commentDeleteUrlTemplate.replace('__COMMENT__', encodeURIComponent(comment.id)));
-        items.value = items.value.filter((c) => c.id !== comment.id);
-        window.Statamic?.$toast?.success(__('workflows::messages.comment_deleted'));
-    } catch (e) {
-        window.Statamic?.$toast?.error(__('workflows::messages.comment_delete_error'));
-    }
-}
-async function submitComment() {
-    const body = draft.value.body.trim();
-    if (!body || draft.value.saving) return;
-    draft.value.saving = true;
-    try {
-        const data = (await post(props.commentUrl, { body, passage_ref: draft.value.ref?.uuid ?? null, passage_handle: draft.value.ref?.handle ?? null }))?.data;
-        items.value.push(data);
-        draft.value.body = '';
-        window.Statamic?.$toast?.success(__('workflows::messages.comment_saved'));
-    } catch (e) {
-        window.Statamic?.$toast?.error(__('workflows::messages.comment_save_error'));
-    } finally {
-        draft.value.saving = false;
-    }
+    commentSidebar.openAtComment(commentId, passageRef ?? null);
 }
 
 // --- actions ---
@@ -1010,10 +957,6 @@ async function runAction(action, payload) {
     }
 }
 
-function formatDate(iso) {
-    try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
-}
-
 // --- request helpers (axios with fetch fallback) ---
 // `.status` on the thrown error is preserved for callers that need to tell a
 // confirmed 404 apart from a network hiccup — neither axios's own AxiosError
@@ -1033,12 +976,6 @@ async function get(url) {
 async function post(url, body) {
     if (axios) return (await axios.post(url, body)).data;
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error('request failed');
-    return res.json();
-}
-async function del(url) {
-    if (axios) return (await axios.delete(url)).data;
-    const res = await fetch(url, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
     if (!res.ok) throw new Error('request failed');
     return res.json();
 }

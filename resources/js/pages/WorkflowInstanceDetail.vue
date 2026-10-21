@@ -103,6 +103,15 @@
                         :disabled="watchBusy"
                         @click="toggleWatch"
                     />
+                    <!-- All comments of the page in the Word-style sidebar. The count
+                         is open threads only, like the gutter buttons. -->
+                    <Button
+                        icon="mail-chat-bubble-text"
+                        variant="ghost"
+                        size="sm"
+                        :text="commentButtonText"
+                        @click="commentSidebar.openSidebar()"
+                    />
                     <Button
                         v-if="canViewHistory"
                         icon="time-clock"
@@ -171,9 +180,10 @@
                     :blocks="content"
                     commentable
                     :technical="isSuper && technical"
-                    :comment-count="commentCount"
-                    :has-new="hasNew"
-                    @comment="openDrawer"
+                    :comment-count="commentSidebar.commentCount"
+                    :has-new="commentSidebar.hasNew"
+                    :active-uuid="commentSidebar.activeUuid.value"
+                    @comment="commentSidebar.openForPassage"
                 />
             </section>
         </div>
@@ -208,91 +218,9 @@
             />
         </Stack>
 
-        <!-- Comment side drawer for the active fieldset. -->
-        <Stack
-            :open="drawer.open"
-            @update:open="(v) => v || closeDrawer()"
-            @opened="focusComposer"
-            :title="drawerTitle"
-            icon="mail-chat-bubble-text"
-            size="narrow"
-        >
-            <div class="space-y-3">
-                <div
-                    v-for="c in drawerComments"
-                    :key="c.id"
-                    :class="[
-                        'rounded-lg border p-3 text-sm transition-opacity duration-150',
-                        (c.content_stale || c.container_changed)
-                            ? 'border-dashed border-gray-300 bg-gray-100/60 opacity-60 hover:opacity-100 dark:border-gray-600! dark:bg-gray-800/60!'
-                            : 'border-blue-200 bg-blue-50/60 dark:border-blue-800! dark:bg-blue-950/30!',
-                    ]"
-                >
-                    <div class="mb-1 flex items-center gap-2 text-xs text-gray-400">
-                        <span>{{ formatDate(c.at) }} · {{ c.author.name }}</span>
-                        <span v-if="isNew(c)" class="rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white">{{ __('workflows::messages.new') }}</span>
-                        <Button
-                            v-if="c.can_delete"
-                            variant="ghost"
-                            size="xs"
-                            icon="trash"
-                            icon-only
-                            :title="__('workflows::messages.delete')"
-                            :aria-label="__('workflows::messages.delete')"
-                            class="ml-auto"
-                            @click="removeComment(c)"
-                        />
-                    </div>
-                    <div class="whitespace-pre-line text-gray-700 dark:text-gray-200!">{{ c.body }}</div>
-                    <!-- Freshness signals as a compact footer below the body:
-                         • content_stale — the passage itself has been edited.
-                         • container_changed — sibling content in the same
-                           Bard-field container was added / removed / reordered
-                           / edited.
-                         Rendered inline, muted, without background box — they
-                         are metadata about relevance, not alarms about the
-                         content. -->
-                    <div
-                        v-if="c.content_stale || c.container_changed"
-                        class="mt-1.5 flex flex-wrap items-center gap-3 text-xs"
-                    >
-                        <span
-                            v-if="c.content_stale"
-                            class="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300!"
-                        >
-                            <Icon name="warning-diamond" class="size-3" />
-                            {{ __('workflows::messages.comment_content_stale') }}
-                        </span>
-                        <span
-                            v-if="c.container_changed"
-                            class="inline-flex items-center gap-1 text-blue-700 dark:text-blue-300!"
-                        >
-                            <Icon name="pencil" class="size-3" />
-                            {{ __('workflows::messages.comment_container_changed') }}
-                        </span>
-                    </div>
-                </div>
-                <p v-if="!drawerComments.length" class="text-sm text-gray-400">{{ __('workflows::messages.no_comments') }}</p>
-
-                <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700!">
-                    <textarea
-                        data-comment-composer
-                        v-model="draft.body"
-                        rows="3"
-                        class="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm dark:border-gray-600! dark:bg-gray-900! dark:text-gray-200!"
-                        :placeholder="__('workflows::messages.write_comment')"
-                    />
-                    <Button
-                        class="mt-2"
-                        variant="primary"
-                        size="sm"
-                        :disabled="draft.saving || !draft.body.trim()"
-                        :text="__('workflows::messages.save')"
-                        @click="submitComment"
-                    />
-                </div>
-            </div>
-        </Stack>
+        <!-- Word-style comment sidebar: every comment of the page, synced with the
+             passages above. Shared with TranslationInstanceDetail. -->
+        <CommentsSidebar :comments="commentSidebar" />
 
         <!-- Assignee editor drawer: assignment is owned by the workflow. -->
         <Stack
@@ -583,6 +511,8 @@ import WorkflowProgress from '../components/WorkflowProgress.vue';
 import VersionListing from '../components/VersionListing.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';
 import ContentBlocks from '../components/ContentBlocks.vue';
+import CommentsSidebar from '../components/comments/CommentsSidebar.vue';
+import { useComments } from '../components/comments/useComments.js';
 import { readTechnical, writeTechnical } from '../components/contentBlocks.js';
 // Only the registration is still needed here: it seeds the module-level colour
 // cache that WorkflowProgress reads through stateColor(). The page itself no
@@ -608,6 +538,13 @@ const props = defineProps({
     watching: { type: Boolean, default: false },
     watchUrl: { type: String, default: '' },
     commentDeleteUrlTemplate: { type: String, default: '' },
+    // PATCH {body, mentions}; resolve / reopen are POSTs on the thread's root.
+    commentUpdateUrlTemplate: { type: String, default: '' },
+    commentResolveUrlTemplate: { type: String, default: '' },
+    commentReopenUrlTemplate: { type: String, default: '' },
+    // The viewer (composer avatar, "your" mentions) and who can be @mentioned.
+    currentUser: { type: Object, default: null },
+    mentionableUsers: { type: Array, default: () => [] },
     actions: { type: Array, default: () => [] },
     applyUrls: { type: Object, default: () => ({}) },
     assigneeUrl: { type: String, default: '' },
@@ -800,7 +737,7 @@ const totalVersions = computed(() => props.versions.length);
 
 // Local, mutable copy of the versions payload so we can clear the "NEW"
 // amber badge on the current version as soon as its comments are marked read
-// (either automatically on mount or when the redakteur opens a passage drawer).
+// (when the redakteur opens a passage's thread in the comment sidebar).
 // JSON round-trip unwraps any Vue reactive proxies safely — plain payload only.
 const localVersions = ref(JSON.parse(JSON.stringify(props.versions ?? [])));
 
@@ -867,10 +804,6 @@ async function saveAssignees() {
     }
 }
 
-// Comments: local copy so we can append without a full reload.
-const items = ref([...props.comments]);
-const draft = ref({ ref: null, body: '', saving: false });
-
 // History drawer state. Opened from the sticky bar; the log lives out of the way
 // until someone asks for it.
 const historyDrawer = ref({ open: false });
@@ -883,98 +816,38 @@ function closeHistory() {
     historyDrawer.value.open = false;
 }
 
-// Comment side drawer state.
-const drawer = ref({ open: false, block: null });
-const drawerComments = computed(() => (drawer.value.block ? commentsFor(drawer.value.block.uuid) : []));
-const drawerTitle = computed(() =>
-    drawer.value.block ? `${__('workflows::messages.comments')} — ${drawer.value.block.label || drawer.value.block.handle}` : __('workflows::messages.comments')
-);
+// Comments: the Word-style sidebar (components/comments). Opening a passage's
+// thread marks it read; once nothing unread is left, the current version's
+// "NEW" badge in the version listing goes too.
+const commentSidebar = useComments({
+    comments: props.comments,
+    blocks: () => props.content,
+    urls: {
+        create: props.commentUrl,
+        read: props.commentReadUrl,
+        deleteTemplate: props.commentDeleteUrlTemplate,
+        updateTemplate: props.commentUpdateUrlTemplate,
+        resolveTemplate: props.commentResolveUrlTemplate,
+        reopenTemplate: props.commentReopenUrlTemplate,
+    },
+    currentUser: props.currentUser,
+    mentionableUsers: props.mentionableUsers,
+    axios,
+    onAllRead: clearCurrentVersionNewFlag,
+});
 
-// "New" = unread by the current user; the server computes `is_new` from the
-// per-user last-seen timestamp. Opening a passage's drawer marks it as read.
-function isNew(comment) {
-    return !!comment.is_new;
-}
+const commentButtonText = computed(() => {
+    const open = commentSidebar.counts.value.open;
 
-function commentsFor(uuid) {
-    return items.value.filter((c) => c.ref?.uuid === uuid);
-}
-function commentCount(uuid) {
-    return commentsFor(uuid).length;
-}
-function hasNew(uuid) {
-    return commentsFor(uuid).some(isNew);
-}
+    return open ? `${__('workflows::messages.comments')} (${open})` : __('workflows::messages.comments');
+});
 
-async function openDrawer(block) {
-    drawer.value = { open: true, block };
-    draft.value = { ref: { uuid: block.uuid, handle: block.handle }, body: '', saving: false };
-    await markRead(block.uuid);
-}
-
-// Timeline handoff: a click on a comment_created event in the History list
-// opens the drawer scoped to that comment's passage. If the passage still
-// exists in the current content, we reuse the live block (so the drawer
-// title matches the passage handle exactly); otherwise we fall back to a
-// synthetic block using whatever the event carried, so the drawer still
-// opens and shows the archived comment thread.
-function openCommentFromHistory({ passageRef }) {
-    if (!passageRef) return;
-    const live = (props.content || []).find((b) => b?.uuid === passageRef);
-    const historyEvent = (props.history || []).find(
-        (e) => e.type === 'comment_created' && e.comment?.passage_ref === passageRef,
-    );
-    const block = live ?? {
-        uuid: passageRef,
-        handle: historyEvent?.comment?.passage_handle ?? passageRef,
-    };
-    // Hand over rather than stack: the history drawer is what the user clicked out
-    // of, and leaving it open behind the comment thread would put two overlays on
-    // screen for one intent.
+// Timeline handoff: a click on a comment_created event in the History list opens
+// the sidebar at that very comment (or its passage, if the comment is gone).
+// Hand over rather than stack: two overlays for one intent would be one too many.
+function openCommentFromHistory({ passageRef, commentId }) {
     closeHistory();
-    openDrawer(block);
-}
-
-// Mark this passage's comments as seen → they're no longer "new" for the user.
-async function markRead(uuid) {
-    const url = props.commentReadUrl;
-
-    if (!url) return;
-
-    try {
-        if (axios) {
-            await axios.post(url, { passage_ref: uuid });
-        } else {
-            await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({ passage_ref: uuid }),
-            });
-        }
-    } catch (e) {
-        // Non-critical: the badge will simply reappear on next load.
-    }
-
-    // Optimistic local update so the per-block "new" dot and the top-level
-    // amber "NEW" badge on this version disappear immediately.
-    items.value.forEach((c) => {
-        if (c.ref?.uuid === uuid) c.is_new = false;
-    });
-    if (!items.value.some((c) => c.is_new)) {
-        clearCurrentVersionNewFlag();
-    }
-
-    items.value.forEach((c) => {
-        if (c.ref?.uuid === uuid) c.is_new = false;
-    });
-}
-
-function closeDrawer() {
-    drawer.value.open = false;
-}
-
-function focusComposer() {
-    document.querySelector('[data-comment-composer]')?.focus();
+    commentSidebar.openAtComment(commentId, passageRef ?? null);
 }
 
 // Called when a transition button is clicked. Transitions marked with
@@ -1070,82 +943,10 @@ async function performApply(action, payload) {
     }
 }
 
-function formatDate(iso) {
-    try {
-        return new Date(iso).toLocaleString();
-    } catch (e) {
-        return iso;
-    }
-}
-
-async function removeComment(comment) {
-    if (!comment.can_delete) return;
-    if (!window.confirm(__('workflows::messages.delete_comment_confirm'))) return;
-
-    const url = props.commentDeleteUrlTemplate.replace('__COMMENT__', encodeURIComponent(comment.id));
-
-    try {
-        if (axios) {
-            await axios.delete(url);
-        } else {
-            await fetch(url, {
-                method: 'DELETE',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            });
-        }
-
-        items.value = items.value.filter((c) => c.id !== comment.id);
-        window.Statamic?.$toast?.success(__('workflows::messages.comment_deleted'));
-    } catch (e) {
-        window.Statamic?.$toast?.error(__('workflows::messages.comment_delete_error'));
-    }
-}
-
-async function submitComment() {
-    const body = draft.value.body.trim();
-    if (!body || draft.value.saving) return;
-
-    draft.value.saving = true;
-
-    const payload = {
-        body,
-        passage_ref: draft.value.ref?.uuid ?? null,
-        passage_handle: draft.value.ref?.handle ?? null,
-    };
-
-    try {
-        const response = axios
-            ? (await axios.post(props.commentUrl, payload)).data
-            : await (
-                  await fetch(props.commentUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                      body: JSON.stringify(payload),
-                  })
-              ).json();
-
-        items.value.push(response.data);
-        draft.value.body = '';
-        draft.value.saving = false;
-        window.Statamic?.$toast?.success(__('workflows::messages.comment_saved'));
-    } catch (e) {
-        draft.value.saving = false;
-        window.Statamic?.$toast?.error(__('workflows::messages.comment_save_error'));
-    }
-}
-
 // Opening the page deliberately does NOT mark anything read. It used to: every
 // passage carrying a new-for-us comment was marked on mount, which meant the whole
 // point of the markers was lost — they vanished in the same instant the page
 // appeared, so you could never see WHICH set somebody had commented on. Reading is
-// opening that set's drawer (openDrawer → markRead), and only that clears it.
+// opening that passage's thread in the sidebar (useComments → markRead), and only
+// that clears it.
 </script>
-
-<style scoped>
-/* Brief highlight when jumping to a referenced passage. */
-.fw-flash { animation: fw-flash 1.2s ease-out; }
-@keyframes fw-flash {
-    0% { background-color: rgb(254 240 138 / 0.7); }
-    100% { background-color: transparent; }
-}
-</style>
