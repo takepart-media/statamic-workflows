@@ -310,14 +310,16 @@ export function useComments(options) {
         if (!text || !urls.create || !thread) return false;
 
         try {
-            const data = (await request('post', urls.create, {
+            const res = await request('post', urls.create, {
                 body: text,
                 passage_ref: thread.root.ref?.uuid ?? null,
                 passage_handle: thread.root.ref?.handle ?? null,
                 parent_id: thread.root.id,
                 mentions: mentionIdsFor(text, mentions),
-            }))?.data;
-            if (data) items.value = upsertComment(items.value, data);
+            });
+            if (res?.data) items.value = upsertComment(items.value, res.data);
+            // A reply to a resolved thread reopens it; the server sends the fresh root.
+            if (res?.root) items.value = upsertComment(items.value, res.root);
             activeThreadId.value = thread.id;
             toast('success', 'comment_saved');
 
