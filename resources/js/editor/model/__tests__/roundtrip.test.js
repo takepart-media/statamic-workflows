@@ -252,6 +252,12 @@ describe('metadata cleanup', () => {
         expect(serialize(model).metadata.progress_orientation).toBe('vertical');
     });
 
+    it('keeps plain-language skip fields trimmed and unique, and drops an empty list', () => {
+        expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('plain_language_skip_fields');
+        const model = normalize({ metadata: { plain_language_skip_fields: [' *.embed_code ', 'anchor.anchor_id', '*.embed_code', ''] } });
+        expect(serialize(model).metadata.plain_language_skip_fields).toEqual(['*.embed_code', 'anchor.anchor_id']);
+    });
+
     it('drops empty colour/variant and an unset branch flag', () => {
         const model = normalize({
             places: { a: { metadata: { color: null, branch: false } }, b: { metadata: { color: 'teal', branch: true } } },

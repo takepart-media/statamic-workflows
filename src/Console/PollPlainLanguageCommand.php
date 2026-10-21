@@ -9,8 +9,9 @@ use Statamic\Facades\Entry;
 use TakepartMedia\Workflows\Support\EventLogSuppressor;
 use TakepartMedia\Workflows\Translation\PlainLanguageConfig;
 use TakepartMedia\Workflows\Translation\PlainLanguageJob;
-use TakepartMedia\Workflows\Translation\PlainLanguageDocument;
+use TakepartMedia\Workflows\Translation\LegacyPlainLanguageDocument;
 use TakepartMedia\Workflows\Translation\PlainLanguageJobStore;
+use TakepartMedia\Workflows\Translation\PlainLanguageLeafDocument;
 use TakepartMedia\Workflows\Translation\PlainLanguageSubmission;
 use TakepartMedia\Workflows\Translation\PlainLanguageTranslator;
 use TakepartMedia\Workflows\Translation\TranslationFailed;
@@ -29,11 +30,14 @@ use TakepartMedia\Workflows\Workflow\WorkflowStateStore;
  * submit the entry and create the localization as a copy of its source. This command
  * asks after the submitted jobs and writes the rewritten document into that copy.
  *
- * It does NOT map answers back onto fields. The service returns a rewritten DOCUMENT —
- * it merges, splits and omits, so five sent texts come back as nineteen blocks — and
- * PlainLanguageDocument owns what that means for an entry: the leading `<h1>` becomes
- * the title, the rest replaces the content field. The `segment_keys` on the row are
- * kept for diagnostics only.
+ * How an answer maps onto the entry depends on the job's `format`. A `sections` job
+ * (everything submitted since the leaf format) carries its plan: every text leaf went
+ * out as its own `<section data-wf-leaf="N">`, and PlainLanguageLeafDocument writes
+ * section N back into exactly that leaf — strictly: an answer whose sections do not
+ * match what was sent is rejected, nothing is written, and the retry below takes
+ * over. A job without a format was submitted before that and is written back by
+ * LegacyPlainLanguageDocument (the leading `<h1>` becomes the title, the rest replaces
+ * the content field), so a rewrite in flight during an update still lands.
  *
  * The workflow STATE is left alone here BY DEFAULT. The transition put the entry in its
  * place when the editor clicked; this command only fills in texts, and the record that
@@ -78,6 +82,9 @@ class PollPlainLanguageCommand extends Command
 
     private ?int $maxAttempts = null;
 
+    /** Status codes the per-job fallback fetch got back, by text id — see handle(). */
+    private array $endpointErrors = [];
+
     private function maxPolls(): int
     {
         return $this->maxPolls ??= app(PlainLanguageConfig::class)->maxPolls();
@@ -89,14 +96,15 @@ class PollPlainLanguageCommand extends Command
     }
 
     protected $signature = 'workflows:plain-language-poll
-                            {--dry-run : Report what the service says without writing anything}';
+                            {--dry-run : Report what the service says and what would be written, without writing anything}
+                            {--diff : Print the per-field diff of every write-back}';
 
     protected $description = 'Fetch finished plain-language rewrites and write them into their entries.';
 
     public function handle(
         PlainLanguageJobStore $jobs,
         PlainLanguageTranslator $service,
-        PlainLanguageDocument $document,
+        LegacyPlainLanguageDocument $document,
         WorkflowEventStore $events,
         DefinitionLoader $loader,
         WorkflowStateStore $states,
@@ -186,7 +194,7 @@ class PollPlainLanguageCommand extends Command
         $group,
         array $reported,
         PlainLanguageJobStore $jobs,
-        PlainLanguageDocument $document,
+        LegacyPlainLanguageDocument $document,
         WorkflowEventStore $events,
         DefinitionLoader $loader,
         WorkflowStateStore $states,
@@ -284,7 +292,13 @@ class PollPlainLanguageCommand extends Command
                 continue;
             }
 
-            $documents[] = ['blocks' => $blocks, 'notes' => $report['qs_notes'] ?? null];
+            $documents[] = [
+                'blocks' => $blocks,
+                'notes' => $report['qs_notes'] ?? null,
+                'format' => $job->format,
+                'plan' => $job->plan,
+                'text_id' => $job->text_id,
+            ];
             $dryRun || $jobs->touch($job, PlainLanguageJob::COMPLETED);
         }
 
@@ -296,8 +310,20 @@ class PollPlainLanguageCommand extends Command
             .$stillOpen.' still running, '.count($failures).' failed.');
 
         $wroteContent = false;
+        $formats = array_values(array_unique(array_map(fn ($doc) => $doc['format'] ?? null, $documents), SORT_REGULAR));
 
-        if ($blocks !== [] && ! $dryRun) {
+        if ($blocks !== [] && count($formats) > 1) {
+            // One answer in each format cannot be combined: the legacy one replaces the
+            // content wholesale, the sections one writes per leaf. Only possible when a
+            // job from before the update and one after it settle in the same tick.
+            Log::warning('workflows.translation.plain_language_mixed_formats', [
+                'subject_id' => $subjectId,
+                'formats' => $formats,
+            ]);
+            $failures[] = __('workflows::messages.translation_plain_job_mixed_formats');
+        } elseif ($blocks !== [] && $formats === [PlainLanguageLeafDocument::FORMAT]) {
+            $wroteContent = $this->settleSections($entry, $subjectId, $workflow, $documents, $loader, $failures, $dryRun);
+        } elseif ($blocks !== [] && ! $dryRun) {
             // Captured BEFORE apply() overwrites it: whether the untranslated copy
             // had anything in content_sets to begin with. A post whose only
             // translatable text is its title (everything else a video, a PDF —
@@ -306,7 +332,7 @@ class PollPlainLanguageCommand extends Command
             // anything to put there besides the sets it already restores on its
             // own — that is a complete answer, not a broken one. Only losing
             // content that genuinely existed is the real "unusable" signal.
-            $hadContent = (array) $entry->get(PlainLanguageDocument::contentField()) !== [];
+            $hadContent = (array) $entry->get(LegacyPlainLanguageDocument::contentField()) !== [];
             // The raw definition goes with it: apply() needs the workflow's settings
             // for the fields a rewrite has to empty (plain_language_clear_fields).
             // Read through the loader here, like failedPlaceFor() and
@@ -314,7 +340,7 @@ class PollPlainLanguageCommand extends Command
             // arguments.
             $data = $document->apply($entry, $blocks, $loader->raw($workflow));
 
-            if ($hadContent && ($data[PlainLanguageDocument::contentField()] ?? []) === []) {
+            if ($hadContent && ($data[LegacyPlainLanguageDocument::contentField()] ?? []) === []) {
                 $failures[] = __('workflows::messages.translation_plain_job_bad_output');
             } else {
                 EventLogSuppressor::while(function () use ($entry, $data) {
@@ -323,7 +349,7 @@ class PollPlainLanguageCommand extends Command
                 });
 
                 $wroteContent = true;
-                $this->line('    title: '.($data[PlainLanguageDocument::titleField()] ?? '—'));
+                $this->line('    title: '.($data[LegacyPlainLanguageDocument::titleField()] ?? '—'));
                 $this->recordNotes($subjectId, $workflow, $documents);
             }
         }
@@ -468,6 +494,125 @@ class PollPlainLanguageCommand extends Command
             }
 
             $jobs->forget($subjectId, $workflow);
+        }
+    }
+
+    /**
+     * Write a `sections` answer back, leaf by leaf (PlainLanguageLeafDocument).
+     *
+     * Returns whether content was written. A rejected answer adds ONE failure — the
+     * reasons go to the log, where the request and response sit next to them — and
+     * writes nothing, so the retry in settle() can resubmit. A dry run applies too,
+     * so it can print what WOULD be written, and then stops before the save.
+     *
+     * An answer that changes nothing (a re-poll of an already written rewrite) is
+     * not saved again, but still counts as written: the content IS the answer.
+     *
+     * @param  array<int, array<string, mixed>>  $documents
+     * @param  array<int, string>  $failures
+     */
+    private function settleSections($entry, string $subjectId, string $workflow, array $documents, DefinitionLoader $loader, array &$failures, bool $dryRun): bool
+    {
+        if (count($documents) > 1) {
+            Log::warning('workflows.translation.plain_language_leaf_rejected', [
+                'subject_id' => $subjectId,
+                'errors' => ['more than one completed sections job for one subject'],
+            ]);
+            $failures[] = __('workflows::messages.translation_plain_job_structure', ['reason' => 'more than one job']);
+
+            return false;
+        }
+
+        $document = $documents[0];
+        $result = app(PlainLanguageLeafDocument::class)->apply($entry, $document['blocks'], (array) $document['plan'], $loader->raw($workflow));
+
+        foreach ($result->warnings as $warning) {
+            $this->line("    warning: {$warning}");
+        }
+
+        if (! $result->ok()) {
+            Log::warning('workflows.translation.plain_language_leaf_rejected', [
+                'subject_id' => $subjectId,
+                'text_id' => $document['text_id'] ?? null,
+                'errors' => $result->errors,
+                'warnings' => $result->warnings,
+                'output_text' => $document['blocks'],
+            ]);
+
+            foreach ($result->errors as $error) {
+                $this->warn("    rejected: {$error}");
+            }
+
+            $failures[] = __('workflows::messages.translation_plain_job_structure', [
+                'reason' => $result->errors[0] ?? '?',
+            ]);
+
+            return false;
+        }
+
+        if ($dryRun || $this->option('diff')) {
+            $this->printDiff($result->diff);
+        }
+
+        if (app(\TakepartMedia\Workflows\Translation\PlainLanguageConfig::class)->logsCalls()) {
+            Log::info('workflows.translation.plain_language_leaf_diff', [
+                'subject_id' => $subjectId,
+                'text_id' => $document['text_id'] ?? null,
+                'dry_run' => $dryRun,
+                'changed' => $result->changed,
+                'diff' => $result->diff,
+                'warnings' => $result->warnings,
+            ]);
+        }
+
+        if ($dryRun) {
+            $this->line('    (dry run — nothing written)');
+
+            return false;
+        }
+
+        if ($result->changed) {
+            EventLogSuppressor::while(function () use ($entry, $result) {
+                $entry->data($result->data);
+                $entry->save();
+            });
+        } else {
+            $this->line('    unchanged — not saved again.');
+        }
+
+        $this->line('    title: '.($result->data[PlainLanguageLeafDocument::titleField()] ?? '—'));
+        $this->recordNotes($subjectId, $workflow, $documents);
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $diff
+     */
+    private function printDiff(array $diff): void
+    {
+        if ($diff === []) {
+            $this->line('    diff: nothing changes.');
+
+            return;
+        }
+
+        foreach ($diff as $field => $change) {
+            if (isset($change['leaves'])) {
+                if (! $change['changed']) {
+                    continue;
+                }
+
+                $this->line("    {$field}: ".count($change['leaves']).' leaf/leaves changed');
+
+                foreach ($change['leaves'] as $leaf) {
+                    $this->line("      {$leaf['path']} ({$leaf['type']}): '{$leaf['from']}' → '{$leaf['to']}'");
+                }
+
+                continue;
+            }
+
+            $this->line("    {$field}: '{$change['from']}' → '{$change['to']}'");
         }
     }
 

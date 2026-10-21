@@ -645,7 +645,7 @@ class TranslatableText
      * Public because the plain-language write-back asks the same question in the
      * other direction: a returned `<div class="hintbox">` may only become a set if
      * the field declares one, and which of its fields carries the text is decided
-     * here, not guessed there (see PlainLanguageDocument).
+     * here, not guessed there (see PlainLanguageLeafWriter).
      */
     public function setFields(Field $field, string $setHandle)
     {

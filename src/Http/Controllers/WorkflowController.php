@@ -24,7 +24,7 @@ use TakepartMedia\Workflows\Translation\DeeplConfig;
 use TakepartMedia\Workflows\Translation\DeeplTranslator;
 use TakepartMedia\Workflows\Translation\LanguageCodes;
 use TakepartMedia\Workflows\Translation\PlainLanguageConfig;
-use TakepartMedia\Workflows\Translation\PlainLanguageDocument;
+use TakepartMedia\Workflows\Translation\PlainLanguageLeafDocument;
 use TakepartMedia\Workflows\Translation\PlainLanguageJobStore;
 use TakepartMedia\Workflows\Translation\PlainLanguageSubmission;
 use TakepartMedia\Workflows\Translation\PlainLanguageTranslator;
@@ -4143,30 +4143,44 @@ class WorkflowController extends CpController
         $codes = app(LanguageCodes::class);
 
         // Resolved BEFORE the extraction, because the two paths do not send the same
-        // fields: the rewriting path drops what its write-back has no slot for (see
-        // PlainLanguageDocument::neverSent()), and a preview extracting the other
-        // path's list would show texts nobody sends.
+        // thing: DeepL gets one segment per text (TranslatableText), the rewriting path
+        // one section per text leaf of the workflow's content fields
+        // (PlainLanguageLeafDocument) — and a preview of the other path's body would
+        // show texts nobody sends.
         $translator = $this->translatorFor($workflow, $target);
         $isPlainLanguage = $translator instanceof PlainLanguageTranslator;
-
-        $exclude = $this->translationExcludeFields($workflow);
-        $extracted = app(TranslatableText::class)->extract(
-            $source,
-            $isPlainLanguage ? PlainLanguageDocument::excludeFields($exclude) : $exclude,
-        );
 
         // Straight from the runner and from the adapter's own constant, so the preview
         // cannot describe a different body than the one that would actually be sent.
         $context = app(TranslationRunner::class)->contextOf($source);
-        $extras = $isPlainLanguage ? app(PlainLanguageTranslator::class)->bodyExtras() : [];
 
-        // The plain-language path marks structure on the way out — `<h1>` for the title,
-        // a `<div class="…">` per set. The preview has to show that markup, or it would
-        // describe a body nobody sends: reading it is how somebody checks whether the
-        // wrappers are right in the first place.
-        $texts = $isPlainLanguage
-            ? app(PlainLanguageDocument::class)->texts($source, $extracted['segments'])
-            : array_column($extracted['segments'], 'text');
+        if ($isPlainLanguage) {
+            $document = app(PlainLanguageLeafDocument::class);
+            $plan = $document->plan($source, $raw);
+            $texts = $document->texts($plan, $source);
+            $extras = app(PlainLanguageTranslator::class)->bodyExtras($document->requestExtras($plan));
+            $extracted = [
+                'segments' => [],
+                // What goes out and where its answer is written: one row per section.
+                'leaves' => array_map(fn (array $leaf) => [
+                    'n' => $leaf['n'],
+                    'path' => $leaf['path'],
+                    'type' => $leaf['type'],
+                    'field' => $leaf['field'],
+                    'context' => $leaf['context'],
+                    'modules' => $leaf['modules'],
+                    'intro' => $leaf['intro'],
+                    'sets' => $leaf['sets'],
+                ], $plan['leaves']),
+                'content_fields' => $plan['fields'],
+                'skipped' => array_map(fn (array $row) => ['key' => $row['path'], 'reason' => $row['reason']], $plan['skipped']),
+                'warnings' => [],
+            ];
+        } else {
+            $extracted = app(TranslatableText::class)->extract($source, $this->translationExcludeFields($workflow));
+            $texts = array_column($extracted['segments'], 'text');
+            $extras = [];
+        }
 
         return response()->json([
             'data' => [
@@ -4190,6 +4204,9 @@ class WorkflowController extends CpController
                 // (`modules`) and on the wire (a `data-modules` wrapper around
                 // `text`), so the preview shows exactly what the service receives.
                 'segments' => $extracted['segments'],
+                // Plain-language only: the text leaves, one per sent section.
+                'leaves' => $extracted['leaves'] ?? null,
+                'content_fields' => $extracted['content_fields'] ?? null,
                 // Copy-pasteable API body, merged in the same order the adapter uses:
                 // document-level context first, then the shared fields, then the
                 // plain-language endpoint's own fixed ones. Every segment is HTML

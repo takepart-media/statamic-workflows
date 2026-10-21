@@ -99,6 +99,14 @@ export function serializeMetadata(source) {
     ]) {
         if (!metadata[key]) delete metadata[key];
     }
+    // Skip rules: trimmed, non-empty, unique — and no key at all when there are none.
+    metadata.plain_language_skip_fields = [...new Set((metadata.plain_language_skip_fields ?? [])
+        .filter((rule) => typeof rule === 'string')
+        .map((rule) => rule.trim())
+        .filter(Boolean))];
+    if (!metadata.plain_language_skip_fields.length) {
+        delete metadata.plain_language_skip_fields;
+    }
     // Only persist the free source pick where it is on — the writer rejects it in
     // a plain-language workflow, so writing `false` everywhere would make that
     // manager unsaveable.

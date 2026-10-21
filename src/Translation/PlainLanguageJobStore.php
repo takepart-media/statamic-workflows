@@ -22,8 +22,11 @@ class PlainLanguageJobStore
      *                           a human's "rewrite again" both begin at 1 and get the
      *                           full retry budget. Only PollPlainLanguageCommand's
      *                           automatic retry passes anything else.
+     * @param  string|null  $format  null = legacy whole-document job; PlainLanguageJob::FORMAT_SECTIONS
+     *                               for a job sent as leaf sections, which then carries its $plan
+     * @param  array<string, mixed>|null  $plan
      */
-    public function add(string $subjectId, string $workflow, string $textId, int $chunk, array $segmentKeys, int $submission = 1): PlainLanguageJob
+    public function add(string $subjectId, string $workflow, string $textId, int $chunk, array $segmentKeys, int $submission = 1, ?string $format = null, ?array $plan = null): PlainLanguageJob
     {
         return PlainLanguageJob::create([
             'subject_id' => $subjectId,
@@ -33,6 +36,8 @@ class PlainLanguageJobStore
             'segment_keys' => array_values($segmentKeys),
             'status' => PlainLanguageJob::PENDING,
             'submission' => max(1, $submission),
+            'format' => $format,
+            'plan' => $plan,
         ]);
     }
 

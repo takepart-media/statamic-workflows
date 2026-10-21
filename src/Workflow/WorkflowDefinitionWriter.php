@@ -1348,6 +1348,27 @@ class WorkflowDefinitionWriter
             }
         });
 
+        // Fields the plain-language rewrite never sends: `handle`, `set.handle` or
+        // `*.handle` (see TextLeafWalker). Shape only, like clear_fields — and the
+        // same pairing: without `plain_language_site` nothing is ever rewritten.
+        $this->at('metadata.plain_language_skip_fields', function () use ($definition) {
+            $skipFields = $definition['metadata']['plain_language_skip_fields'] ?? [];
+
+            if (! is_array($skipFields) || ! array_is_list($skipFields)) {
+                $this->fail('skip_fields_not_list');
+            }
+
+            foreach ($skipFields as $rule) {
+                if (! is_string($rule) || preg_match('~^((\*|[A-Za-z0-9_-]+)\.)?[A-Za-z0-9_-]+$~', trim($rule)) !== 1) {
+                    $this->fail('skip_fields_not_list');
+                }
+            }
+
+            if ($skipFields !== [] && ($definition['metadata']['plain_language_site'] ?? null) === null) {
+                $this->fail('skip_fields_needs_site');
+            }
+        });
+
         // The top-level fields that are this workflow's content, in reading order.
         // Absent or empty means "automatic" (ContentFieldCatalog::autoDetect()).
         // Unlike site_fields and clear_fields above, these ARE checked against the

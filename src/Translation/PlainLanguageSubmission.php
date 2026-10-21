@@ -21,7 +21,8 @@ use TakepartMedia\Workflows\Workflow\WorkflowResolver;
 class PlainLanguageSubmission
 {
     /**
-     * Hand the source's segments to the service and record the job against the
+     * Hand the source's text leaves to the service (as sections, see
+     * PlainLanguageLeafDocument) and record the job — with its plan — against the
      * localization the rewrite is destined for.
      *
      * Returns `[submittedJobs, errorMessage]`. A refused submission leaves no row —
@@ -36,12 +37,12 @@ class PlainLanguageSubmission
     {
         $raw = app(DefinitionLoader::class)->raw($workflow);
 
-        $segments = app(TranslatableText::class)->extract($source, PlainLanguageDocument::excludeFields(
-            app(WorkflowResolver::class)->translationExcludeFields($raw)
-        ))['segments'];
+        $document = app(PlainLanguageLeafDocument::class);
+        $plan = $document->plan($source, $raw);
+        $texts = $document->texts($plan, $source);
 
-        if ($segments === []) {
-            // Nothing translatable — the copy IS the correct result, exactly as in the
+        if ($texts === []) {
+            // Nothing to rewrite — the copy IS the correct result, exactly as in the
             // synchronous path. Note this is reported as success: the retry path has to
             // decide for itself that "nothing to send" means it cannot try again.
             return [0, null];
@@ -51,26 +52,35 @@ class PlainLanguageSubmission
         $context = app(TranslationRunner::class)->contextOf($source);
 
         // ONE request for the whole entry, deliberately unchunked. The service answers
-        // with a rewritten document, and splitting a document into pieces would have it
-        // rewrite each piece on its own — four parts, four headings, four introductions.
-        // The chunker stays in use on the DeepL path, where every text is answered
-        // independently and a split changes nothing about the result.
+        // with a rewritten document, and splitting it would have it rewrite each piece
+        // on its own — four parts, four headings, four introductions. The sections
+        // inside that one request are what keeps the answer mappable per field.
         try {
             $textId = app(PlainLanguageTranslator::class)->submit(
-                app(PlainLanguageDocument::class)->texts($source, $segments),
+                $texts,
                 $codes->source((string) $source->locale()),
                 $codes->target($target),
                 $context,
+                $document->requestExtras($plan),
             );
         } catch (TranslationFailed $e) {
             return [0, $e->getMessage()];
         }
 
-        // The segment paths ride along for diagnostics only — the write-back replaces
-        // the content wholesale (see PlainLanguageDocument), so nothing maps by path.
-        // When a result looks wrong, what was sent is the first thing worth seeing.
-        app(PlainLanguageJobStore::class)
-            ->add($localization->id(), $workflow, $textId, 0, array_column($segments, 'key'), $submission);
+        // The plan travels with the job: it is what the answer is written into, so
+        // the write-back does not depend on the source still looking the same when
+        // the answer arrives minutes later. The leaf paths double as `segment_keys`
+        // for diagnostics.
+        app(PlainLanguageJobStore::class)->add(
+            $localization->id(),
+            $workflow,
+            $textId,
+            0,
+            array_column($plan['leaves'], 'path'),
+            $submission,
+            PlainLanguageLeafDocument::FORMAT,
+            $plan,
+        );
 
         return [1, null];
     }

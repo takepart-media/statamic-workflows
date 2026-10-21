@@ -4,7 +4,8 @@
     "type": "statamic-addon",
     "require": {
         "statamic/cms": "^6.0",
-        "symfony/workflow": "^7.0"
+        "symfony/workflow": "^7.0",
+        "league/html-to-markdown": "^5.1"
     },
     "autoload": {
         "psr-4": {

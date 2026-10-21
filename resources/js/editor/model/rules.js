@@ -321,6 +321,12 @@ export function validate(model, ctx = {}) {
     if (meta.plain_language_failed_place && !plainLanguageSite) {
         error('failed_place_needs_site', 'metadata.plain_language_failed_place', null, 'writer_failed_place_needs_site');
     }
+    const skipFields = meta.plain_language_skip_fields ?? [];
+    if (skipFields.some((rule) => typeof rule !== 'string' || !/^((\*|[A-Za-z0-9_-]+)\.)?[A-Za-z0-9_-]+$/.test(rule.trim()))) {
+        error('skip_fields_not_list', 'metadata.plain_language_skip_fields', null, 'writer_skip_fields_not_list');
+    } else if (skipFields.length && !plainLanguageSite) {
+        error('skip_fields_needs_site', 'metadata.plain_language_skip_fields', null, 'writer_skip_fields_needs_site');
+    }
 
     // --- places marked for deletion ---
     for (const deletion of model.deletions ?? []) {

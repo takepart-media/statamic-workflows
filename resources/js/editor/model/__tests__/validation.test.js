@@ -181,6 +181,20 @@ describe('rules.js', () => {
             expect(find(problems, 'failed_place_needs_site').path).toBe('metadata.plain_language_failed_place');
         });
 
+        it('plain-language skip fields: shape, and only with plain_language_site', () => {
+            const m = localization({ plain_language_skip_fields: ['anchor.anchor_id'] });
+            m.transitions[0].metadata.actions = [{ type: 'start_localization' }];
+            expect(find(validate(m, ctx), 'skip_fields_needs_site').path).toBe('metadata.plain_language_skip_fields');
+
+            const bad = localization({ plain_language_site: 'plain', plain_language_skip_fields: ['a.b.c'] });
+            bad.transitions[0].metadata.actions = [{ type: 'start_localization' }];
+            expect(find(validate(bad, ctx), 'skip_fields_not_list').path).toBe('metadata.plain_language_skip_fields');
+
+            const ok = localization({ plain_language_site: 'plain', plain_language_skip_fields: ['*.embed_code', 'intro'] });
+            ok.transitions[0].metadata.actions = [{ type: 'start_localization' }];
+            expect(find(validate(ok, ctx), 'skip_fields_not_list')).toBeUndefined();
+        });
+
         it('a source-draft place that publishes', () => {
             const m = localization({ source_draft_place: 'published' });
             m.transitions[0].metadata.actions = [{ type: 'start_localization' }];

@@ -5,7 +5,8 @@ namespace TakepartMedia\Workflows\Console;
 use Illuminate\Console\Command;
 use Statamic\Facades\Entry;
 use TakepartMedia\Workflows\Support\EventLogSuppressor;
-use TakepartMedia\Workflows\Translation\PlainLanguageDocument;
+use TakepartMedia\Workflows\Content\TextLeafWalker;
+use TakepartMedia\Workflows\Translation\PlainLanguageLeafDocument;
 use TakepartMedia\Workflows\Translation\PlainLanguageJobStore;
 use TakepartMedia\Workflows\Translation\PlainLanguageSeo;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
@@ -31,7 +32,7 @@ use TakepartMedia\Workflows\Workflow\WorkflowResolver;
  * before it, and one pass over the entries is cheaper than one command per rule.
  *
  * Deliberately the same rules as the live path, applied through the same classes:
- * PlainLanguageSeo::plan() decides per SEO subkey, PlainLanguageDocument decides what
+ * PlainLanguageSeo::planFor() decides per SEO subkey, PlainLanguageLeafDocument decides what
  * an emptied field contains, and this command only reports and saves. A backfill that
  * did it "almost like" the live path would leave two versions of the truth in the
  * project, and the difference would only show up months later on one entry.
@@ -86,7 +87,7 @@ class BackfillPlainLanguageCommand extends Command
         WorkflowResolver $resolver,
         PlainLanguageJobStore $jobs,
         PlainLanguageSeo $seo,
-        PlainLanguageDocument $document,
+        PlainLanguageLeafDocument $document,
     ): int {
         $dryRun = (bool) $this->option('dry-run');
         $keepEdited = ! (bool) $this->option('force');
@@ -117,7 +118,7 @@ class BackfillPlainLanguageCommand extends Command
             }
 
             foreach ($entries as $entry) {
-                $result = $this->backfill($entry, $workflow, $jobs, $seo, $document, $target['clear'], $keepEdited, $dryRun);
+                $result = $this->backfill($entry, $workflow, $target['raw'], $jobs, $seo, $document, $target['clear'], $keepEdited, $dryRun);
 
                 $written += $result === self::WRITTEN ? 1 : 0;
                 $unchanged += $result === self::UNCHANGED ? 1 : 0;
@@ -135,26 +136,29 @@ class BackfillPlainLanguageCommand extends Command
      * One version: report the decision per SEO subkey and per clearable field, then
      * store whatever came out of it.
      *
-     * The description is derived from the version's OWN `content_sets`, never through
-     * `value()`. A localization without its own content inherits the origin's, and
-     * deriving from that would put the German introduction into the plain version's
-     * meta description — the exact bug this command exists to remove. The same reading
-     * applies to the cleared fields, for the mirror-image reason: what matters there is
-     * whether the version has an own value at all.
+     * The description is derived from the text leaves of the version's OWN data in
+     * the workflow's content fields (TextLeafWalker), never through `value()`. A
+     * localization without its own content inherits the origin's, and deriving from
+     * that would put the German introduction into the plain version's meta
+     * description — the exact bug this command exists to remove. The same reading
+     * applies to the cleared fields, for the mirror-image reason: what matters there
+     * is whether the version has an own value at all.
      *
-     * Intro nodes are deliberately NOT passed to plan(). The live path prefers the
-     * intro it has just written back (PlainLanguageSeo), but every version this command
-     * walks predates that — their intro field still holds the German copy, and there is
-     * nothing there worth preferring.
+     * Intro leaves are NOT preferred here, unlike the live path: the versions this
+     * command was written for predate the intro round trip, and their intro field
+     * may still hold the German copy.
+     *
+     * @param  array<string, mixed>  $raw
      *
      * @param  array<int, string>  $clear
      */
     private function backfill(
         $entry,
         string $workflow,
+        array $raw,
         PlainLanguageJobStore $jobs,
         PlainLanguageSeo $seo,
-        PlainLanguageDocument $document,
+        PlainLanguageLeafDocument $document,
         array $clear,
         bool $keepEdited,
         bool $dryRun,
@@ -180,7 +184,9 @@ class BackfillPlainLanguageCommand extends Command
             return self::SKIPPED;
         }
 
-        if (! $this->wasRewritten($entry, $root, $workflow)) {
+        $fields = $document->contentFields($entry, $raw);
+
+        if (! $this->wasRewritten($entry, $root, $workflow, $fields)) {
             $this->line("  {$label}: no completed rewrite — skipped.");
 
             return self::SKIPPED;
@@ -189,9 +195,15 @@ class BackfillPlainLanguageCommand extends Command
         $own = $entry->data()->get(PlainLanguageSeo::field());
         $origin = $root->data()->get(PlainLanguageSeo::field());
 
-        $plan = $seo->plan(
-            (string) ($entry->value(PlainLanguageDocument::titleField()) ?? ''),
-            (array) $entry->data()->get(PlainLanguageDocument::contentField()),
+        $ownData = array_intersect_key($entry->data()->all(), array_flip($fields));
+        $leaves = array_map(
+            fn ($leaf) => ['type' => $leaf->type, 'value' => $leaf->value],
+            app(TextLeafWalker::class)->leaves($entry, $ownData, $fields, app(WorkflowResolver::class)->plainLanguageSkipFields($raw)),
+        );
+
+        $plan = $seo->planFor(
+            (string) ($entry->value(PlainLanguageLeafDocument::titleField()) ?? ''),
+            $seo->descriptionFromLeaves($leaves),
             $own,
             $origin,
             $keepEdited,
@@ -202,7 +214,7 @@ class BackfillPlainLanguageCommand extends Command
         // clearing half runs on, and only the two derived texts are dropped.
         $seoOff = $plan === null;
         $merged = $seoOff ? null : $seo->withPlan($plan, $own, $origin);
-        $clearPlan = $this->clearPlan($entry, $root, $document, $clear, $keepEdited);
+        $clearPlan = $this->clearPlan($entry, $root, $document, array_diff($clear, $document->protectedFields(['fields' => $fields])), $keepEdited);
 
         $this->line("  {$label}:");
 
@@ -233,7 +245,7 @@ class BackfillPlainLanguageCommand extends Command
 
                 foreach ($writes as $handle => $value) {
                     // set(), never remove(): an absent key is not an empty field but an
-                    // inherited one — see PlainLanguageDocument::clear() for the whole
+                    // inherited one — see LegacyPlainLanguageDocument::clear() for the whole
                     // argument. This is the line that would otherwise quietly restore
                     // the German sources it was told to remove.
                     $entry->set($handle, $value);
@@ -266,7 +278,7 @@ class BackfillPlainLanguageCommand extends Command
      * @param  array<int, string>  $handles
      * @return array<string, array{from: mixed, to: mixed, reason: string}>
      */
-    private function clearPlan($entry, $root, PlainLanguageDocument $document, array $handles, bool $keepEdited): array
+    private function clearPlan($entry, $root, PlainLanguageLeafDocument $document, array $handles, bool $keepEdited): array
     {
         $plan = [];
 
@@ -305,8 +317,9 @@ class BackfillPlainLanguageCommand extends Command
      * PurgeWorkflowDataOnEntryDeleted-style history pruning means an absent row is not
      * proof of absence either.
      *
-     * So there is a fallback, and it asks the content itself: the version has
-     * `content_sets` of its OWN, and that content differs from the origin's. The
+     * So there is a fallback, and it asks the content itself: the version has one of
+     * the workflow's content fields of its OWN, and that content differs from the
+     * origin's. The
      * second half carries the whole test. A localization is created as a full copy of
      * its source, so own content alone proves nothing — an empty copy waiting for its
      * rewrite has exactly the same shape. Content that has DIVERGED from the origin is
@@ -314,9 +327,11 @@ class BackfillPlainLanguageCommand extends Command
      * document worth deriving from.
      *
      * The title is checked too, for the case where the rewrite changed the heading but
-     * a project has content_sets excluded from the run.
+     * a project has its content fields excluded from the run.
+     *
+     * @param  array<int, string>  $fields  the workflow's content fields for this entry
      */
-    private function wasRewritten($entry, $root, string $workflow): bool
+    private function wasRewritten($entry, $root, string $workflow, array $fields): bool
     {
         $completed = WorkflowEvent::query()
             ->where('workflow', $workflow)
@@ -328,21 +343,33 @@ class BackfillPlainLanguageCommand extends Command
             return true;
         }
 
-        $content = (array) $entry->data()->get(PlainLanguageDocument::contentField());
+        $diverged = false;
+        $hasOwn = false;
 
-        if ($content === []) {
+        foreach ($fields as $field) {
+            $content = $entry->data()->get($field);
+
+            if ($content === null || $content === [] || $content === '') {
+                continue;
+            }
+
+            $hasOwn = true;
+            $diverged = $diverged || $content !== $root->data()->get($field);
+        }
+
+        if (! $hasOwn) {
             return false;
         }
 
-        return $content !== (array) $root->data()->get(PlainLanguageDocument::contentField())
-            || $entry->data()->get(PlainLanguageDocument::titleField())
-                !== $root->data()->get(PlainLanguageDocument::titleField());
+        return $diverged
+            || $entry->data()->get(PlainLanguageLeafDocument::titleField())
+                !== $root->data()->get(PlainLanguageLeafDocument::titleField());
     }
 
     /**
      * The version this one was copied from, or null when it is not a localization.
      *
-     * `root()` for the reason PlainLanguageDocument::originSeo() gives: localizations
+     * `root()` for the reason LegacyPlainLanguageDocument::originSeo() gives: localizations
      * are created off the root, so the origin chain is one level deep and the root IS
      * the origin. An entry that is its own root has none.
      */
@@ -362,7 +389,7 @@ class BackfillPlainLanguageCommand extends Command
      * land in — so it answers both questions this command has at once: which
      * workflows are in scope, and which versions belong to them.
      *
-     * @return array<string, array{site: string, collections: array<int, string>, clear: array<int, string>}>
+     * @return array<string, array{site: string, collections: array<int, string>, clear: array<int, string>, raw: array<string, mixed>}>
      */
     private function workflows(DefinitionLoader $loader, WorkflowResolver $resolver, ?string $only): array
     {
@@ -411,6 +438,7 @@ class BackfillPlainLanguageCommand extends Command
                 // live path gets — including its refusal to hand any out for a
                 // workflow that is not the plain-language manager.
                 'clear' => $resolver->plainLanguageClearFields($raw),
+                'raw' => $raw,
             ];
         }
 

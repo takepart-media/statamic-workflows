@@ -625,6 +625,18 @@ return [
             // job on its first poll.
             'max_polls' => env('PLAIN_LANGUAGE_MAX_POLLS', 5),
             'max_attempts' => env('PLAIN_LANGUAGE_MAX_ATTEMPTS', 3),
+
+            // Writing the answer back (one section per text leaf). In a TOP-LEVEL
+            // Bard content field a returned <h2>/<h3> becomes this set, and heading
+            // sets are numbered 1, 2, 3 … in `heading_index_field` — both only where
+            // the field declares the set. Null switches either off.
+            'heading_set' => 'heading',
+            'heading_index_field' => 'heading_index',
+
+            // Whether disabled Replicator rows and Bard sets are rewritten too. On by
+            // default: a disabled row an editor switches back on later should not
+            // turn up in German on the plain-language page.
+            'include_disabled' => true,
         ],
 
     ],

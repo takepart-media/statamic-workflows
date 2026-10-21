@@ -22,6 +22,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $error_message
  * @property int $attempts
  * @property int $submission
+ * @property string|null $format  null = legacy whole document, `sections` = per-leaf
+ * @property array<string, mixed>|null $plan  what a `sections` job was sent (PlainLanguageLeafDocument::plan())
  */
 class PlainLanguageJob extends Model
 {
@@ -33,6 +35,9 @@ class PlainLanguageJob extends Model
     public const COMPLETED = 'completed';
 
     public const FAILED = 'failed';
+
+    /** Write-back format of a job submitted with leaf sections (PlainLanguageLeafDocument). */
+    public const FORMAT_SECTIONS = 'sections';
 
     /** The two that are still worth polling. */
     public const OPEN = [self::PENDING, self::PROCESSING];
@@ -48,5 +53,6 @@ class PlainLanguageJob extends Model
         'chunk' => 'integer',
         'attempts' => 'integer',
         'submission' => 'integer',
+        'plan' => 'array',
     ];
 }

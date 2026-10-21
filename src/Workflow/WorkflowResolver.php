@@ -242,6 +242,32 @@ class WorkflowResolver
     }
 
     /**
+     * Fields the plain-language rewrite never sends (`metadata.plain_language_skip_fields`):
+     * `handle` for a top-level field, `set.handle` for a field inside a set / row
+     * type, `*.handle` for a field at any nested level — see TextLeafWalker.
+     *
+     * For text that is not prose although it is stored in a text field: an anchor
+     * id, an embed code, a button label that has to match a design. Empty for a
+     * workflow that is not the plain-language manager, like plainLanguageClearFields().
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array<int, string>
+     */
+    public function plainLanguageSkipFields(array $raw): array
+    {
+        if (! $this->isPlainLanguageWorkflow($raw)) {
+            return [];
+        }
+
+        return collect($raw['metadata']['plain_language_skip_fields'] ?? [])
+            ->filter(fn ($handle) => is_string($handle) && trim($handle) !== '')
+            ->map(fn (string $handle) => trim($handle))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * The site a workflow translates FROM (`metadata.translation_source_site`),
      * or null for "the entry's origin".
      *

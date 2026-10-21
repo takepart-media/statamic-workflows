@@ -10,6 +10,11 @@ use Statamic\Fieldtypes\RowId;
 use TakepartMedia\Workflows\Workflow\WorkflowResolver;
 
 /**
+ * LEGACY. Only still used to write back jobs submitted before the leaf format
+ * existed (`workflow_plain_language_jobs.format` = null). New submissions go through
+ * PlainLanguageLeafDocument. Kept unchanged so a rewrite in flight during the update
+ * lands exactly as it would have before; delete once no such job can exist any more.
+ *
  * How a plain-language result maps onto an entry — both directions, in one class.
  *
  * This is where the plain-language path parts ways with DeepL. DeepL returns one
@@ -49,7 +54,7 @@ use TakepartMedia\Workflows\Workflow\WorkflowResolver;
  * addon already treats it as this project's content field, and deriving "the main
  * Bard field" would be a guess dressed up as a rule.
  */
-class PlainLanguageDocument
+class LegacyPlainLanguageDocument
 {
     /** The entry field the rewritten document replaces: `content_fields.body`. */
     public static function contentField(): string

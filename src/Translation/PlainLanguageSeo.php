@@ -11,7 +11,7 @@ use TakepartMedia\Workflows\Support\ContentFields;
  * TranslatableText writes them into the field they left (see SEO_TEXT_KEYS). The
  * rewriting service answers with a DOCUMENT, and everything sent to it reappears
  * inside that document — which is why `seo` is excluded on that path
- * (PlainLanguageDocument::NEVER_SENT) and why a plain-language version used to carry
+ * (PlainLanguageLeafDocument::excludeFields()) and why a plain-language version used to carry
  * the German meta texts of its origin, word for word, forever.
  *
  * The fix is deliberately NOT a second call to the service. The two texts a reader
@@ -24,7 +24,7 @@ use TakepartMedia\Workflows\Support\ContentFields;
  *     `intro` field, then the first non-empty top-level `paragraph` of the finished
  *     `content_sets`. Both are the same text; which one holds it depends on whether
  *     the service returned the intro wrapper it was sent (see
- *     PlainLanguageDocument::INTRO_FIELD). With the wrapper the introduction is a
+ *     LegacyPlainLanguageDocument::INTRO_FIELD). With the wrapper the introduction is a
  *     field of its own and no longer the document's first paragraph — that paragraph
  *     is then the article's opening, which describes the page less well. Without it
  *     nothing is passed and the paragraph rule answers, exactly as before.
@@ -36,7 +36,7 @@ use TakepartMedia\Workflows\Support\ContentFields;
  *     they are a parameter rather than something this class fetches.
  *
  * Everything here is pure: values in, values out, no entry and no save. That is what
- * lets the live path (PlainLanguageDocument::apply()) and the one-off backfill
+ * lets the live path (PlainLanguageLeafDocument::apply()) and the one-off backfill
  * (BackfillPlainLanguageCommand) share one set of rules instead of agreeing on them twice.
  *
  * THE MERGE IS WHOLE-ARRAY, and that is not a shortcut. Statamic's origin
@@ -139,6 +139,29 @@ class PlainLanguageSeo
      */
     public function plan(string $title, array $nodes, $own, $origin, bool $keepEdited = false, array $intro = []): ?array
     {
+        return $this->planFor($title, $this->description($nodes, $intro), $own, $origin, $keepEdited);
+    }
+
+    /**
+     * merged() for a description the caller derived itself — the leaf path, whose
+     * content is not one Bard document (see descriptionFromLeaves()).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function mergedWith(string $title, ?string $description, $own, $origin, bool $keepEdited = false): ?array
+    {
+        $plan = $this->planFor($title, $description, $own, $origin, $keepEdited);
+
+        return $plan === null ? null : $this->withPlan($plan, $own, $origin);
+    }
+
+    /**
+     * plan() with the description already derived.
+     *
+     * @return array<string, array{from: mixed, to: string|null, reason: string}>|null
+     */
+    public function planFor(string $title, ?string $description, $own, $origin, bool $keepEdited = false): ?array
+    {
         if ($this->disabled($own, $origin)) {
             return null;
         }
@@ -148,7 +171,7 @@ class PlainLanguageSeo
 
         $derived = [
             self::TITLE_KEY => trim($title) === '' ? null : trim($title),
-            self::DESCRIPTION_KEY => $this->description($nodes, $intro),
+            self::DESCRIPTION_KEY => $description,
         ];
 
         $plan = [];
@@ -246,6 +269,64 @@ class PlainLanguageSeo
         $text = $this->firstParagraph($intro) ?? $this->firstParagraph($nodes);
 
         return $text === null ? null : $this->truncate($text);
+    }
+
+    /**
+     * The meta description for a rewrite written per text leaf: the first paragraph
+     * of the intro leaf if there is one, otherwise of the first Bard, Markdown or
+     * Textarea leaf that has a paragraph. Text fields are skipped — a one-line field
+     * is a label or a heading, not a summary. Shortened to the field's limit.
+     *
+     * @param  array<int, array{type: string, value: mixed, intro?: bool}>  $leaves  written leaves, in document order
+     */
+    public function descriptionFromLeaves(array $leaves): ?string
+    {
+        usort($leaves, fn ($a, $b) => (int) ! ($a['intro'] ?? false) <=> (int) ! ($b['intro'] ?? false));
+
+        foreach ($leaves as $leaf) {
+            $value = $leaf['value'] ?? null;
+
+            $text = match ($leaf['type'] ?? null) {
+                'bard' => is_array($value) ? $this->firstParagraph($value) : $this->firstHtmlParagraph((string) $value),
+                'markdown' => $this->firstHtmlParagraph(\Statamic\Facades\Markdown::parse((string) $value)),
+                'textarea' => $this->firstTextParagraph((string) $value),
+                default => null,
+            };
+
+            if ($text !== null) {
+                return $this->truncate($text);
+            }
+        }
+
+        return null;
+    }
+
+    private function firstHtmlParagraph(string $html): ?string
+    {
+        preg_match_all('~<p\b[^>]*>(.*?)</p>~is', $html, $matches);
+
+        foreach ($matches[1] as $inner) {
+            $text = trim((string) preg_replace('~\s+~u', ' ', html_entity_decode(strip_tags(str_ireplace(['<br>', '<br/>', '<br />'], ' ', $inner)), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return null;
+    }
+
+    private function firstTextParagraph(string $text): ?string
+    {
+        foreach (preg_split('~\R\s*\R~u', $text) ?: [] as $paragraph) {
+            $paragraph = trim((string) preg_replace('~\s+~u', ' ', $paragraph));
+
+            if ($paragraph !== '') {
+                return $paragraph;
+            }
+        }
+
+        return null;
     }
 
     /**

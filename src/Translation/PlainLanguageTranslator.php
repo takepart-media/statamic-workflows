@@ -46,9 +46,10 @@ class PlainLanguageTranslator implements TranslationService
      * than one concatenated string.
      *
      * `generate_intro` asks the service to write the opening paragraph itself instead of
-     * rewriting the one it was handed. The intro travels marked (`<div class="intro">`,
-     * see PlainLanguageDocument::INTRO_FIELD), so the service can tell which text that
-     * is — without the marker the flag would have nothing to act on.
+     * rewriting the one it was handed. The intro travels marked (`<div class="intro">`
+     * inside its section), so the service can tell which text that is — without the
+     * marker the flag would have nothing to act on, which is why the leaf path sends
+     * it as false when no intro section goes out (PlainLanguageLeafDocument::requestExtras()).
      *
      * It travels as a JSON boolean: the body carries `"generate_intro": true`.
      */
@@ -57,10 +58,16 @@ class PlainLanguageTranslator implements TranslationService
         'generate_intro' => true,
     ];
 
-    /** The protocol extras plus the project's `body_extras`, which win on a clash. */
-    public function bodyExtras(): array
+    /**
+     * The protocol extras, then the per-request ones ($request — today
+     * `generate_intro`, which depends on whether an intro section goes out), then
+     * the project's `body_extras`, which win on a clash.
+     *
+     * @param  array<string, mixed>  $request
+     */
+    public function bodyExtras(array $request = []): array
     {
-        return array_merge(self::PROTOCOL_EXTRAS, $this->config->bodyExtras());
+        return array_merge(self::PROTOCOL_EXTRAS, $request, $this->config->bodyExtras());
     }
 
     public function __construct(private PlainLanguageConfig $config) {}
@@ -81,10 +88,11 @@ class PlainLanguageTranslator implements TranslationService
      *
      * @param  array<int, string>  $texts
      * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $extras  per-request protocol fields, see bodyExtras()
      *
      * @throws TranslationFailed
      */
-    public function submit(array $texts, string $sourceLang, string $targetLang, array $context = []): string
+    public function submit(array $texts, string $sourceLang, string $targetLang, array $context = [], array $extras = []): string
     {
         $texts = array_values($texts);
 
@@ -104,7 +112,7 @@ class PlainLanguageTranslator implements TranslationService
             'source_lang' => $sourceLang,
             'target_lang' => $targetLang,
             'tag_handling' => 'html',
-        ], $this->bodyExtras());
+        ], $this->bodyExtras($extras));
 
         $response = $this->send(fn () => Http::withToken($token)
             ->timeout(self::TIMEOUT)

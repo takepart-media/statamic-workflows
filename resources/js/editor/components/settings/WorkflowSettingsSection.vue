@@ -189,6 +189,17 @@
                             @update:model-value="(v) => setMeta('plain_language_failed_place', v ?? null)"
                         />
                     </ProblemField>
+                    <ProblemField
+                        :label="__('workflows::messages.plain_language_skip_fields')"
+                        :instructions="__('workflows::messages.plain_language_skip_fields_hint')"
+                        path="metadata.plain_language_skip_fields"
+                    >
+                        <Input
+                            :model-value="skipFieldsText"
+                            placeholder="anchor.anchor_id, *.embed_code"
+                            @update:model-value="updateSkipFields"
+                        />
+                    </ProblemField>
                 </template>
                 <ProblemField
                     v-else
@@ -441,7 +452,7 @@
 </template>
 
 <script setup>
-import { computed, inject } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { Button, Checkbox, CodeEditor, Field, Icon, Input, Select } from '@statamic/cms/ui';
 import EnvStatusLine from '../../../components/EnvStatusLine.vue';
 import { SLA_STAGES } from '../../model/constants.js';
@@ -470,6 +481,24 @@ const nav = computed(() => model.workflow.metadata.nav ?? {});
 const sla = computed(() => model.workflow.metadata.sla);
 
 const setMeta = (key, value) => editor.api.updateWorkflow({ metadata: { [key]: value } });
+
+// plain_language_skip_fields as a comma-separated input. The typed text is kept
+// locally so "a, " survives until the next handle is typed; the model only ever
+// holds the trimmed, non-empty list.
+const splitList = (value) => String(value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+const skipFieldsText = ref((meta.value.plain_language_skip_fields ?? []).join(', '));
+watch(
+    () => meta.value.plain_language_skip_fields,
+    (list) => {
+        if (splitList(skipFieldsText.value).join(',') !== (list ?? []).join(',')) {
+            skipFieldsText.value = (list ?? []).join(', ');
+        }
+    },
+);
+function updateSkipFields(value) {
+    skipFieldsText.value = value ?? '';
+    setMeta('plain_language_skip_fields', splitList(value));
+}
 
 // Live validation (useValidation.js): the errors at a field's path, as one string.
 const err = (path) => editor.validation?.errorFor(path);

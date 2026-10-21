@@ -801,6 +801,7 @@ dieselbe Transition, weil er immer an der ersten stand.
 | `plain_language_completed_place` | Optional, nur mit `plain_language_site`. Sobald `PollPlainLanguageCommand` einen Auftrag erfolgreich abschließt (Text übernommen, keine `failures`), setzt es den Beitrag **direkt** in diesen Place — per `WorkflowStateStore::set()`, bewusst NICHT über eine Transition (der Scheduler läuft unbeaufsichtigt, es gibt also weder einen Klick, an dem eine `required_group`-Prüfung hängen könnte, noch die Assignee-/Publish-Nebeneffekte, die eine echte Transition mitbringt — das ist der Preis für die Einfachheit, nicht ein Versehen). Fehlt die Einstellung, bleibt es beim heutigen Verhalten: liegen bleiben bis zum manuellen Klick auf `submit_plain_language`. Bei einem fehlgeschlagenen Auftrag greift es nie. Muss ein existierender Place sein, der Writer lehnt sonst ab, wie bei `seed_published_place`. **Der einzige Weg, eine „Einfache Sprache ist fertig"-Mail zu bekommen:** ohne diese Einstellung ändert sich beim Eintreffen des Rewrites kein Status, es kommt also nirgends etwas an und nichts kann melden. Mit ihr trägt der genannte Place eine `mail`-Action (`mail_type: plain_language_ready`), und der Poll-Befehl löst sie beim Setzen aus — siehe Place-Action-Typen oben. |
 | `plain_language_failed_place` | Optional, nur mit `plain_language_site`. Das Gegenstück zum Abschluss-Place: wohin `PollPlainLanguageCommand` eine Fassung setzt, deren Rewrite **endgültig** gescheitert ist — Auftrag vom Dienst abgelehnt, als `failed` gemeldet, unbrauchbares Ergebnis, oder nach dem Abfrage-Budget einer Einreichung nicht fertig geworden (`max_polls`, Default 5, env `PLAIN_LANGUAGE_MAX_POLLS`; ein Poll pro Minute). **Ein einzelner Fehlschlag parkt aber nicht mehr sofort:** der Poll reicht den ganzen Aufruf erneut ein, bis `max_attempts` Einreichungen verbraucht sind (Default 3, env `PLAIN_LANGUAGE_MAX_ATTEMPTS`, `1` schaltet Wiederholungen ab). Die Zählung trägt die Spalte `submission` der Job-Tabelle, die der Retry beim Anlegen der Ersatzzeile weiterschreibt — `attempts` daneben zählt Polls und beginnt pro Einreichung neu. Jeder verbrauchte Versuch schreibt ein `plain_language_retry`-Event (bewusst nicht `plain_language_failed`, sonst würde die Instanzseite bei jedem Zwischenversuch einen Fehler-Toast feuern). Erst der letzte gescheiterte Versuch parkt. Ebenfalls, wenn die **Status-Abfrage** selbst dauerhaft mit einem Fehlercode antwortet — bei einem Fehlercode wird pro Job einzeln nachgefragt, damit eine unbekannte ID nicht die gesunden Aufträge mitreißt; ist der Dienst gar nicht erreichbar, wird gewartet statt eskaliert. **Nicht** für den synchronen Fall: scheitert schon das Einreichen (500 vom Dienst in `applyTransition()`), wird die Lokalisierung wieder gelöscht und es bleibt gar nichts zurück — dort war nie ein Auftrag angenommen, es gibt also nichts zu parken. Ebenfalls per `WorkflowStateStore::set()`, also ohne Transition und ohne `required_group`-Prüfung. **Ohne diese Einstellung wird die unübersetzte Kopie gelöscht** — das ältere Verhalten, das bleibt, damit bestehende Projekte sich nicht ändern. Setzen lohnt: ein Place ist das einzige dauerhafte Signal, das das CP hat (ein Toast ist nach 3,5 s weg, und der Poll läuft ohne Session, in die er einen flashen könnte), er ist im Queue-Listing sichtbar, und eine Transition mit `plain_language_resubmit` aus ihm heraus macht den zweiten Versuch zu einem Klick. Muss ein existierender Place sein, der Writer lehnt sonst ab. |
 | `plain_language_clear_fields` | Optional, nur mit `plain_language_site`, Liste von **Top-Level-Feld-Handles**. Diese Felder werden beim Rückschreiben eines fertigen Rewrites auf der Einfache-Sprache-Fassung **geleert** — gedacht für Inhalte, die eine Vollkopie mitbringt, die aber in Einfacher Sprache nichts zu suchen haben und die der Dienst von sich aus nie entfernt, weil sie gar nicht Teil des Dokuments sind, mit dem er antwortet. Der Anlass in diesem Projekt: der Quellen-Block (`dd_title`/`dd_text`) mit der wissenschaftlichen Referenzliste unter jedem Beitrag. **Geleert heißt beschattet, nicht gelöscht** — warum, siehe „Quellen überleben den Rewrite nicht" unten. Welche Felder das sind, ist eine **Projekt**-Entscheidung: das Addon weiß nicht, dass dieses Projekt seine Quellen `dd_text` nennt, und hardcodet nichts (dieselbe Haltung wie `site_fields`). Nicht gegen ein Blueprint geprüft (ein Workflow kann mehrere Collections mit verschiedenen Blueprints führen; ein unbekannter Handle beschattet ein Feld, das niemand liest, und ist harmlos) — die **Kopplung** an `plain_language_site` prüft der Writer dagegen schon, wie bei den beiden Place-Keys: ohne sie entsteht in diesem Workflow nie ein Rewrite, der Key sähe also wirksam aus und leerte nichts. `WorkflowResolver::plainLanguageClearFields()` gibt für jeden anderen Workflow ohnehin nichts heraus — **der Übersetzungspfad ist nicht betroffen**, eine englische Fassung behält ihre (übersetzten) Quellen. Im Graph-Editor gibt es kein Feld dafür; der Key wird in der YAML gesetzt und überlebt das Speichern im Editor unverändert (`normalize()`/`save()` kopieren `metadata` vollständig). Bestandsfassungen holt `workflows:backfill-plain-language` nach. |
+| `plain_language_skip_fields` | Optional, nur mit `plain_language_site`, Liste von Regeln: `feld` (Top-Level-Feld), `set.feld` (Feld `feld` in einem Set/einer Zeile vom Typ `set`, bzw. in der Grid/Group `set`) oder `*.feld` (Feld in jeder Verschachtelung). Solche Textfelder gehen **nie** an den Einfache-Sprache-Dienst und behalten ihren Wert — für Text, der keine Prosa ist (Anker-IDs, Embed-Codes, Button-Labels). Writer prüft Form und Kopplung an `plain_language_site`; im Graph-Editor unter Lokalisierung als kommagetrenntes Feld. Siehe „Rückschreiben pro Textblatt". |
 | `translation_source_site` | Die Version, aus der übersetzt wird. Leer/fehlend = die **Main-Site** (Statamics Default-Site), und nur wenn der Beitrag dort keine Version hat, dessen Ursprungsversion — ein Beitrag, der direkt in einer anderen Site angelegt wurde, hat keine andere Quelle. Aufgelöst an genau einer Stelle: `WorkflowResolver::sourceSiteFor()`. Es gibt **eine** Quelle pro Manager: steht hier `simple`, entstehen alle Übersetzungen aus der Einfache-Sprache-Fassung und nicht mehr aus der deutschen. Fehlt einem Beitrag diese Version, ist die Start-Transition gesperrt (Begründung am Button, 422 am Endpoint) — kein stiller Rückfall. |
 | `translation_source_pick: true` | Hebt die Verbindlichkeit auf: der Sprach-Dialog fragt dann zusätzlich nach der Quelle, vorbelegt mit `translation_source_site` (bzw. der Main-Site) und begrenzt auf die Fassungen, die der Beitrag hat. Für Projekte, die pro Übersetzung entscheiden wollen. Standard aus. Nur in einem Lokalisierungs-Workflow **ohne** `plain_language_site` erlaubt — der Einfache-Sprache-Manager fragt nichts, dort wäre das Flag wirkungslos, und der Writer lehnt die Kombination deshalb ab. Bei eingeschaltetem Flag sperrt eine fehlende Quell-Version die Transition nicht mehr: sie ist dann eine Option unter mehreren, und der Dialog bietet nur vorhandene an. Gesetzt z. B. auf `simple`, um jede Übersetzung auf der Einfache-Sprache-Version aufzubauen statt auf dem Original. Wirkt an **einer** Stelle (`sourceEntryFor()`) und damit einheitlich auf Übersetzungslauf, Quell-Panel der Detailansicht und Payload-Vorschau. Fehlt einem Beitrag die gewählte Version, bleibt die Transition gesperrt und nennt den Grund — es wird **nie** stillschweigend auf den Ursprung zurückgefallen, weil das Ergebnis dann falsch wäre und richtig aussähe. Muss eine konfigurierte Site sein und darf nicht gleich `plain_language_site` sein. |
 | `translation_source_view: [...]` | Nur im Lokalisierungs-Workflow: wer die **Quellspalte** der Detailansicht wie sieht. Liste von Regeln, je `mode` (`hidden` = die Quelle wird gar nicht an den Browser geliefert, `collapsed` = die Seite startet einspaltig und ein Button blendet die Quelle ein), `by` (`group`, `role` oder `user`) und `handles` (Gruppen-/Rollen-Handles bzw. Benutzer-IDs). Wen keine Regel trifft, sieht die Gegenüberstellung wie bisher; treffen mehrere, gilt die strengere. **Darstellungsregel, keine Berechtigung** — Super-Admins sind nicht ausgenommen. Im CP editierbar (Übersetzungs-Abschnitt der Workflow-Einstellungen). Ausgewertet in `Workflow\SourceViewRules`, validiert vom Writer (`writer_source_view_*`). |
@@ -1261,7 +1262,73 @@ Auseinandergehalten werden sie über die **Site, die ein Manager beansprucht**:
   gebunden: auf der deutschen Fassung angewendet würde es das Original mit
   Einfacher Sprache überschreiben.
 
-##### Sets über den Dienst hinweg erhalten
+##### Rückschreiben pro Textblatt (Format `sections`)
+
+Seit dem Leaf-Format schickt der Einfache-Sprache-Pfad nicht mehr „den Body", sondern
+**jedes Stück Prosa der Inhaltsfelder einzeln markiert** und schreibt die Antwort
+genau dorthin zurück (`Translation\PlainLanguageLeafDocument`).
+
+- **Welche Felder:** die Inhaltsfelder des Workflows (`metadata.content_fields`, sonst
+  Auto-Erkennung inkl. `content_fields.intro`/`body` aus der Config — dieselbe Antwort
+  wie Summary und Kommentare, `ContentFieldResolver::for($entry, $raw)`), abzüglich
+  `translation_exclude_fields` und `seo`. Andere Felder gehen nicht mehr mit.
+- **Textblätter** (`Content\TextLeafWalker`): Replicator-Zeilen, Grid-Zeilen und Groups
+  werden durchlaufen; ein **Bard-Feld ist ein Blatt** samt seinen Sets (Stopp dort),
+  Markdown/Textarea/Text sind je ein Blatt. Jedes Blatt hat einen Rohdaten-Pfad
+  (`sections.0.content.2.text`). Übersprungen: leere Werte, hidden/computed Felder,
+  Text-Felder mit `input_type` ≠ `text`, Werte, die nur eine URL sind oder mit
+  `<iframe`/`<script`/`<blockquote` beginnen, und `metadata.plain_language_skip_fields`.
+  Deaktivierte Zeilen/Sets gehen mit (`translation.plain_language.include_disabled`,
+  Default `true`).
+- **Wire-Format** (`input_format: json-modules`, ein Request pro Eintrag): `text[0]` ist
+  `<h1>Titel</h1>`, danach je Blatt
+  `<section data-wf-leaf="N" data-wf-type="bard|markdown|textarea|text">…</section>`.
+  Bard wird wie gehabt gerendert (Bild-/Link-Referenzen bleiben `statamic://`), Sets mit
+  Text als `<div class="<set>" data-wf-set="<set-id>">` (nur **ein** Textfeld je Set:
+  das erste nicht übersprungene mit Inhalt), Sets ohne Text (Video, PDF) gar nicht.
+  Markdown geht als HTML, Textarea als `<p>`/`<br>`, Text escaped. Ein Entity-Scope
+  reist als `<div data-modules="…">`. Das Intro-Blatt (`content_fields.intro`) steckt in
+  `<div class="intro">`; `generate_intro` ist nur `true`, wenn es ein solches Blatt gibt.
+  Der Dienst muss `section[data-wf-leaf]` unverändert zurückgeben.
+- **Rückschreiben ist strikt:** fehlender, unbekannter, leerer oder nicht-benachbart
+  doppelter Abschnitt, Inhalt außerhalb der Abschnitte (außer führendem `<h1>`) oder ein
+  Blatt, das nicht mehr zum Blueprint passt → die Antwort wird **verworfen, nichts wird
+  geschrieben** (Log `workflows.translation.plain_language_leaf_rejected`), und der
+  bestehende Retry (`max_attempts`) reicht neu ein. Benachbarte Teile eines Abschnitts
+  werden zusammengefügt, eine andere Reihenfolge nur geloggt.
+- **Was geschrieben wird:** die Inhaltsfelder werden aus dem beim Einreichen
+  gespeicherten **Skeleton** (Rohwerte der Quelle) wiederhergestellt, dann je Blatt per
+  Pfad gesetzt. Bard: Augmentor-Parse, Sets werden über `data-wf-set` aus der Quelle
+  **geklont** (nur das gesendete Textfeld ersetzt — Assets, Toggles, Scope bleiben),
+  textfreie Sets an ihren alten Index. Markdown über `league/html-to-markdown` (ATX,
+  harte Umbrüche), Textarea als Absätze mit Leerzeile, Text einzeilig (Warnung bei
+  mehreren Blöcken oder > 3× Länge). Vor dem Speichern muss der Struktur-Fingerprint
+  (alles außer den Blättern) identisch sein. Titel aus dem `<h1>`, `seo.title`/
+  `seo.description` abgeleitet (`PlainLanguageSeo::descriptionFromLeaves()`: erster
+  Absatz des Intro-Blatts, sonst des ersten Bard/Markdown/Textarea-Blatts).
+  `plain_language_clear_fields` kann Titel und Inhaltsfelder nie leeren. Ändert sich
+  nichts, wird nicht gespeichert.
+- **Überschriften:** nur in einem **Top-Level**-Bard wird ein zurückgegebenes
+  `<h2>`/`<h3>` zum Set `translation.plain_language.heading_set` (Default `heading`) und
+  die Heading-Sets in `heading_index_field` (Default `heading_index`) neu
+  durchnummeriert — jeweils nur, wo das Feld das Set deklariert; `null` schaltet ab.
+- **Job-Zeile:** `workflow_plain_language_jobs.format = 'sections'` und `plan`
+  (Felder, Blätter mit Pfad/Typ/Hash, Skeleton). Jobs mit `format = null` stammen von
+  vor dem Update und werden weiter von `LegacyPlainLanguageDocument` (Abschnitt unten)
+  zurückgeschrieben; gemischte Formate in einer Gruppe schlagen fehl.
+- **Diagnose:** `workflows:plain-language-poll --dry-run` führt `apply()` aus und zeigt
+  den Feld-Diff (pro Blatt vorher → nachher), ohne zu schreiben; `--diff` zeigt ihn auch
+  im echten Lauf; mit `log_calls` landet er als
+  `workflows.translation.plain_language_leaf_diff` im Log. Die Payload-Vorschau
+  (`…/translation-payload`) liefert `leaves`, `content_fields` und `skipped`.
+- Nach dem Update im Projekt `composer update takepart-media/workflows` laufen lassen
+  (neue Abhängigkeit `league/html-to-markdown`) und migrieren.
+
+##### Altes Format: Sets über den Dienst hinweg erhalten (nur Jobs mit `format = null`)
+
+Alles ab hier bis „Quellen überleben den Rewrite nicht" beschreibt
+`LegacyPlainLanguageDocument` (früher `PlainLanguageDocument`), das nur noch Jobs
+zurückschreibt, die vor dem Leaf-Format eingereicht wurden.
 
 Der Einfache-Sprache-Dienst liefert ein **Dokument**, nicht eine Antwort pro Feld. Es
 gibt keinen Block, der `content_sets.2` entspricht, deshalb ersetzt das Ergebnis das
@@ -1573,11 +1640,15 @@ der Quellen-Block unter einer Seite in Einfacher Sprache ist auch dann falsch, w
 Pro für den Eintrag ausgeschaltet ist, also läuft das Leeren weiter und der Report sagt
 `seo: switched off`. „Abgeschlossen" ist das
 `plain_language_completed`-Event; für die Fassungen von vor diesem Event greift ein
-Fallback: eigene `content_sets` vorhanden **und** vom Ursprung abweichend (eine
+Fallback: eines der Inhaltsfelder des Workflows (`ContentFieldResolver`) eigen
+vorhanden **und** vom Ursprung abweichend (eine
 Lokalisierung entsteht als Vollkopie, eigener Inhalt allein beweist also nichts —
 *abgewichener* Inhalt ist entweder eine Umschreibung oder redaktionelle Arbeit an der
 Fassung, und beides ist ein Dokument, aus dem sich ableiten lässt). Der Titel wird
-mitgeprüft, für den Fall, dass ein Projekt `content_sets` vom Lauf ausschließt.
+mitgeprüft, für den Fall, dass ein Projekt seine Inhaltsfelder vom Lauf ausschließt.
+Die Beschreibung leitet der Backfill aus den Textblättern der **eigenen** Daten ab
+(`TextLeafWalker` + `PlainLanguageSeo::descriptionFromLeaves()`), und
+`plain_language_clear_fields` lässt Titel und Inhaltsfelder auch hier unangetastet.
 
 **Eine Regel gehört nur dem Backfill: Skip-if-edited**, pro SEO-Unterschlüssel **und**
 pro geleertem Feld. Ein Wert, den nach der Umschreibung jemand geändert hat, bleibt
