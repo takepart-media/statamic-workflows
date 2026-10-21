@@ -132,3 +132,36 @@ export function writeTechnical(value, storage = globalThis.localStorage) {
         /* non-critical */
     }
 }
+
+// ---------------------------------------------------------------------------
+// Technische Baumansicht – testweise (User-Entscheidung ausstehend).
+// Used only when `technical` is on: the structure tree instead of the reading
+// flow. Remove this helper together with the marked branch in ContentBlocks.vue.
+// ---------------------------------------------------------------------------
+
+/**
+ * All blocks (structural ones without own items included) annotated for the
+ * tree: `indent` = depth relative to the shallowest block, `pathTail` = the
+ * block's path relative to its nearest shallower predecessor (its parent),
+ * e.g. `content_right` or `content_right.content`; the full path otherwise.
+ */
+export function technicalTree(blocks) {
+    const list = (blocks || []).filter(Boolean);
+    const depths = list.map((block) => Number(block.depth) || 0);
+    const base = depths.length ? Math.min(...depths) : 0;
+    const stack = [];
+
+    return list.map((block, i) => {
+        const depth = depths[i];
+        while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
+
+        const parent = stack[stack.length - 1];
+        const path = String(block.path ?? '');
+        const prefix = parent?.path ? `${parent.path}.` : null;
+        const pathTail = prefix && path.startsWith(prefix) ? path.slice(prefix.length) : path;
+
+        stack.push({ depth, path });
+
+        return { block, indent: depth - base, pathTail };
+    });
+}

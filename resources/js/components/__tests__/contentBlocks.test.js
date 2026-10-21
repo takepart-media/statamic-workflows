@@ -13,6 +13,7 @@ import {
     readingBlocks,
     readTechnical,
     SHORT_TEXT_MAX,
+    technicalTree,
     TECHNICAL_STORAGE_KEY,
     writeTechnical,
 } from '../contentBlocks.js';
@@ -143,5 +144,40 @@ describe('assetThumb', () => {
         expect(assetThumb({ isImage: true, url: '/u' })).toBe('/u');
         expect(assetThumb({ isImage: false, url: '/u.pdf' })).toBe(null);
         expect(assetThumb(null)).toBe(null);
+    });
+});
+
+// Technische Baumansicht – testweise (User-Entscheidung ausstehend).
+describe('technicalTree', () => {
+    const blocks = [
+        { uuid: 'c1', path: 'content.0', depth: 0, handle: 'chapter', kind: 'fields', items: [{ kind: 'text', handle: 'headline', text: 'H' }] },
+        { uuid: 'c1.content_right', path: 'content.0.content_right', depth: 1, handle: 'content_right', kind: 'fields', items: [] },
+        { uuid: 'c1.content_right.content', path: 'content.0.content_right.content', depth: 2, handle: 'content', kind: 'html', html: '<p>x</p>' },
+        { uuid: 'c2', path: 'content.1', depth: 0, handle: 'teaser', kind: 'fields', items: [] },
+    ];
+
+    it('keeps structural blocks without items and indents by depth', () => {
+        const tree = technicalTree(blocks);
+        expect(tree.map((n) => n.block.uuid)).toEqual(['c1', 'c1.content_right', 'c1.content_right.content', 'c2']);
+        expect(tree.map((n) => n.indent)).toEqual([0, 1, 2, 0]);
+    });
+
+    it('shows the path relative to the parent block', () => {
+        expect(technicalTree(blocks).map((n) => n.pathTail)).toEqual(['content.0', 'content_right', 'content', 'content.1']);
+    });
+
+    it('falls back to the full path when the parent is skipped', () => {
+        const tree = technicalTree([
+            { uuid: 'a', path: 'content.0', depth: 0, kind: 'fields', items: [] },
+            { uuid: 'b', path: 'content.0.content_right.content', depth: 2, kind: 'html' },
+        ]);
+        expect(tree[1].pathTail).toBe('content_right.content');
+        expect(technicalTree([{ uuid: 'x', path: 'other.y', depth: 1, kind: 'html' }])[0]).toMatchObject({ indent: 0, pathTail: 'other.y' });
+    });
+
+    it('normalizes indent to the shallowest block and tolerates empty input', () => {
+        expect(technicalTree([{ uuid: 'x', path: 'p', depth: 3 }])[0].indent).toBe(0);
+        expect(technicalTree(null)).toEqual([]);
+        expect(technicalTree([null])).toEqual([]);
     });
 });

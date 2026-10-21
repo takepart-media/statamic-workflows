@@ -5,7 +5,66 @@
          `depth` is ignored for display (readingBlocks() drops structural nodes
          that frame nothing). Every passage keeps `id="passage-<uuid>"` and
          `data-ref`: comment links and the history handoff jump there. -->
-    <div class="space-y-6">
+    <!-- Technische Baumansicht – testweise (User-Entscheidung ausstehend).
+         With `technical` on, the structure tree replaces the reading flow: every
+         block (structural ones without own items too), indented by `depth`,
+         set/row headers with handle + label + uuid, items under their field
+         handle, child blocks nested below their parent with their path tail.
+         Remove this branch + technicalTree() in contentBlocks.js to drop it. -->
+    <div v-if="technical" class="space-y-2">
+        <div
+            v-for="(node, i) in treeNodes"
+            :key="blockKey(node.block, i, keyPrefix)"
+            :id="anchors ? passageId(node.block) : undefined"
+            :data-ref="anchors ? node.block.uuid : undefined"
+            class="fw-passage group relative flex items-start gap-3 rounded-md"
+            :style="{ marginInlineStart: `${node.indent * 1.25}rem` }"
+        >
+            <div class="min-w-0 flex-1 border-s-2 border-gray-200 ps-3 dark:border-gray-700!">
+                <div class="flex flex-wrap items-baseline gap-2">
+                    <code class="rounded bg-gray-100 px-1.5 py-0.5 text-2xs font-semibold text-gray-700 dark:bg-gray-800! dark:text-gray-300!">{{ node.block.handle }}</code>
+                    <span v-if="node.pathTail && node.pathTail !== node.block.handle" class="font-mono text-2xs text-gray-500 dark:text-gray-400">{{ node.pathTail }}</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-300">{{ node.block.label }}</span>
+                    <span class="select-all font-mono text-2xs text-gray-400 dark:text-gray-500">{{ node.block.uuid }}</span>
+                </div>
+
+                <div
+                    v-if="node.block.kind === 'html'"
+                    class="fw-prose mt-1.5 text-sm text-gray-800 dark:text-gray-200"
+                    v-html="node.block.html"
+                />
+
+                <dl v-else-if="blockItems(node.block).length" class="mt-1.5 space-y-1.5 ps-[1.25rem]">
+                    <div v-for="(item, j) in blockItems(node.block)" :key="j" class="flex items-baseline gap-2 text-sm">
+                        <dt class="shrink-0 font-mono text-2xs text-gray-500 dark:text-gray-400">{{ item.handle || item.label }}</dt>
+                        <dd class="min-w-0 flex-1 text-gray-800 dark:text-gray-200">
+                            <span v-if="item.kind === 'text'" class="whitespace-pre-line">{{ item.text }}</span>
+                            <pre
+                                v-else-if="item.kind === 'code'"
+                                class="max-h-60 overflow-auto rounded-md bg-gray-50 p-2 font-mono text-xs text-gray-700 dark:bg-gray-900! dark:text-gray-300!"
+                            ><code>{{ item.code }}</code></pre>
+                            <a v-else-if="item.kind === 'video'" :href="item.url" :class="link" target="_blank" rel="noopener">{{ item.url }}</a>
+                            <span v-else-if="item.kind === 'media'" class="text-xs">{{ (item.assets || []).map((a) => a.basename).join(', ') }}</span>
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+
+            <div
+                v-if="commentable"
+                class="fw-comment flex shrink-0 items-center gap-1.5"
+                :class="{ 'fw-comment--active': count(node.block) || fresh(node.block) }"
+            >
+                <slot name="comment" :block="node.block">
+                    <CommentAction :block="node.block" :count="count(node.block)" :fresh="fresh(node.block)" @comment="$emit('comment', node.block)" />
+                </slot>
+            </div>
+        </div>
+
+        <slot v-if="!treeNodes.length" name="empty" />
+    </div>
+
+    <div v-else class="space-y-6">
         <div
             v-for="(block, i) in visibleBlocks"
             :key="blockKey(block, i, keyPrefix)"
@@ -131,7 +190,7 @@
 <script setup>
 import { computed, defineComponent, h } from 'vue';
 import { Button, Icon } from '@statamic/cms/ui';
-import { assetThumb, blockItems, blockKey, blockTitle, isHeaderOnly, itemDisplay, itemLabel, passageId, readingBlocks } from './contentBlocks.js';
+import { assetThumb, blockItems, blockKey, blockTitle, isHeaderOnly, itemDisplay, itemLabel, passageId, readingBlocks, technicalTree } from './contentBlocks.js';
 
 const props = defineProps({
     blocks: { type: Array, default: () => [] },
@@ -157,6 +216,9 @@ const link = 'text-blue-600 no-underline hover:underline';
 const visibleBlocks = computed(() =>
     readingBlocks(props.blocks, props.commentable ? (uuid) => props.commentCount(uuid) : () => 0),
 );
+
+// Technische Baumansicht – testweise (User-Entscheidung ausstehend).
+const treeNodes = computed(() => (props.technical ? technicalTree(props.blocks) : []));
 
 function count(block) {
     return Number(props.commentCount(block.uuid)) || 0;
