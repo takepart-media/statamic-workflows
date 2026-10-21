@@ -6,3 +6,5 @@ composer.lock
 resources/dist/dev
 .idea/
 CLAUDE.local.md
+.phpunit.cache
+phpunit.xml

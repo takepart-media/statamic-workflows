@@ -341,7 +341,9 @@ class ServiceProvider extends AddonServiceProvider
     {
         $path = config('database.connections.workflow.database');
 
-        if (! $path || file_exists($path)) {
+        // `:memory:` (the test suite's connection) has no file to provision —
+        // touching it would leave a stray file named `:memory:` in the cwd.
+        if (! $path || $path === ':memory:' || file_exists($path)) {
             return;
         }
 

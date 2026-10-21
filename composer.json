@@ -37,5 +37,19 @@
                 "TakepartMedia\\Workflows\\ServiceProvider"
             ]
         }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "pixelfear/composer-dist-plugin": true
+        }
+    },
+    "require-dev": {
+        "pestphp/pest": "^4.0",
+        "orchestra/testbench": "^11.0",
+        "mockery/mockery": "^1.6"
+    },
+    "scripts": {
+        "test": "pest"
     }
 }
