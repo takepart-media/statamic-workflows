@@ -541,6 +541,11 @@ return [
     'settings_field_default_assignee_group' => 'Default assignee group',
     'default_assignee_group_none' => 'None',
     'settings_field_assign_creator' => 'Assign creator automatically',
+    'self_assignment' => 'Prevent self-assignment',
+    'self_assignment_instructions' => 'Whoever triggers the step cannot assign themselves: the manual picker leaves them out. If they would be the only candidate, automatic assignment included, the picker opens with these people instead.',
+    'self_assignment_handles_none' => 'Who should be offered?',
+    'self_assignment_hint_default' => 'You cannot assign this post to yourself. Pick who should take it over.',
+    'self_assignment_hint_instructions' => 'Note shown above the picker. Leave empty for the default text.',
     'settings_field_initial_place' => 'Initial place',
     // Orientation of the progress bar on the detail page. Decides both the bar's
     // layout AND its position — horizontal above the content, vertical in a column
@@ -886,6 +891,8 @@ return [
     'writer_sla_days_invalid' => 'SLA [:key]: [:value] is not a number of days (empty, or a whole number from 0).',
     'writer_sla_stage_incomplete' => 'SLA stage [:stage]: days and step belong together — with only one of them nothing happens.',
     'writer_sla_place_unknown' => 'SLA stage [:stage] points at the unknown step [:place].',
+    'writer_self_assignment_invalid' => 'metadata.self_assignment: the picker needs a type (group, role or person) and at least one entry.',
+    'writer_self_assignment_hint_invalid' => 'metadata.self_assignment: hint must be text.',
     'writer_sla_assign_invalid' => 'SLA stage [:stage]: responsibility needs a type (group, role or person) and at least one entry.',
     'writer_sla_days_order' => 'The second stage (:outdated days) must not come before the first (:needs_update days) — both deadlines count from the same approval.',
     'writer_source_draft_not_localization' => 'A fallback step for the source going to draft belongs in a localization workflow — only its versions have a source above them.',

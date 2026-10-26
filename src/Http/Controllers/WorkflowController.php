@@ -49,6 +49,7 @@ use TakepartMedia\Workflows\Workflow\Filters\StateFilter;
 use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
 use TakepartMedia\Workflows\Workflow\ProgressSteps;
 use TakepartMedia\Workflows\Workflow\PublishedFlag;
+use TakepartMedia\Workflows\Workflow\SelfAssignmentGuard;
 use TakepartMedia\Workflows\Workflow\StatsPresets;
 use TakepartMedia\Workflows\Workflow\SubjectLinks;
 use TakepartMedia\Workflows\Workflow\WorkflowAssigneeStore;
@@ -1672,7 +1673,7 @@ class WorkflowController extends CpController
      * "accepted" stay one set.
      *
      * @param  array<string, mixed>  $raw
-     * @return array{name: string, label: string, needs_pick: bool, sends_mail: bool, pickable_assignees: array<int, array<string, mixed>>}|null
+     * @return array{name: string, label: string, needs_pick: bool, pick_hint: string|null, sends_mail: bool, pickable_assignees: array<int, array<string, mixed>>}|null
      */
     private function createCta(array $raw, string $collection): ?array
     {
@@ -1683,13 +1684,17 @@ class WorkflowController extends CpController
         }
 
         $transition = $raw['transitions'][$cta['name']];
-        $needsPick = TransitionActions::opensUserDialog($transition);
+        $stub = $this->stubEntryFor($collection);
+        $actorId = (string) (User::current()?->id() ?? '') ?: null;
+        $guarded = SelfAssignmentGuard::applies($raw, $transition, $stub, $actorId);
+        $needsPick = TransitionActions::opensUserDialog($transition) || $guarded;
 
         return $cta + [
             'needs_pick' => $needsPick,
+            'pick_hint' => $guarded ? SelfAssignmentGuard::hint($raw) : null,
             'sends_mail' => WorkflowNotifier::stepMail($raw, $cta['name']) !== null,
             'pickable_assignees' => $needsPick
-                ? $this->pickableAssignees($raw, $cta['name'], $this->stubEntryFor($collection))
+                ? $this->pickableAssignees($raw, $cta['name'], $stub)
                 : [],
         ];
     }
@@ -3148,6 +3153,7 @@ class WorkflowController extends CpController
         }
 
         $raw = app(DefinitionLoader::class)->raw($workflow);
+        $actorId = (string) (User::current()?->id() ?? '') ?: null;
 
         $claimed = $this->plainLanguageSite($workflow);
         $onSourceOfPlainLanguage = $claimed !== null && (string) $entry->locale() !== $claimed;
@@ -3185,7 +3191,15 @@ class WorkflowController extends CpController
                 // visible instead of failing silently. An automatic assignment
                 // opens nothing and leaves this false — the client then applies
                 // the transition directly and the server decides the assignees.
-                'needs_pick' => TransitionActions::opensUserDialog($transition),
+                //
+                // Also true for an assignment of either mode that would hand the
+                // subject back to the clicker alone, when the workflow forbids
+                // that (SelfAssignmentGuard) — `pick_hint` then says why.
+                'needs_pick' => TransitionActions::opensUserDialog($transition)
+                    || SelfAssignmentGuard::applies($raw, $transition, $entry, $actorId),
+                'pick_hint' => SelfAssignmentGuard::applies($raw, $transition, $entry, $actorId)
+                    ? SelfAssignmentGuard::hint($raw)
+                    : null,
                 // The action's candidates (may be empty), with site_allocation.
                 'pickable_assignees' => $this->pickableAssignees($raw, $name, $entry),
                 // Whether the step mails anybody — the picker offers its "send
@@ -3506,6 +3520,44 @@ class WorkflowController extends CpController
     }
 
     /**
+     * Who a pick for this transition may name, or null when the transition asks
+     * nobody. Usually the MANUAL assignment's candidates (minus the clicker where
+     * the workflow forbids self-assignment); for an assignment of either mode
+     * that would hand the subject back to the clicker alone, the workflow's
+     * self-assignment fallback instead (SelfAssignmentGuard). The picker is
+     * filled from here and every pick is validated against here, so "offered"
+     * and "accepted" stay one set in both cases.
+     *
+     * @param  array<string, mixed>  $raw
+     * @param  array<string, mixed>  $transition
+     * @return \Illuminate\Support\Collection<int, \Statamic\Contracts\Auth\User>|null
+     */
+    private function pickPool(array $raw, array $transition, $entry, ?string $actorId): ?\Illuminate\Support\Collection
+    {
+        if (SelfAssignmentGuard::applies($raw, $transition, $entry, $actorId)) {
+            return collect(SelfAssignmentGuard::candidateIds($raw, $actorId))
+                ->map(fn (string $id) => User::find($id))
+                ->filter()
+                ->values();
+        }
+
+        if (! TransitionActions::opensUserDialog($transition)) {
+            return null;
+        }
+
+        $ids = SelfAssignmentGuard::withoutClicker(
+            $raw,
+            app(AssignmentCandidates::class)->ids(TransitionActions::userAssignment($transition), $entry),
+            $actorId,
+        );
+
+        return app(AssignmentCandidates::class)
+            ->for(TransitionActions::userAssignment($transition), $entry)
+            ->filter(fn ($user) => in_array((string) $user->id(), $ids, true))
+            ->values();
+    }
+
+    /**
      * Users a `user_assignment` action wants to be picked from — its candidates
      * (see Workflow\AssignmentCandidates), with site_allocation labels (blueprint
      * field). Empty array when the transition opens no picker, which includes an
@@ -3526,17 +3578,16 @@ class WorkflowController extends CpController
      */
     private function pickableAssignees(array $raw, string $name, $entry): array
     {
-        $transition = $raw['transitions'][$name] ?? [];
+        $actorId = (string) (User::current()?->id() ?? '') ?: null;
+        $pool = $this->pickPool($raw, $raw['transitions'][$name] ?? [], $entry, $actorId);
 
-        if (! TransitionActions::opensUserDialog($transition)) {
+        if ($pool === null) {
             return [];
         }
 
         $mails = WorkflowNotifier::stepMail($raw, $name) !== null;
-        $actorId = (string) (User::current()?->id() ?? '') ?: null;
 
-        return app(AssignmentCandidates::class)
-            ->for(TransitionActions::userAssignment($transition), $entry)
+        return $pool
             ->map(fn ($user) => [
                 'id' => (string) $user->id(),
                 'name' => $user->name() ?? $user->email(),
@@ -3597,7 +3648,24 @@ class WorkflowController extends CpController
             ->values()
             ->all();
 
-        if ($assignment !== null && $assignment['mode'] === TransitionActions::MODE_AUTOMATIC) {
+        $actorId = (string) (User::current()?->id() ?? '') ?: null;
+
+        if (SelfAssignmentGuard::applies($raw, $transition, $entry, $actorId)) {
+            // An assignment (either mode) that would land on the clicker alone,
+            // in a workflow that forbids it: the picker asked the fallback
+            // audience instead, so the picks are checked against that.
+            if ($explicit === []) {
+                return response()->json(['message' => $this->t('assignee_required')], 422);
+            }
+
+            $eligible = SelfAssignmentGuard::candidateIds($raw, $actorId);
+
+            foreach ($explicit as $userId) {
+                if (! in_array($userId, $eligible, true)) {
+                    return response()->json(['message' => $this->t('assignee_invalid')], 422);
+                }
+            }
+        } elseif ($assignment !== null && $assignment['mode'] === TransitionActions::MODE_AUTOMATIC) {
             // Nothing was asked, so nothing posted may be trusted: the candidates
             // ARE the answer. A client that posts assignees anyway is not an
             // error worth a 422 — it is simply answering a question that was
@@ -3622,7 +3690,9 @@ class WorkflowController extends CpController
             // was filled from, so "offered" and "accepted" cannot drift; criteria
             // that match nobody mean nobody qualifies, which is the same answer
             // the picker gives by showing an empty list.
-            $eligible = app(AssignmentCandidates::class)->ids($assignment, $entry);
+            $eligible = SelfAssignmentGuard::withoutClicker(
+                $raw, app(AssignmentCandidates::class)->ids($assignment, $entry), $actorId,
+            );
 
             foreach ($explicit as $userId) {
                 if (! in_array($userId, $eligible, true)) {
@@ -4933,9 +5003,13 @@ class WorkflowController extends CpController
         $explicitAssignees = null;
 
         if ($cta !== null) {
-            $assignment = TransitionActions::userAssignment($raw['transitions'][$cta['name']]);
+            $ctaTransition = $raw['transitions'][$cta['name']];
+            $assignment = TransitionActions::userAssignment($ctaTransition);
+            $stub = $this->stubEntryFor($collection);
+            $creatorId = (string) ($currentUser?->id() ?? '') ?: null;
+            $guarded = SelfAssignmentGuard::applies($raw, $ctaTransition, $stub, $creatorId);
 
-            if ($assignment !== null && $assignment['mode'] !== TransitionActions::MODE_AUTOMATIC) {
+            if ($assignment !== null && ($guarded || $assignment['mode'] !== TransitionActions::MODE_AUTOMATIC)) {
                 $explicitAssignees = collect((array) $request->input('assignees', []))
                     ->map(fn ($id) => trim((string) $id))
                     ->filter()
@@ -4947,7 +5021,13 @@ class WorkflowController extends CpController
                     return response()->json(['message' => $this->t('assignee_required')], 422);
                 }
 
-                $eligible = app(AssignmentCandidates::class)->ids($assignment, $this->stubEntryFor($collection));
+                // The same pool createCta() offered: the manual candidates, or
+                // the self-assignment fallback (SelfAssignmentGuard).
+                $eligible = $guarded
+                    ? SelfAssignmentGuard::candidateIds($raw, $creatorId)
+                    : SelfAssignmentGuard::withoutClicker(
+                        $raw, app(AssignmentCandidates::class)->ids($assignment, $stub), $creatorId,
+                    );
 
                 foreach ($explicitAssignees as $pickedId) {
                     if (! in_array($pickedId, $eligible, true)) {

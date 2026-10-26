@@ -39,6 +39,14 @@ export function normalize(def, { labelLocales = DEFAULT_LABEL_LOCALES } = {}) {
             handles: [...(assign?.handles ?? [])],
         };
     }
+    // The self-assignment guard: always an object, so the picker has a model;
+    // `by: null` is "off" and serialize() drops it.
+    const selfAssignment = copy.metadata.self_assignment;
+    copy.metadata.self_assignment = {
+        by: selfAssignment?.by ?? null,
+        handles: [...(selfAssignment?.handles ?? [])],
+        hint: selfAssignment?.hint ?? '',
+    };
     copy.metadata.source_draft_place = copy.metadata.source_draft_place || null;
     // Bind the Select to null rather than undefined, so clearing it is a real
     // value the save step can recognise and drop. Same reason for the

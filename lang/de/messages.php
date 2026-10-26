@@ -546,6 +546,11 @@ return [
     'settings_field_default_assignee_group' => 'Standard-Zuweisungsgruppe',
     'default_assignee_group_none' => 'Keine',
     'settings_field_assign_creator' => 'Ersteller automatisch zuweisen',
+    'self_assignment' => 'Selbstzuweisung verhindern',
+    'self_assignment_instructions' => 'Wer den Schritt auslöst, kann sich nicht selbst zuweisen: In der manuellen Auswahl fehlt diese Person. Bliebe sonst nur sie übrig, auch bei automatischer Zuweisung, öffnet sich die Auswahl mit diesen Personen.',
+    'self_assignment_handles_none' => 'Wer soll zur Auswahl stehen?',
+    'self_assignment_hint_default' => 'Du kannst dir diesen Beitrag nicht selbst zuweisen. Wähle aus, wer ihn übernehmen soll.',
+    'self_assignment_hint_instructions' => 'Hinweistext über der Auswahl. Leer lassen für den Standardtext.',
     'settings_field_initial_place' => 'Startzustand',
     // Ausrichtung der Fortschrittsleiste auf der Detailseite. Entscheidet beides:
     // Layout der Leiste UND ihre Position — waagerecht über dem Inhalt, senkrecht
@@ -895,6 +900,8 @@ return [
     'writer_sla_days_invalid' => 'SLA [:key]: [:value] ist keine Anzahl von Tagen (leer oder eine ganze Zahl ab 0).',
     'writer_sla_stage_incomplete' => 'SLA-Stufe [:stage]: Tage und Schritt gehören zusammen — mit nur einem der beiden passiert nichts.',
     'writer_sla_place_unknown' => 'SLA-Stufe [:stage] zeigt auf den unbekannten Schritt [:place].',
+    'writer_self_assignment_invalid' => 'metadata.self_assignment: Die Auswahl braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
+    'writer_self_assignment_hint_invalid' => 'metadata.self_assignment: hint muss ein Text sein.',
     'writer_sla_assign_invalid' => 'SLA-Stufe [:stage]: Die Zuständigkeit braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
     'writer_sla_days_order' => 'Die zweite Stufe (:outdated Tage) darf nicht vor der ersten liegen (:needs_update Tage) — beide Fristen zählen ab derselben Freigabe.',
     'writer_source_draft_not_localization' => 'Ein Rückfall-Schritt für den Entwurf der Quelle gehört in einen Lokalisierungs-Workflow — nur dessen Fassungen haben eine Quelle über sich.',

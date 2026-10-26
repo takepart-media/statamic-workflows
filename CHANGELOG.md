@@ -39,6 +39,12 @@ Alle nennenswerten Änderungen am Addon. Format nach
   standardmäßig an. Aus = der Schritt übergibt ohne Mail (`notify: false` →
   `WorkflowTransitioner::apply(notify: false)`). (DOCS.md § „Mail-Schalter im
   Assignee-Picker")
+- **Selbstzuweisung verhindern** (`metadata.self_assignment`): Im manuellen
+  Picker fehlt die klickende Person. Würde eine Zuweisung den Beitrag nur an
+  sie zurückgeben, öffnet sich stattdessen der Picker mit einer einstellbaren Zielgruppe
+  (Gruppe, Rolle oder Person, ohne den Klickenden). Darüber steht ein
+  anpassbarer Hinweistext. Einstellbar im Graph-Editor unter Einstellungen ›
+  Berechtigungen. (DOCS.md § „Selbstzuweisung verhindern")
 - **PHP-Testsuite** (Pest + Orchestra Testbench, in-memory DB, temporärer
   Stache): `vendor/bin/pest` bzw. `composer test`. (DOCS.md § 11 → Tests)
 

@@ -384,6 +384,12 @@
                 <span class="text-lg font-medium text-gray-900 dark:text-white">{{ __('workflows::messages.pick_assignee_title') }}</span>
             </ModalTitle>
 
+            <!-- An automatic assignment redirected here because it would have handed the
+                 post back to the clicker alone (SelfAssignmentGuard) — say why. -->
+            <Alert v-if="picker.action.pick_hint" variant="warning">
+                <p class="text-sm">{{ picker.action.pick_hint }}</p>
+            </Alert>
+
             <p class="text-sm text-gray-600 dark:text-gray-300">
                 {{ __('workflows::messages.pick_assignee_prompt') }}
             </p>

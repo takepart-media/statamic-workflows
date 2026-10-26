@@ -47,6 +47,11 @@
                  and blocks the button rather than creating a post nobody
                  could be handed. -->
             <Field v-if="createCta?.needs_pick" :label="__('workflows::messages.pick_assignee_title')" :instructions="__('workflows::messages.pick_assignee_prompt')">
+                <!-- An automatic assignment redirected here because it would have handed the
+                     post back to the clicker alone (SelfAssignmentGuard) — say why. -->
+                <Alert v-if="createCta.pick_hint" variant="warning" class="mb-2">
+                    <p class="text-sm">{{ createCta.pick_hint }}</p>
+                </Alert>
                 <!-- Off = hand over without the step's mail. Offered only when the step
                      mails at all (`sends_mail`, the same answer the send uses). -->
                 <label v-if="createCta.sends_mail" class="mb-2 flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
@@ -99,7 +104,7 @@
 
 <script setup>
 import { computed, ref, getCurrentInstance } from 'vue';
-import { Badge, Button, Field, Icon, Input, Modal, ModalTitle, Select, Switch } from '@statamic/cms/ui';
+import { Alert, Badge, Button, Field, Icon, Input, Modal, ModalTitle, Select, Switch } from '@statamic/cms/ui';
 
 /**
  * The "New post" button and the modal behind it — shared by the workflow

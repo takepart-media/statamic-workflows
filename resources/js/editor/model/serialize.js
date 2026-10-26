@@ -121,6 +121,18 @@ export function serializeMetadata(source) {
     if (!metadata.translation_source_view.length) {
         delete metadata.translation_source_view;
     }
+    // The self-assignment guard: no type = off = no key. Switched on, the block is
+    // written even with no handles yet, so the writer can say what is missing
+    // instead of the guard quietly staying off. The hint only when there is one.
+    const selfAssignment = metadata.self_assignment;
+    if (selfAssignment?.by) {
+        metadata.self_assignment = { by: selfAssignment.by, handles: [...(selfAssignment.handles ?? [])] };
+        if (String(selfAssignment.hint ?? '').trim()) {
+            metadata.self_assignment.hint = String(selfAssignment.hint).trim();
+        }
+    } else {
+        delete metadata.self_assignment;
+    }
     // Nur die Abweichung wandert in die YAML. `horizontal` ist der Standard des
     // Lesers (ProgressSteps::orientation()). Auch ein leerer Wert fällt heraus:
     // ein null oder '' würde der Writer mit „unbekannter Wert [NULL]" ablehnen.

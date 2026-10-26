@@ -77,6 +77,35 @@
                 <Field :label="__('workflows::messages.settings_field_assign_creator')">
                     <Checkbox solo :model-value="!!meta.assign_creator" @update:model-value="(v) => setMeta('assign_creator', v)" />
                 </Field>
+                <!-- SelfAssignmentGuard: an AUTOMATIC assignment that would land on
+                     the clicker alone opens the picker with this audience instead.
+                     Off = no block in the YAML. -->
+                <ProblemField
+                    :label="__('workflows::messages.self_assignment')"
+                    :instructions="__('workflows::messages.self_assignment_instructions')"
+                    path="metadata.self_assignment"
+                >
+                    <div class="space-y-3">
+                        <Checkbox solo :model-value="!!selfAssignment.by" @update:model-value="toggleSelfAssignment" />
+                        <template v-if="selfAssignment.by">
+                            <AudiencePicker
+                                :by="selfAssignment.by"
+                                :handles="selfAssignment.handles"
+                                :by-options="audienceOptions"
+                                :placeholder="__('workflows::messages.self_assignment_handles_none')"
+                                @update:by="(v) => setSelfAssignment({ by: v, handles: [] })"
+                                @update:handles="(v) => setSelfAssignment({ handles: v })"
+                            />
+                            <Textarea
+                                :model-value="selfAssignment.hint"
+                                :placeholder="__('workflows::messages.self_assignment_hint_default')"
+                                :rows="2"
+                                @update:model-value="(v) => setSelfAssignment({ hint: v ?? '' })"
+                            />
+                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.self_assignment_hint_instructions') }}</p>
+                        </template>
+                    </div>
+                </ProblemField>
                 <ProblemField
                     v-if="!isLocalization"
                     :label="__('workflows::messages.post_creator_groups')"
@@ -453,7 +482,7 @@
 
 <script setup>
 import { computed, inject, ref, watch } from 'vue';
-import { Button, Checkbox, CodeEditor, Field, Icon, Input, Select } from '@statamic/cms/ui';
+import { Button, Checkbox, CodeEditor, Field, Icon, Input, Select, Textarea } from '@statamic/cms/ui';
 import EnvStatusLine from '../../../components/EnvStatusLine.vue';
 import { SLA_STAGES } from '../../model/constants.js';
 import { hasPublishPlace, isLocalizationWorkflow, isPlainLanguageWorkflow } from '../../model/actionRules.js';
@@ -519,6 +548,14 @@ function setNav(key, value) {
     }
     setMeta('nav', next);
 }
+
+// normalize() always gives the block an object; `by: null` means the guard is off.
+const selfAssignment = computed(() => meta.value.self_assignment ?? { by: null, handles: [], hint: '' });
+const setSelfAssignment = (patch) => setMeta('self_assignment', { ...selfAssignment.value, ...patch });
+// On starts with groups, the usual answer ("project leads"); off clears it all.
+const toggleSelfAssignment = (on) => setMeta('self_assignment', on
+    ? { by: 'group', handles: [], hint: '' }
+    : { by: null, handles: [], hint: '' });
 
 // normalize() always gives each stage an assign object; a hand-made one may not.
 function assignOf(stage) {

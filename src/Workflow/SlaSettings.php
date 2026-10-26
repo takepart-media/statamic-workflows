@@ -122,8 +122,18 @@ class SlaSettings
      */
     public static function assign(array $sla, string $stage): ?array
     {
-        $assign = $sla[$stage.'_assign'] ?? null;
+        return self::audience($sla[$stage.'_assign'] ?? null);
+    }
 
+    /**
+     * One `{by, handles}` audience, cleaned — or null when the type is unknown or
+     * no handle is left. Shared with SelfAssignmentGuard, which names its
+     * fallback audience in the same shape.
+     *
+     * @return array{by: string, handles: array<int, string>}|null
+     */
+    public static function audience(mixed $assign): ?array
+    {
         if (! is_array($assign)) {
             return null;
         }

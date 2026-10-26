@@ -739,6 +739,41 @@ nicht: dort ist die leere Kandidatenliste etwas, das die Redaktion **sieht** (de
 Dialog sagt es und lässt sich nicht bestätigen) — eine bessere Antwort als ein
 deaktivierter Button mit einer Begründung im Tooltip.
 
+**Selbstzuweisung verhindern (`metadata.self_assignment`).** Ist dieser Block
+gesetzt, kann sich der Klickende über kein `user_assignment` selbst zuweisen:
+
+- **Manuell:** Der Picker lässt den Klickenden weg
+  (`SelfAssignmentGuard::withoutClicker()`). Eine Auswahl, die ihn trotzdem
+  nennt, lehnt der Server mit `assignee_invalid` ab.
+- **Automatisch oder manuell, nur der Klickende:** Ergibt die Zuweisung genau
+  die Person, die klickt, und sonst niemanden, öffnet sich der Picker mit der
+  hier genannten Zielgruppe und dem Hinweistext. Den Klickenden enthält die
+  Zielgruppe nicht, sonst wäre der Ausweg ein Häkchen.
+
+```yaml
+metadata:
+  self_assignment:
+    by: group                 # group | role | user
+    handles: [projektleitung]
+    hint: ''                  # optional; leer = self_assignment_hint_default
+```
+
+- Ergibt eine automatische Zuweisung eine Gruppe mit weiteren Mitgliedern, wird
+  wie bisher zugewiesen, auch an den Klickenden, falls er Mitglied ist.
+- Ohne Klickenden greift der Block nie. Das gilt etwa für den SLA-Scheduler.
+- Beim „Neuen Beitrag" wird gegen dieselbe Stub-Fassung geprüft wie die
+  Kandidaten (siehe `createCta()`).
+- Eine einzige Quelle, `Workflow\SelfAssignmentGuard`, beantwortet alles:
+  `applies()`, `withoutClicker()`, `candidateIds()` und `hint()`. Daraus kommen `needs_pick`,
+  `pickable_assignees` und `pick_hint` der Action, die Prüfung der Auswahl in
+  `applyTransition()` und `storePost()` sowie der Hinweis über dem Picker.
+- Die Zielgruppe wird wie die SLA-Übernahme aufgelöst
+  (`SlaSettings::audience()` und `assigneeIds()`).
+- Der Writer lehnt einen Block ohne gültige Art oder ohne Einträge ab
+  (`self_assignment_invalid`), ebenso einen `hint`, der kein Text ist.
+- Gepflegt wird der Block im Graph-Editor unter Einstellungen › Berechtigungen
+  („Selbstzuweisung verhindern").
+
 #### Die Sprachauswahl ist nicht konfigurierbar — aber WELCHE Transition sie trägt, ist es
 
 Sie steht in keiner `actions`-Liste und lässt sich auch nicht in eine schreiben —

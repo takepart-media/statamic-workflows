@@ -772,6 +772,34 @@ class WorkflowDefinitionWriter
         }
     }
 
+    /**
+     * `metadata.self_assignment` — the fallback audience a click that would hand
+     * the subject back to the clicker alone is redirected to (SelfAssignmentGuard).
+     * Present means usable: an unknown audience type or an empty handle list
+     * would quietly switch the guard off, so it is refused instead. Handles are
+     * not checked against the repositories, as for the SLA take-over.
+     *
+     * @param  array<string, mixed>  $definition
+     */
+    private function validateSelfAssignment(array $definition): void
+    {
+        if (! array_key_exists(SelfAssignmentGuard::KEY, $definition['metadata'] ?? [])) {
+            return;
+        }
+
+        $block = $definition['metadata'][SelfAssignmentGuard::KEY];
+
+        if (! is_array($block) || SlaSettings::audience($block) === null) {
+            $this->fail('self_assignment_invalid');
+        }
+
+        $hint = $block['hint'] ?? null;
+
+        if ($hint !== null && ! is_string($hint)) {
+            $this->fail('self_assignment_hint_invalid');
+        }
+    }
+
     private function validateSla(array $definition, array $places): void
     {
         $sla = $definition['metadata'][SlaSettings::KEY] ?? null;
@@ -1498,6 +1526,7 @@ class WorkflowDefinitionWriter
         });
 
         $this->at('metadata.'.SourceViewRules::KEY, fn () => $this->validateSourceView($definition));
+        $this->at('metadata.'.SelfAssignmentGuard::KEY, fn () => $this->validateSelfAssignment($definition));
 
         // No credential keys are validated here because none belong in this file.
         // The translation services read their key and token from
