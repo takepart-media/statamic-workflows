@@ -228,9 +228,8 @@ return [
     'applied' => 'Angewendet: :action',
     'demo_note' => '(Demo – nicht gespeichert)',
     'open_workflow_detail' => 'Workflow-Detail öffnen',
-    'my_queue' => 'Meine Warteschlange',
-    'my_created' => 'Von mir erstellt',
-    'widget_assigned_title' => 'Meine Beiträge',
+    'my_queue' => 'Mir zugewiesen',
+    'my_created' => 'Meine Beiträge',
     'widget_open_manager' => 'Zum Beitragsmanager',
     // Eigener, kürzerer Text nur für den Fuß der WorkflowStatus-Stacks: dort
     // steht der Link neben dem Pager und muss in eine schmale Zeile passen.
@@ -257,7 +256,7 @@ return [
     'widget_meta_since' => ':time',
     'widget_meta_today' => 'heute :time',
     // Kennzahlreihe „workflows_queue_stats" — vier Karten über den Listen.
-    'widget_stats_queue' => 'In meiner Warteschlange',
+    'widget_stats_queue' => 'Mir zugewiesen',
     'widget_stats_review' => 'Wartet auf Freigabe',
     // Benannt statt bloß „Fehlgeschlagen": die Karte zählt genau eines —
     // Fassungen, die im `plain_language_failed_place` eines Workflows geparkt sind.
@@ -283,7 +282,7 @@ return [
     // Die Karten der Kennzahlreihe sind Links: nur für Screenreader angehängt,
     // damit die Karte nicht bloß „Wartet auf Freigabe 3" vorliest, sondern sagt,
     // wohin sie führt. Siehe QueueStatsWidget.vue.
-    'widget_stats_jump_to_queue' => 'zu „Meine Warteschlange" springen',
+    'widget_stats_jump_to_queue' => 'zu „Mir zugewiesen" springen',
     'widget_stats_filter_overview' => 'in „Alle Beiträge" anzeigen',
     'widget_stats_open_manager' => 'im Workflow öffnen',
     // Der entfernbare Chip über „Alle Beiträge", solange eine Karte der

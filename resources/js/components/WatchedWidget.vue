@@ -1,6 +1,6 @@
 <template>
     <!-- "Beobachtet": the posts the current user bookmarked on a detail page,
-         latest edit first. Same shell and rows as "Created by me" next to it,
+         latest edit first. Same shell and rows as "My posts" next to it,
          plus a button per row to stop watching. `h-full`: fills its grid cell,
          which the dashboard row stretches to its tallest card. -->
     <Widget :title="__('workflows::messages.widget_watched_title')" class="h-full">

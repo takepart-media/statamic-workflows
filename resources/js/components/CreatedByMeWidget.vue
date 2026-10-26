@@ -1,6 +1,6 @@
 <template>
-    <!-- "Von mir erstellt": what the current user brought into a workflow, newest
-         edit first. Same shell (the CP's `Widget`) and the same rows as the queue
+    <!-- "Meine Beiträge": the posts whose author field names the current user,
+         newest edit first. Same shell (the CP's `Widget`) and the same rows as the queue
          beside it; no tab row, no meta line — see the script note. `h-full`:
          fills its grid cell, which the dashboard row stretches to its tallest
          card. -->

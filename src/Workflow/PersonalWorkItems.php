@@ -15,11 +15,11 @@ use Statamic\Facades\Site;
  *
  * Semantics deliberately mirror the manager listings so the widget and the
  * manager never disagree about the same user: "assigned" means a direct
- * assignee row (the listing's `mine=1`, no group expansion), "created" means
- * the oldest `created`/`localized` event (the listing's `created_by_me=1`,
- * via WorkflowEventStore::creatorsByWorkflow — the event-picking rules live
- * there and must not be duplicated here), "watched" means a bookmark row of the
- * user's own (WorkflowWatchStore).
+ * assignee row (the listing's `mine=1`, no group expansion), "authored" means
+ * the entry's `author` field names the user (the listing's `created_by_me=1`,
+ * read through Entry::authors(), so a localization inherits its origin's
+ * authors), "watched" means a bookmark row of the user's own
+ * (WorkflowWatchStore).
  *
  * The same localization can appear once per workflow that tracks it (owning
  * plus localization workflow). Both rows are kept: the managers show it the
@@ -109,6 +109,7 @@ class PersonalWorkItems
         private WorkflowEventStore $events,
         private InstanceUrl $urls,
         private WorkflowWatchStore $watches,
+        private WorkflowStateStore $states,
     ) {}
 
     /**
@@ -131,21 +132,45 @@ class PersonalWorkItems
     }
 
     /**
-     * Rows for every subject the user brought into a workflow, across all
+     * Rows for every subject whose `author` field names the user, across all
      * active workflows (or the subset named in $only).
      *
      * @param  array<int, string>|null  $only
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
-    public function createdBy(string $userId, ?array $only = null): Collection
+    public function authoredBy(string $userId, ?array $only = null): Collection
     {
-        return $this->memo['created|'.self::memoKey($userId, $only)] ??= $this->rows(
-            fn (string $workflow) => array_keys(array_filter(
-                $this->events->creatorsByWorkflow($workflow),
-                fn (string $creatorId) => $creatorId === $userId,
-            )),
+        return $this->memo['authored|'.self::memoKey($userId, $only)] ??= $this->rows(
+            fn (string $workflow) => $this->authoredSubjectIds($workflow, $userId),
             $only,
         );
+    }
+
+    /**
+     * Ids of the entries in a workflow's collections the user is an author of.
+     *
+     * Participation follows the manager's flat listing: the collection's owning
+     * workflow covers every entry, a secondary one (e.g. translation) only those
+     * with a stored state — and either way there must be a state to show, since
+     * a row without one is not part of the workflow yet.
+     *
+     * @return array<int, string>
+     */
+    private function authoredSubjectIds(string $workflow, string $userId): array
+    {
+        $raw = $this->loader->raw($workflow);
+        $states = $this->states->statesFor($workflow);
+
+        return Entry::query()
+            ->whereIn('collection', $raw['collections'] ?? [])
+            ->get()
+            ->filter(fn ($entry) => $entry->authors()->map(fn ($author) => (string) $author)->contains($userId))
+            ->filter(fn ($entry) => isset($states[$entry->id()])
+                || $this->resolver->forCollection($entry->collectionHandle()) === $workflow)
+            ->filter(fn ($entry) => $this->resolver->stateFor($entry, $workflow, $raw) !== null)
+            ->map(fn ($entry) => (string) $entry->id())
+            ->values()
+            ->all();
     }
 
     /**
@@ -193,7 +218,7 @@ class PersonalWorkItems
      * here — the widget takes what it shows and counts the remainder.
      *
      * `$withMeta` decides whether the rows carry the `meta` line, which costs
-     * one aggregate query per workflow — skipped for "Created by me", whose
+     * one aggregate query per workflow — skipped for "My posts", whose
      * card does not show it.
      *
      * @param  callable(string): array<int, string>  $subjectIdsFor
@@ -329,7 +354,7 @@ class PersonalWorkItems
             // Sort rank read off the state color, see self::URGENCY.
             'urgency' => self::URGENCY[$stateColor] ?? self::URGENCY_FALLBACK,
             // Entry last-modified as a unix timestamp — the sort key of the
-            // "Created by me" card, which asks what moved most recently rather
+            // "My posts" card, which asks what moved most recently rather
             // than what is most urgent. 0 where the entry cannot say.
             'last_modified' => $entry->lastModified()?->getTimestamp() ?? 0,
             // Second half of the queue row's meta line, '' when the card does

@@ -8,10 +8,10 @@ use TakepartMedia\Workflows\Widgets\Concerns\PresentsPersonalEntries;
 use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
 
 /**
- * CP dashboard card listing the posts the current user brought into a workflow,
- * across ALL active workflows — the cross-workflow counterpart of the managers'
- * "Created by me" sections, with identical semantics (oldest created/localized
- * event, see WorkflowEventStore::creatorsByWorkflow). Widget config: `limit`
+ * CP dashboard card listing the posts whose `author` field names the current
+ * user, across ALL active workflows — the cross-workflow counterpart of the
+ * managers' "My posts" sections, with identical semantics (Entry::authors(),
+ * see PersonalWorkItems::authoredBy()). Widget config: `limit`
  * (rows per page, default 5) and `workflows` (restrict to a subset of workflow
  * names, default all active).
  *
@@ -23,7 +23,7 @@ use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
  * pages client-side with `limit` as the page size.
  *
  * Sorted by the entry's last-modified rather than by urgency: the question this
- * card answers is "what did I touch, and where has it got to", so recency is
+ * card answers is "what did I write, and where has it got to", so recency is
  * the useful order. Urgency belongs to the queue, where the rows are work
  * waiting on the reader.
  */
@@ -49,7 +49,7 @@ class CreatedByMe extends Widget
         // Newest first. `sortByDesc` is stable (PHP 8.0+), so entries sharing a
         // timestamp — a batch save — keep the title order they arrive in.
         $rows = app(PersonalWorkItems::class)
-            ->createdBy((string) $user->id(), $this->workflowsConfig())
+            ->authoredBy((string) $user->id(), $this->workflowsConfig())
             ->sortByDesc('last_modified')
             ->values();
 

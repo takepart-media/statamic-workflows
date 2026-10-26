@@ -40,6 +40,10 @@ Alle nennenswerten Änderungen am Addon. Format nach
 - Comment-Hashes werden über das neue Block-Format gebildet.
 - Laufende Einfache-Sprache-Jobs von vor dem Update (`format = null`) schreibt
   weiter das alte Verfahren zurück (`LegacyPlainLanguageDocument`).
+- „Von mir erstellt“ heißt jetzt **„Meine Beiträge“** und zeigt die Beiträge,
+  bei denen der aktuelle Benutzer als **Autor** (`author`-Feld) eingetragen ist,
+  statt der Beiträge, die er angelegt hat (Dashboard-Kachel und Manager-Seite).
+- „Meine Warteschlange“ heißt jetzt **„Mir zugewiesen“** (auch die Kennzahl-Karte).
 
 ### Deprecated
 

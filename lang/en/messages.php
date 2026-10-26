@@ -224,9 +224,8 @@ return [
     'applied' => 'Applied: :action',
     'demo_note' => '(demo – not persisted)',
     'open_workflow_detail' => 'Open workflow detail',
-    'my_queue' => 'My Queue',
-    'my_created' => 'Created by me',
-    'widget_assigned_title' => 'My posts',
+    'my_queue' => 'Assigned to me',
+    'my_created' => 'My posts',
     'widget_open_manager' => 'Open post manager',
     // A separate, shorter text for the foot of the WorkflowStatus stacks only:
     // the link sits next to the pager there and has to fit a narrow line.
@@ -253,7 +252,7 @@ return [
     'widget_meta_since' => ':time',
     'widget_meta_today' => 'today :time',
     // Stat row `workflows_queue_stats` — the four cards above the lists.
-    'widget_stats_queue' => 'In my queue',
+    'widget_stats_queue' => 'Assigned to me',
     'widget_stats_review' => 'Awaiting approval',
     // Named, not just "Failed": the card counts one specific thing — versions
     // parked in a workflow's `plain_language_failed_place`.
@@ -279,7 +278,7 @@ return [
     // The stat row's cards are links: appended for screen readers only, so a
     // card does not just read "Awaiting approval 3" but says where it leads.
     // See QueueStatsWidget.vue.
-    'widget_stats_jump_to_queue' => 'jump to “My Queue”',
+    'widget_stats_jump_to_queue' => 'jump to “Assigned to me”',
     'widget_stats_filter_overview' => 'show in “All posts”',
     'widget_stats_open_manager' => 'open in the workflow',
     // The removable chip above "All posts" while a stat card filters the table.

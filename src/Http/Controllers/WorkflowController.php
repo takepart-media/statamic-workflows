@@ -457,7 +457,6 @@ class WorkflowController extends CpController
         $states = app(WorkflowStateStore::class)->statesFor($workflow);
         $enteredAt = app(WorkflowStateStore::class)->enteredAtLabels($workflow);
         $assigneeMap = app(WorkflowAssigneeStore::class)->byWorkflow($workflow);
-        $creatorMap = app(WorkflowEventStore::class)->creatorsByWorkflow($workflow);
         $resolver = app(WorkflowResolver::class);
         $isLocalization = $resolver->isLocalizationWorkflow($raw);
         // The sites this manager reads and writes — the same set its pivot shows
@@ -514,11 +513,11 @@ class WorkflowController extends CpController
                 // `$states` has to be captured explicitly — this is a `function`,
                 // not an `fn`. It was missing, isset() swallowed the undefined
                 // variable without a warning, and the store was never consulted at
-                // all: every such task silently vanished from "My posts" and
-                // "Created by me".
+                // all: every such task silently vanished from "Assigned to me" and
+                // "My posts".
                 return isset($states[$entry->id()]) || $this->defaultState($raw, $entry) !== null;
             })
-            ->map(function ($entry) use ($raw, $states, $enteredAt, $assigneeMap, $creatorMap, $workflow) {
+            ->map(function ($entry) use ($raw, $states, $enteredAt, $assigneeMap, $workflow) {
                 $id = $entry->id();
                 $assignees = $this->assigneeNames($entry, $workflow, $assigneeMap);
                 $state = $states[$id] ?? $this->defaultState($raw, $entry);
@@ -552,7 +551,9 @@ class WorkflowController extends CpController
                     'new_comment_count' => $this->newCommentCount($entry, $workflow),
                     '_assignees' => $assignees,
                     '_assignee_ids' => $this->assigneeIds($entry, $workflow, $assigneeMap),
-                    '_created_by' => $creatorMap[$id] ?? null,
+                    // The entry's `author` field — inherited from the origin by
+                    // a localization through value() — for "My posts".
+                    '_author_ids' => $entry->authors()->map(fn ($author) => (string) $author)->values()->all(),
                 ];
             })
             ->values()
@@ -5078,7 +5079,7 @@ class WorkflowController extends CpController
         $mine = $request->boolean('mine');
         $createdByMe = $request->boolean('created_by_me');
 
-        // "My Queue" and "Created by me" are both flat per-localization lists,
+        // "Assigned to me" and "My posts" are both flat per-localization lists,
         // not the site-pivot.
         $flat = $isEntry && ($mine || $createdByMe);
         $pivot = $scope !== null || ($isEntry && ! $flat);
@@ -5152,11 +5153,11 @@ class WorkflowController extends CpController
             $rows = $rows->filter(fn (array $row) => in_array($uid, $row['_assignee_ids'] ?? [], true));
         }
 
-        // "Created by me": only rows the current user authored (from the
-        // 'created' event), regardless of who is currently assigned.
+        // "My posts": only rows whose `author` field names the current user,
+        // regardless of who created them or who is currently assigned.
         if ($createdByMe) {
             $uid = (string) (User::current()?->id() ?? '');
-            $rows = $rows->filter(fn (array $row) => ($row['_created_by'] ?? null) === $uid);
+            $rows = $rows->filter(fn (array $row) => in_array($uid, $row['_author_ids'] ?? [], true));
         }
 
         // Sort.
@@ -5186,7 +5187,7 @@ class WorkflowController extends CpController
         $total = $rows->count();
         $items = $rows->forPage($page, $perPage)->values()
             ->map(fn (array $row) => collect($row)
-                ->except(['_assignees', '_assignee_ids', '_states', '_created_by', '_content_updated_at', '_stale', '_subject_ids'])
+                ->except(['_assignees', '_assignee_ids', '_states', '_author_ids', '_content_updated_at', '_stale', '_subject_ids'])
                 ->all())
             ->all();
 

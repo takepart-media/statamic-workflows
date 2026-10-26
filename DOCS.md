@@ -1243,7 +1243,7 @@ Auseinandergehalten werden sie über die **Site, die ein Manager beansprucht**:
   dieselbe Prüfung wie am Start-Button) — eine Fassung, die dort noch mitten in
   der Prüfung steckt, ist noch nichts Fertiges zum Übersetzen, und die Start-Transition
   würde sie ohnehin ablehnen. Ohne Quelle gibt es erst recht nichts zu übersetzen.
-  „Meine Warteschlange" und „Von mir erstellt" folgen
+  „Mir zugewiesen" und „Meine Beiträge" folgen
   derselben Regel, zusätzlich pro Fassung: eine Fassung in einer Site, die dieser
   Manager weder liest noch schreibt, erscheint dort nicht mehr. Das räumt zugleich
   Statuszeilen aus dem Blickfeld, die von einer früheren Quell-Einstellung stammen. Ohne konfigurierte Quelle fällt dadurch nichts weg (der
@@ -2161,19 +2161,16 @@ Fixture-ID einen echten Entry überdecken, weil `findInstance()` **vor**
 > `null` liefert.
 
 - `entryRowsFlat($workflow)` — **flache** Zeilen (eine pro Localization) für
-  „Meine Warteschlange" (`mine=1`) und „Von mir erstellt" (`created_by_me=1`).
+  „Mir zugewiesen" (`mine=1`) und „Meine Beiträge" (`created_by_me=1`).
   Filtert nur Localizations rein, die im gefragten Workflow angemeldet sind (via
   Store-State oder Collection-Ownership). Bleibt bewusst über alle Collections
   gemerged (persönliche To-do-Sicht) und führt dafür ein `collection`-Feld mit dem
   Collection-Titel.
-  - `_created_by` kommt aus `WorkflowEventStore::creatorsByWorkflow()`, und das
-    liest **zwei** Event-Typen: `created` (neuer Beitrag via `storePost`) und
-    `localized` (Übersetzungsaufgabe via `transfer` bzw. `localizeInto`). Nur mit
-    dem zweiten funktioniert „Von mir erstellt" im Übersetzungsmanager — dessen
-    Subjekte bekommen nie eine `created`-Zeile. Innerhalb **eines** Workflows
-    trägt ein Subjekt immer nur einen der beiden: ein Lokalisierungs-Workflow
-    kann nicht anlegen, und `storePost` schreibt `created` für den Workflow, der
-    die Collection *besitzt*.
+  - `_author_ids` kommt aus dem `author`-Feld des Eintrags
+    (`Entry::authors()`); eine Localization erbt es über `value()` vom Origin.
+    „Meine Beiträge" zeigt also, wo der aktuelle Benutzer als **Autor**
+    eingetragen ist — unabhängig davon, wer den Beitrag angelegt hat oder wem er
+    gerade zugewiesen ist.
 - `rowsFor($workflow, $collection = null)` — dispatcht zwischen den drei je nach
   Kontext.
 - `overviewRows($workflows)` — die Pivot-Zeilen **mehrerer** Workflows in einer
@@ -3707,7 +3704,7 @@ konfigurierte `collection` (Default `posts`) aufgelöst. Konfigurierbar per
 
 ### `MyQueue` (`workflows_my_queue`)
 
-`src/Widgets/MyQueue.php` — „Meine Warteschlange" workflow-ÜBERGREIFEND: alle
+`src/Widgets/MyQueue.php` — „Mir zugewiesen" workflow-ÜBERGREIFEND: alle
 Beiträge, denen der aktuelle User als Assignee eingetragen ist, über sämtliche
 aktiven Workflows. Die Semantik ist absichtlich identisch zum `mine=1`-Filter
 der Manager-Listen — nur direkte Zuweisungen, keine Gruppen-Expansion — damit
@@ -3780,11 +3777,11 @@ Relativ-Keys (`day_ago` = „:count Tagen", das nackte `day` = „:count Tage") 
 
 ### `CreatedByMe` (`workflows_created_by_me`)
 
-`src/Widgets/CreatedByMe.php` — „Von mir erstellt" workflow-übergreifend.
-Ersteller-Semantik identisch zu `created_by_me=1` der Manager: ältestes
-`created`/`localized`-Event, geliefert von
-`WorkflowEventStore::creatorsByWorkflow()` (die Auswahllogik lebt dort und
-wird nicht dupliziert). Config wie `MyQueue` (`limit` = Seitengröße, Default 5,
+`src/Widgets/CreatedByMe.php` — „Meine Beiträge" workflow-übergreifend.
+Autor-Semantik identisch zu `created_by_me=1` der Manager: das `author`-Feld des
+Eintrags nennt den Benutzer (`PersonalWorkItems::authoredBy()`). Teilnahme am
+Workflow wie in `entryRowsFlat`: Owning-Workflow oder gespeicherter State, und
+es muss ein State auflösbar sein. Config wie `MyQueue` (`limit` = Seitengröße, Default 5,
 und `workflows`).
 
 Ebenfalls Komponenten-Widget:

@@ -15,7 +15,7 @@
          hands the same kind of name to `Badge`'s `color` prop instead.
 
          Shared by both cards, which differ in two switches — the queue shows an
-         urgency rail and a meta line, "Created by me" shows neither (its order
+         urgency rail and a meta line, "My posts" shows neither (its order
          already says "recent", so a second time reference beside every title
          would repeat it). Everything else about the two rows has to stay
          identical, which is exactly what a shared component enforces.

@@ -34,8 +34,9 @@ class WorkflowEventStore
      *
      * Both are asked more than once per dashboard load: the newest-event times
      * back the queue rows' meta line (PersonalWorkItems::rows) AND the "awaiting
-     * approval" card's note (QueueStats::oldestSince), and the creator map backs
-     * "Created by me" plus the manager listing's `created_by_me` filter.
+     * approval" card's note (QueueStats::oldestSince), and the creator map is
+     * there for callers that need who brought a subject in (the personal
+     * "My posts" lists go by the entry's `author` field instead).
      *
      * Only the aggregates. The per-subject reads (forSubject, latestOfType,
      * latestSnapshot) stay uncached: they are indexed single-subject queries, and
@@ -174,8 +175,8 @@ class WorkflowEventStore
      *
      * Two event types qualify, one per kind of workflow: `created` for a new
      * entry (`storePost`), `localized` for a translation task (`transfer`).
-     * Without the second, "Created by me" in a localization manager was always
-     * empty — those subjects never get a `created` row. A subject can only ever
+     * Without the second, the map was always empty for a localization
+     * workflow — those subjects never get a `created` row. A subject can only ever
      * carry one of the two within a single workflow: a localization workflow
      * cannot create entries, and creating writes `created` for the collection's
      * OWNING workflow. Ordering oldest-first keeps the pick deterministic

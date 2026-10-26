@@ -269,8 +269,8 @@ const emit = defineEmits(['open-summary']);
 // The two listing kinds carry the comment numbers differently, and the cell has to
 // read whichever applies. The pivot has one column per site and keys its maps by
 // site handle (= the state column's `field`), so the flag lands on that site's
-// state cell and says which site-version was commented on. The flat listings ("My
-// Queue", "Created by me") are already one row per site-version, so they carry
+// state cell and says which site-version was commented on. The flat listings ("Assigned
+// to me", "My posts") are already one row per site-version, so they carry
 // plain numbers and the flag goes on the title. A row only ever has one of the two
 // shapes, so the missing one reads as 0 and the flag stays hidden.
 function commentTotal(row, col) {
