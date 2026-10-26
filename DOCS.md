@@ -157,10 +157,10 @@ Grund, warum die Benachrichtigung überhaupt hierher gehört:
 `pending_rewrite_spinner` und `refresh_interval` sagen **solange** eine Fassung
 hier steht, `mail` sagt **wenn** eine hier ankommt. Der
 Ankunftsmoment wird an genau zwei Stellen ausgelöst —
-`WorkflowTransitioner::apply()` und
-`PollPlainLanguageCommand::moveToCompletedPlace()` —, beide über
-`WorkflowNotifier::notifyPlaceArrival()`, damit sie nicht auseinanderlaufen
-können.
+`WorkflowTransitioner::apply()` (über `WorkflowNotifier::stepMail()`) und
+`PollPlainLanguageCommand::moveToCompletedPlace()` (über
+`WorkflowNotifier::notifyPlaceArrival()`); beide lesen die Mail über
+`PlaceActions::notificationMail()`, damit sie nicht auseinanderlaufen können.
 
 #### Zuweisung passiert nur noch, wo es dransteht
 
@@ -311,8 +311,30 @@ Der Job bekommt nur IDs und liest Entry und Definition beim Versand neu. Reminde
 der es ebenfalls trägt, geht **eine** Mail raus, nicht zwei: die der
 Transition. Sie ist die genauere Aussage — sie benennt diesen Schritt, während der
 Place jeden Weg hinein benennt. Entschieden wird das in
-`WorkflowTransitioner::apply()`, der einzigen Stelle, an der sich beide treffen
-können; der Poll-Befehl kennt nur den Place-Fall.
+`WorkflowNotifier::stepMail()`, das `WorkflowTransitioner::apply()` fragt; der
+Poll-Befehl kennt nur den Place-Fall.
+
+**Hinweis im Assignee-Picker.** Öffnet eine Transition den Picker (manuelles
+`user_assignment`), steht neben jeder Person, die dabei eine Mail bekommt,
+„Erhält E-Mail" (`pick_assignee_notified`). Das Flag `notified` an jedem
+Eintrag von `pickable_assignees` kommt aus denselben zwei Methoden, die auch den
+Versand entscheiden: `WorkflowNotifier::stepMail()` (verschickt der Schritt
+überhaupt eine Mail — Transition oder Ziel-Place) und
+`WorkflowNotifier::reaches()` (hat die Person eine E-Mail-Adresse und ist sie
+nicht selbst die Klickende). Gilt für alle Picker: Detailseite,
+Übersetzungs-Detailseite, Workflow-Actions-Fieldtype und „Neuer Beitrag".
+**Mail-Schalter im Assignee-Picker.** Verschickt der Schritt eine Mail
+(`sends_mail` an der Action bzw. an `createCta`), zeigt der Picker den Schalter
+„Benachrichtigung per E-Mail senden" (`pick_assignee_notify`), standardmäßig an.
+Ausgeschaltet schickt der Client `notify: false` mit; `applyTransition()` und
+`storePost()` reichen das als `notify` an `WorkflowTransitioner::apply()` weiter,
+und die Mail des Schritts (Transition oder Ziel-Place) entfällt für diesen Klick.
+Beim Anlegen eines Beitrags gilt das auch für die Ankunftsmail des
+Start-Places, falls die gekoppelte Transition nicht läuft. Ohne `notify` im
+Request wird wie bisher gemailt.
+
+Ob der konfigurierte Mailer tatsächlich zustellt (`log`, `array`), zeigt der
+Picker nicht — das steht in den Workflow-Einstellungen (`mailStatus`).
 
 #### Mail-Typen (`mail_type:`)
 

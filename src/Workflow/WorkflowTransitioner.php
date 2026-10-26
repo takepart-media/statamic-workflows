@@ -44,6 +44,8 @@ class WorkflowTransitioner
      *                                    the question back here: an AUTOMATIC action is resolved
      *                                    from the subject, anything else leaves assignment alone.
      * @param  string|null  $note  a History note — only for unattended callers
+     * @param  bool  $notify  false skips the step's mail (WorkflowNotifier::stepMail()) for
+     *                        this run — the editor switched it off in the assignee picker
      */
     public function apply(
         EntryContract $entry,
@@ -53,6 +55,7 @@ class WorkflowTransitioner
         ?string $actorId = null,
         ?array $explicitAssignees = null,
         ?string $note = null,
+        bool $notify = true,
     ): string {
         $transition = $raw['transitions'][$transitionName] ?? null;
 
@@ -84,7 +87,7 @@ class WorkflowTransitioner
         // the editor's behalf. Suppressed as one scope so they don't show up in the
         // History as draft saves — this step logs its own event, with its own
         // snapshot, a few lines down.
-        return EventLogSuppressor::while(function () use ($entry, $workflow, $transitionName, $transition, $raw, $actorId, $explicitAssignees, $current, $to, $note) {
+        return EventLogSuppressor::while(function () use ($entry, $workflow, $transitionName, $transition, $raw, $actorId, $explicitAssignees, $current, $to, $note, $notify) {
             $this->states->set($entry->id(), $workflow, $to);
             app(PublishedFlag::class)->sync($entry, $raw, $to);
             $this->stampContentTimestamp($entry, $raw, $to);
@@ -152,39 +155,32 @@ class WorkflowTransitioner
             // successful click reported as an error. The notifier already contains
             // per-recipient failures; this catches the rest (a broken mail config,
             // an unresolvable dependency).
-            $mailType = TransitionActions::notificationMail($transition);
+            //
+            // Which mail, if any, is WorkflowNotifier::stepMail()'s answer: the
+            // transition's own `mail` action, else the one on the place it lands
+            // in (sent exactly as notifyPlaceArrival() would). The assignee picker
+            // announces the mail from the same method, so its hint cannot drift
+            // from this send.
+            //
+            // `$notify` is the picker's toggle: an editor may hand over without
+            // announcing it. It silences this one send and nothing else.
+            $mail = $notify ? WorkflowNotifier::stepMail($raw, $transitionName) : null;
 
-            if ($mailType !== null) {
+            if ($mail !== null) {
                 try {
                     app(WorkflowNotifier::class)->queue(
-                        $fresh, $workflow, $raw, $mailType, $to,
-                        CustomActions::SCOPE_TRANSITION, $transitionName, $actorId,
+                        $fresh, $workflow, $raw, $mail['type'], $to,
+                        $mail['scope'], $mail['trigger'], $actorId,
                     );
                 } catch (\Throwable $e) {
-                    Log::error('Workflow assignment notification failed.', [
+                    Log::error('Workflow step notification failed.', [
                         'workflow' => $workflow,
                         'transition' => $transitionName,
+                        'scope' => $mail['scope'],
                         'subject' => $entry->id(),
                         'exception' => $e,
                     ]);
                 }
-            } else {
-                // The same action, read off the PLACE instead of the step: for a
-                // subject that ARRIVED rather than for a step that ran — see
-                // PlaceActions::MAIL.
-                // The same call the plain-language poller makes when it moves a
-                // finished rewrite into its completed place, which is the whole
-                // reason the action exists on places: that path has no transition
-                // to hang a mail on.
-                //
-                // In the `else`, deliberately. A transition carrying the action AND
-                // landing in a place that carries it would otherwise send the same
-                // people two mails for one click. The transition wins because it is
-                // the more specific statement: it names this step, while the place
-                // names every way in.
-                app(WorkflowNotifier::class)->notifyPlaceArrival(
-                    $fresh, $workflow, $raw, $to, $actorId,
-                );
             }
 
             // Project handlers last, when the transition is a completed fact —

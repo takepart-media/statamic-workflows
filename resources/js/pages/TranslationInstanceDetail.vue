@@ -388,6 +388,13 @@
                 {{ __('workflows::messages.pick_assignee_prompt') }}
             </p>
 
+            <!-- Off = hand over without the step's mail. Offered only when the step
+                 mails at all (`sends_mail`, the same answer the send uses). -->
+            <label v-if="picker.action.sends_mail" class="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                <Switch size="xs" v-model="picker.notify" />
+                {{ __('workflows::messages.pick_assignee_notify') }}
+            </label>
+
             <ul v-if="picker.action.pickable_assignees?.length" class="divide-y divide-gray-100 rounded-md border border-gray-200 dark:divide-gray-800 dark:border-gray-700!">
                 <li v-for="user in picker.action.pickable_assignees" :key="user.id">
                     <label class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
@@ -404,6 +411,11 @@
                             size="sm"
                         />
                         <span class="min-w-0 flex-1 truncate">{{ user.name }}</span>
+                        <span
+                            v-if="user.notified && picker.notify"
+                            class="shrink-0 text-xs text-gray-500 dark:text-gray-400"
+                            :title="__('workflows::messages.pick_assignee_notified_hint')"
+                        >{{ __('workflows::messages.pick_assignee_notified') }}</span>
                     </label>
                 </li>
             </ul>
@@ -873,7 +885,7 @@ const sitePicker = ref({ action: null, selected: null, source: null, saving: fal
 // is multi-select. This page used to handle only the site pick and sent every
 // other action straight to the server, so an assignment came back as a 422
 // ("please pick a person") with no modal ever opening.
-const picker = ref({ action: null, selected: [], saving: false });
+const picker = ref({ action: null, selected: [], notify: true, saving: false });
 
 async function apply(action) {
     if (!action.can_apply) return;
@@ -885,7 +897,7 @@ async function apply(action) {
         return;
     }
     if (action.needs_pick) {
-        picker.value = { action, selected: [], saving: false };
+        picker.value = { action, selected: [], notify: true, saving: false };
         return;
     }
     await runAction(action, {});
@@ -893,13 +905,13 @@ async function apply(action) {
 
 function cancelPicker() {
     if (picker.value.saving) return;
-    picker.value = { action: null, selected: [], saving: false };
+    picker.value = { action: null, selected: [], notify: true, saving: false };
 }
 
 async function confirmPicker() {
     if (!picker.value.selected.length) return;
     picker.value.saving = true;
-    await runAction(picker.value.action, { assignees: picker.value.selected });
+    await runAction(picker.value.action, { assignees: picker.value.selected, notify: picker.value.notify });
 }
 
 function cancelSitePicker() {

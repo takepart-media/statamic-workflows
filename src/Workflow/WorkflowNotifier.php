@@ -159,19 +159,9 @@ class WorkflowNotifier
         $sent = 0;
 
         foreach ($userIds as $userId) {
-            // Whoever triggered the step already knows about it — a creator who is
-            // assigned their own new post, or someone who hands a post to a group
-            // they belong to, gets no mail about their own click.
-            if ($actorId !== null && (string) $userId === $actorId) {
-                continue;
-            }
-
             $user = User::find($userId);
 
-            // An assignment can outlive the user it names (deleted account), and a
-            // Statamic user is not required to have an email. Neither is an error
-            // worth a log line per transition — there is simply nowhere to send.
-            if ($user === null || ! $user->email()) {
+            if (! self::reaches($user, $actorId)) {
                 continue;
             }
 
@@ -263,6 +253,57 @@ class WorkflowNotifier
         );
 
         $mode === 'queue' ? dispatch($job) : dispatch($job)->afterResponse();
+    }
+
+    /**
+     * WHICH mail a transition sends when it runs, and on whose behalf — or null
+     * when it sends none. The one answer to that question: apply() sends what this
+     * returns, and the assignee picker announces it before the click.
+     *
+     * The transition's own `mail` action wins; without one, the action on the
+     * place it lands in fires instead. Never both: a step carrying the action AND
+     * landing in a place that carries it would otherwise send the same people two
+     * mails for one click. The transition wins because it is the more specific
+     * statement — it names this step, while the place names every way in.
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array{type: string, scope: string, trigger: string}|null
+     */
+    public static function stepMail(array $raw, string $transitionName): ?array
+    {
+        $transition = $raw['transitions'][$transitionName] ?? [];
+
+        if (($type = TransitionActions::notificationMail($transition)) !== null) {
+            return ['type' => $type, 'scope' => CustomActions::SCOPE_TRANSITION, 'trigger' => $transitionName];
+        }
+
+        $to = (string) ($transition['to'] ?? '');
+
+        if (($type = PlaceActions::notificationMail($raw['places'][$to] ?? [])) !== null) {
+            return ['type' => $type, 'scope' => CustomActions::SCOPE_PLACE, 'trigger' => $to];
+        }
+
+        return null;
+    }
+
+    /**
+     * Would a mail to this assignee actually go out? Asked by notify() for every
+     * recipient, and by the assignee picker for every candidate — so the hint the
+     * editor sees and the send cannot disagree.
+     */
+    public static function reaches(?UserContract $user, ?string $actorId): bool
+    {
+        // An assignment can outlive the user it names (deleted account), and a
+        // Statamic user is not required to have an email. Neither is an error
+        // worth a log line per transition — there is simply nowhere to send.
+        if ($user === null || ! $user->email()) {
+            return false;
+        }
+
+        // Whoever triggered the step already knows about it — a creator who is
+        // assigned their own new post, or someone who hands a post to a group
+        // they belong to, gets no mail about their own click.
+        return $actorId === null || (string) $user->id() !== $actorId;
     }
 
     /**

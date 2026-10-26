@@ -1672,7 +1672,7 @@ class WorkflowController extends CpController
      * "accepted" stay one set.
      *
      * @param  array<string, mixed>  $raw
-     * @return array{name: string, label: string, needs_pick: bool, pickable_assignees: array<int, array<string, mixed>>}|null
+     * @return array{name: string, label: string, needs_pick: bool, sends_mail: bool, pickable_assignees: array<int, array<string, mixed>>}|null
      */
     private function createCta(array $raw, string $collection): ?array
     {
@@ -1687,8 +1687,9 @@ class WorkflowController extends CpController
 
         return $cta + [
             'needs_pick' => $needsPick,
+            'sends_mail' => WorkflowNotifier::stepMail($raw, $cta['name']) !== null,
             'pickable_assignees' => $needsPick
-                ? $this->pickableAssignees($transition, $this->stubEntryFor($collection))
+                ? $this->pickableAssignees($raw, $cta['name'], $this->stubEntryFor($collection))
                 : [],
         ];
     }
@@ -3186,7 +3187,10 @@ class WorkflowController extends CpController
                 // the transition directly and the server decides the assignees.
                 'needs_pick' => TransitionActions::opensUserDialog($transition),
                 // The action's candidates (may be empty), with site_allocation.
-                'pickable_assignees' => $this->pickableAssignees($transition, $entry),
+                'pickable_assignees' => $this->pickableAssignees($raw, $name, $entry),
+                // Whether the step mails anybody — the picker offers its "send
+                // email" toggle only then. Same answer the send uses.
+                'sends_mail' => WorkflowNotifier::stepMail($raw, $name) !== null,
                 // Target-site pick: the starting transition of a translation
                 // manager asks which site to localize into. The pickable list is
                 // localizableSitesFor() — see there for what is subtracted.
@@ -3512,14 +3516,24 @@ class WorkflowController extends CpController
      * the very same resolver, so a request naming one valid and one ineligible
      * user is rejected whole rather than applied in part.
      *
-     * @param  array<string, mixed>  $transition
+     * `notified` says whether picking this user sends them a mail — asked of
+     * WorkflowNotifier with the same two questions the send asks (does the step
+     * mail at all, does a mail reach this user with the current user as actor),
+     * so the picker's hint is true exactly when the mail goes out.
+     *
+     * @param  array<string, mixed>  $raw
      * @return array<int, array<string, mixed>>
      */
-    private function pickableAssignees(array $transition, $entry): array
+    private function pickableAssignees(array $raw, string $name, $entry): array
     {
+        $transition = $raw['transitions'][$name] ?? [];
+
         if (! TransitionActions::opensUserDialog($transition)) {
             return [];
         }
+
+        $mails = WorkflowNotifier::stepMail($raw, $name) !== null;
+        $actorId = (string) (User::current()?->id() ?? '') ?: null;
 
         return app(AssignmentCandidates::class)
             ->for(TransitionActions::userAssignment($transition), $entry)
@@ -3527,6 +3541,7 @@ class WorkflowController extends CpController
                 'id' => (string) $user->id(),
                 'name' => $user->name() ?? $user->email(),
                 'site_allocation' => $this->userSiteAllocation($user),
+                'notified' => $mails && WorkflowNotifier::reaches($user, $actorId),
             ])
             ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
@@ -3712,6 +3727,7 @@ class WorkflowController extends CpController
                     $raw,
                     actorId: (string) (User::current()?->id() ?? '') ?: null,
                     explicitAssignees: $explicit !== [] ? $explicit : null,
+                    notify: $request->boolean('notify', true),
                 );
             } catch (\RuntimeException $e) {
                 report($e);
@@ -3815,6 +3831,7 @@ class WorkflowController extends CpController
                     $raw,
                     actorId: (string) (User::current()?->id() ?? '') ?: null,
                     explicitAssignees: $explicit !== [] ? $explicit : null,
+                    notify: $request->boolean('notify', true),
                 );
             } catch (\RuntimeException $e) {
                 report($e);
@@ -3865,6 +3882,7 @@ class WorkflowController extends CpController
                 $raw,
                 actorId: (string) (User::current()?->id() ?? '') ?: null,
                 explicitAssignees: $explicit !== [] ? $explicit : null,
+                notify: $request->boolean('notify', true),
             );
         } catch (\RuntimeException $e) {
             report($e);
@@ -5004,6 +5022,7 @@ class WorkflowController extends CpController
                         $raw,
                         actorId: $userId !== '' ? $userId : null,
                         explicitAssignees: $explicitAssignees,
+                        notify: $request->boolean('notify', true),
                     );
                     $transitionResult['applied'] = true;
                 } catch (\RuntimeException $e) {
@@ -5021,7 +5040,9 @@ class WorkflowController extends CpController
         // initial place's own `mail` action, the same one a transition INTO it
         // would fire. When the transition did run, WorkflowTransitioner already
         // sent its mail or this one — never both.
-        if (! $transitionResult['applied']) {
+        // The modal's mail toggle covers this mail as well: whoever switched it
+        // off asked for a silent creation, not just a silent transition.
+        if (! $transitionResult['applied'] && $request->boolean('notify', true)) {
             app(WorkflowNotifier::class)->notifyPlaceArrival(
                 $entry, $workflow, $raw, $initial, $userId !== '' ? $userId : null,
             );

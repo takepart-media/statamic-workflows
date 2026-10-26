@@ -30,6 +30,15 @@ Alle nennenswerten Änderungen am Addon. Format nach
   der Retry reicht neu ein. Neue Option `metadata.plain_language_skip_fields`.
   Diagnose per `workflows:plain-language-poll --dry-run` / `--diff`.
   (DOCS.md § 2 → „Rückschreiben pro Textblatt")
+- **Mail-Hinweis im Assignee-Picker**: Bei manueller Zuweisung steht neben jeder
+  Person „Erhält E-Mail", wenn der Schritt ihr eine Benachrichtigung schickt.
+  Entschieden von denselben Regeln wie der Versand
+  (`WorkflowNotifier::stepMail()` / `reaches()`). (DOCS.md § „Hinweis im
+  Assignee-Picker")
+- **Mail-Schalter im Assignee-Picker**: „Benachrichtigung per E-Mail senden",
+  standardmäßig an. Aus = der Schritt übergibt ohne Mail (`notify: false` →
+  `WorkflowTransitioner::apply(notify: false)`). (DOCS.md § „Mail-Schalter im
+  Assignee-Picker")
 - **PHP-Testsuite** (Pest + Orchestra Testbench, in-memory DB, temporärer
   Stache): `vendor/bin/pest` bzw. `composer test`. (DOCS.md § 11 → Tests)
 

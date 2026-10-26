@@ -47,6 +47,12 @@
                  and blocks the button rather than creating a post nobody
                  could be handed. -->
             <Field v-if="createCta?.needs_pick" :label="__('workflows::messages.pick_assignee_title')" :instructions="__('workflows::messages.pick_assignee_prompt')">
+                <!-- Off = hand over without the step's mail. Offered only when the step
+                     mails at all (`sends_mail`, the same answer the send uses). -->
+                <label v-if="createCta.sends_mail" class="mb-2 flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                    <Switch size="xs" v-model="createModal.notify" />
+                    {{ __('workflows::messages.pick_assignee_notify') }}
+                </label>
                 <ul v-if="createCta.pickable_assignees?.length" class="divide-y divide-gray-100 rounded-md border border-gray-200 dark:divide-gray-800 dark:border-gray-700!">
                     <li v-for="user in createCta.pickable_assignees" :key="user.id">
                         <label class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
@@ -58,6 +64,11 @@
                             />
                             <Badge v-if="user.site_allocation" :text="user.site_allocation" color="blue" size="sm" />
                             <span class="min-w-0 flex-1 truncate">{{ user.name }}</span>
+                            <span
+                                v-if="user.notified && createModal.notify"
+                                class="shrink-0 text-xs text-gray-500 dark:text-gray-400"
+                                :title="__('workflows::messages.pick_assignee_notified_hint')"
+                            >{{ __('workflows::messages.pick_assignee_notified') }}</span>
                         </label>
                     </li>
                 </ul>
@@ -88,7 +99,7 @@
 
 <script setup>
 import { computed, ref, getCurrentInstance } from 'vue';
-import { Badge, Button, Field, Icon, Input, Modal, ModalTitle, Select } from '@statamic/cms/ui';
+import { Badge, Button, Field, Icon, Input, Modal, ModalTitle, Select, Switch } from '@statamic/cms/ui';
 
 /**
  * The "New post" button and the modal behind it — shared by the workflow
@@ -121,7 +132,7 @@ const axios = instance?.appContext?.config?.globalProperties?.$axios;
 
 // The modal's state. `collection` starts on the first owned one, which is also
 // what a single-collection workflow always sends.
-const createModal = ref({ open: false, title: '', collection: props.createCollections[0]?.value ?? '', assignees: [], saving: false });
+const createModal = ref({ open: false, title: '', collection: props.createCollections[0]?.value ?? '', assignees: [], notify: true, saving: false });
 
 // A title, and — when the coupled transition asks who gets the post — at least
 // one pick; the server refuses an empty pick with 422 before creating anything.
@@ -132,7 +143,7 @@ const canSubmit = computed(() =>
 );
 
 function openCreate() {
-    createModal.value = { open: true, title: '', collection: props.createCollections[0]?.value ?? '', assignees: [], saving: false };
+    createModal.value = { open: true, title: '', collection: props.createCollections[0]?.value ?? '', assignees: [], notify: true, saving: false };
 }
 
 function closeCreate() {
@@ -164,6 +175,8 @@ async function submitCreate() {
         title: createModal.value.title.trim(),
         // Only meaningful for a manual assignment; the server ignores it otherwise.
         assignees: props.createCta?.needs_pick ? [...createModal.value.assignees] : [],
+        // The mail toggle exists only next to the picker; without it, mail as usual.
+        notify: props.createCta?.needs_pick ? createModal.value.notify : true,
     };
 
     try {
