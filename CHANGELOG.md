@@ -45,6 +45,10 @@ Alle nennenswerten Änderungen am Addon. Format nach
   (Gruppe, Rolle oder Person, ohne den Klickenden). Darüber steht ein
   anpassbarer Hinweistext. Einstellbar im Graph-Editor unter Einstellungen ›
   Berechtigungen. (DOCS.md § „Selbstzuweisung verhindern")
+- **Zuweisen heißt beobachten**: Wer einem Beitrag neu zugewiesen wird,
+  beobachtet ihn automatisch (`WorkflowAssigneeStore::set()`). Bewusstes
+  Entbeobachten bleibt bestehen. Nicht-mehr-Beobachten zeigt jetzt ein
+  durchgestrichenes Lesezeichen. (DOCS.md § `Watched`)
 - **PHP-Testsuite** (Pest + Orchestra Testbench, in-memory DB, temporärer
   Stache): `vendor/bin/pest` bzw. `composer test`. (DOCS.md § 11 → Tests)
 

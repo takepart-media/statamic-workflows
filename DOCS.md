@@ -3957,6 +3957,24 @@ jede Zeile trägt zusätzlich die URL zum Nicht-mehr-Beobachten. Config: `limit`
 clientseitig, die Paginierung läuft über den Rest: die nächste Zeile rückt in
 die Seite nach, und wird die letzte Seite leer, springt der Pager eine zurück.
 
+**Zuweisen heißt beobachten.** Wer einem Beitrag neu zugewiesen wird, beobachtet
+ihn ab dann automatisch. Angelegt wird das in `WorkflowAssigneeStore::set()`,
+dem einen Punkt, an dem jede Zuweisung landet: Transition, Assignee-Drawer, neuer
+Beitrag, neue Lokalisierung, SLA-Übernahme.
+
+- Es zählen nur **neu hinzugekommene** Zuständige. Wer zugewiesen bleibt und
+  bewusst entbeobachtet hat, wird beim nächsten Speichern nicht wieder
+  angemeldet.
+- Wer aus der Zuweisung fällt, behält seine Beobachtung.
+- Grenzfall: Nimmt `workflows:transition-aged` eine SLA-Übernahme zurück
+  (`restore()`), gelten die wiederhergestellten Zuständigen erneut als neu.
+- Zuweisungen von vor diesem Verhalten werden nicht nachgezogen.
+
+**Icon.** Nicht-mehr-Beobachten zeigt ein durchgestrichenes Lesezeichen
+(`BOOKMARK_SLASH` in `resources/js/support/icons.js`, ein Inline-SVG, das
+Statamics `<Icon>` als Namen mit `<svg` direkt rendert). Es erscheint im Widget
+und auf den Detailseiten im Zustand „Beobachte ich“.
+
 ### `WorkflowsOverview` (`workflows_overview`)
 
 `src/Widgets/WorkflowsOverview.php` — „Alle Beiträge": die Pivot-Liste der

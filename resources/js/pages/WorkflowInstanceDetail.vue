@@ -92,10 +92,12 @@
                     />
                     <!-- Bookmark for the "Watched" dashboard card — personal, no mail,
                          no responsibility. Filled while watching, so the state reads at a
-                         glance; `bookmark`, not `eye`, because the eye is the preview. -->
+                         glance; then crossed out, because a click stops watching.
+                         `bookmark`, not `eye`, because the eye is the preview. Being
+                         assigned starts a watch on its own (WorkflowAssigneeStore). -->
                     <Button
                         v-if="watchUrl"
-                        icon="bookmark"
+                        :icon="isWatching ? BOOKMARK_SLASH : 'bookmark'"
                         :variant="isWatching ? 'default' : 'ghost'"
                         size="sm"
                         :text="isWatching ? __('workflows::messages.watching') : __('workflows::messages.watch')"
@@ -525,6 +527,7 @@
 import { ref, computed, getCurrentInstance, onUnmounted, watch } from 'vue';
 import { Alert, Avatar, Badge, Button, Icon, Input, Modal, ModalTitle, Select, SplitterGroup, SplitterPanel, SplitterResizeHandle, Stack, Switch } from '@statamic/cms/ui';
 import { Head } from '@statamic/cms/inertia';
+import { BOOKMARK_SLASH } from '../support/icons.js';
 import WorkflowProgress from '../components/WorkflowProgress.vue';
 import VersionListing from '../components/VersionListing.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';

@@ -12,7 +12,7 @@
             <PersonalWidgetRow v-for="row in pageItems" :key="row.unwatch_url" :row="row">
                 <template #actions>
                     <Button
-                        icon="bookmark"
+                        :icon="BOOKMARK_SLASH"
                         variant="ghost"
                         size="xs"
                         icon-only
@@ -29,7 +29,7 @@
                  same button as a real row, so they are the same height. -->
             <PersonalWidgetRow v-for="(row, index) in fillers" :key="`filler-${index}`" :row="row" placeholder>
                 <template #actions>
-                    <Button icon="bookmark" variant="ghost" size="xs" icon-only class="flex-none" disabled />
+                    <Button :icon="BOOKMARK_SLASH" variant="ghost" size="xs" icon-only class="flex-none" disabled />
                 </template>
             </PersonalWidgetRow>
         </div>
@@ -50,6 +50,7 @@ import { Button, Description, Widget } from '@statamic/cms/ui';
 import PersonalWidgetRow from './PersonalWidgetRow.vue';
 import WidgetPagination from './WidgetPagination.vue';
 import { useClientPagination } from '../support/pagination';
+import { BOOKMARK_SLASH } from '../support/icons.js';
 
 /**
  * Dashboard widget `workflows_watched`. The rows arrive complete, sorted and with

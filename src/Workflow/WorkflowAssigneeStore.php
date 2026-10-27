@@ -57,11 +57,23 @@ class WorkflowAssigneeStore
     /**
      * Replace the assignees of a subject/workflow with exactly the given ids.
      *
+     * Everyone this ADDS also starts watching the subject (WorkflowWatchStore),
+     * so a handed-over post shows up in their "Watched" card without a click.
+     * Done here because every way into an assignment ends in this method — a
+     * transition, the assignee drawer, a new post, a new localization, the SLA
+     * take-over — and one place cannot forget what six callers could.
+     *
+     * Only the newly added, not everyone in the list: somebody who stays
+     * assigned and deliberately unwatched is not re-subscribed by the next
+     * save of the drawer. Removing somebody leaves their watch alone — watching
+     * is their own choice from then on.
+     *
      * @param  array<int, string>  $userIds
      */
     public function set(string $subjectId, string $workflow, array $userIds): void
     {
-        $userIds = collect($userIds)->filter()->unique()->values();
+        $userIds = collect($userIds)->filter()->map(fn ($id) => (string) $id)->unique()->values();
+        $added = $userIds->diff(array_map('strval', $this->idsFor($subjectId, $workflow)));
 
         WorkflowAssignee::query()
             ->where('workflow', $workflow)
@@ -73,6 +85,9 @@ class WorkflowAssigneeStore
             'workflow' => $workflow,
             'user_id' => $userId,
         ]));
+
+        $watches = app(WorkflowWatchStore::class);
+        $added->each(fn (string $userId) => $watches->watch($userId, $subjectId, $workflow));
     }
 
     /**
