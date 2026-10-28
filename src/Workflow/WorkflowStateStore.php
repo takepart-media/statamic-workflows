@@ -30,7 +30,7 @@ class WorkflowStateStore
      */
     private array $memo = [];
 
-    /** @var array<string, array<string, string>> enteredAtLabels() per workflow — dropped with $memo */
+    /** @var array<string, array<string, \Illuminate\Support\Carbon>> enteredAtTimes() per workflow — dropped with $memo */
     private array $enteredMemo = [];
 
     /**
@@ -88,13 +88,26 @@ class WorkflowStateStore
      */
     public function enteredAtLabels(string $workflow): array
     {
+        return array_map(
+            fn ($time) => $time->locale(app()->getLocale())->isoFormat('L'),
+            $this->enteredAtTimes($workflow),
+        );
+    }
+
+    /**
+     * Arrival time of every subject in a workflow whose arrival is known, keyed
+     * by subject id. One query per workflow and request; enteredAtLabels() and
+     * the listings' "waiting longer than" filter both read it.
+     *
+     * @return array<string, \Illuminate\Support\Carbon>
+     */
+    public function enteredAtTimes(string $workflow): array
+    {
         return $this->enteredMemo[$workflow] ??= WorkflowState::query()
             ->where('workflow', $workflow)
             ->whereNotNull('entered_at')
             ->get(['subject_id', 'entered_at'])
-            ->mapWithKeys(fn (WorkflowState $row) => [
-                $row->subject_id => $row->entered_at->locale(app()->getLocale())->isoFormat('L'),
-            ])
+            ->mapWithKeys(fn (WorkflowState $row) => [$row->subject_id => $row->entered_at])
             ->all();
     }
 

@@ -2266,10 +2266,18 @@ Fixture-ID einen echten Entry überdecken, weil `findInstance()` **vor**
 - `applyColumnVisibility($columns, $param)` — der CP-Column-Customizer sendet
   die sichtbaren Spalten als CSV. Titel bleibt immer sichtbar.
 - `filters($rows, $workflow, $scope = null)` — baut je nach Kontext `SiteFilter`,
-  `StateFilter`, `AssigneeFilter`. Pivot-View hat nur den State-Filter (Site ist
-  ja die Spalte). Mit `$scope` (Übersicht) dieselben zwei: `StateFilter` mit der
-  **Vereinigung** der Places aller Workflows im Scope (geteilte Places einmal)
-  und `StaleFilter`. Einen Workflow-Filter gibt es nicht — das Einengen auf
+  `StateFilter`, `AssigneeFilter`. Pivot-View (Manager-Seite und Übersicht mit
+  `$scope`) hat keinen Site-Filter (Site ist ja die Spalte), sondern
+  `StateFilter` — mit `$scope` die **Vereinigung** der Places aller Workflows im
+  Scope (geteilte Places einmal) —, `AssigneeFilter` und `AuthorFilter` (je
+  über alle Sites des Beitrags, per User-ID gematcht, als Name beschriftet;
+  `_assignee_ids` bzw. `_author_ids` der Zeile, Autoren via `$entry->authors()`)
+  und `StaleFilter`. Dazu `WaitingFilter` („Wartet länger als“, feste Stufen
+  `WAITING_DAYS` = 3/7/14/30 Tage): `_waiting_since` der Zeile ist die früheste
+  Ankunft (`WorkflowStateStore::enteredAtTimes()`) einer Fassung, die in einem
+  **offenen** Place steht — einem, den eine Transition als `from` nennt
+  (`openPlaces()`); End-Places wie `published` sind kein Warten. Filter ohne
+  Optionen werden weggelassen. Einen Workflow-Filter gibt es nicht — das Einengen auf
   einen Workflow machen die Buttons des Widgets über `workflows=<name>` (§ 9).
 - `overviewColumns($workflows)` — Spalten der Übersicht: Titel, `workflow_label`
   (Typ `workflow`; nur bei mehr als einem Workflow im Scope sichtbar), eine

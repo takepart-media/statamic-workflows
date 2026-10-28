@@ -326,6 +326,7 @@ return [
     'site' => 'Site',
     'assignees' => 'Assignees',
     'assignee' => 'Assignee',
+    'author' => 'Author',
     'assigned_to' => 'Responsible:',
     'edit_assignees' => 'Edit assignees',
     'no_assignees' => 'No one assigned',
@@ -367,6 +368,10 @@ return [
     'all_states' => 'All states',
     'all_workflows' => 'All workflows',
     'all_assignees' => 'All assignees',
+    'all_authors' => 'All authors',
+    'waiting' => 'Waiting longer than',
+    'all_waiting' => 'Any time',
+    'filter_waiting_days' => '1 day|:count days',
     'embedded_podcast' => 'Embedded podcast',
 
     // Workflow states

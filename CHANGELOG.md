@@ -7,6 +7,13 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Hinzugefügt
 
+- **Filter „Zugewiesen an“ und „Autor“** in der Workflow-Übersicht und auf der
+  Manager-Seite: zeigt nur Beiträge, bei denen die Person in irgendeiner
+  Sprachfassung zugewiesen bzw. Autor ist.
+- **Filter „Wartet länger als“** (3 / 7 / 14 / 30 Tage) in der Workflow-Übersicht
+  und auf der Manager-Seite: Beiträge, von denen eine Sprachfassung länger als
+  das im aktuellen Status steht. Status ohne ausgehende Transition (z. B.
+  „Veröffentlicht“) zählen nicht als Warten.
 - **Graph-Editor** für Workflows unter Settings › Workflows › `<Workflow>`:
   Places und Transitions als Knoten, Bearbeiten in Seitenpanels, Undo/Redo,
   Tastaturkürzel, Live-Validierung, versioniertes Speichern mit Backups,

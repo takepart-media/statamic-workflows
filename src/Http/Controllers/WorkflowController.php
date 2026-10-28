@@ -43,9 +43,11 @@ use TakepartMedia\Workflows\Workflow\TransitionActions;
 use TakepartMedia\Workflows\Workflow\TransitionGates;
 use TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter;
 use TakepartMedia\Workflows\Workflow\Filters\AssigneeFilter;
+use TakepartMedia\Workflows\Workflow\Filters\AuthorFilter;
 use TakepartMedia\Workflows\Workflow\Filters\SiteFilter;
 use TakepartMedia\Workflows\Workflow\Filters\StaleFilter;
 use TakepartMedia\Workflows\Workflow\Filters\StateFilter;
+use TakepartMedia\Workflows\Workflow\Filters\WaitingFilter;
 use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
 use TakepartMedia\Workflows\Workflow\ProgressSteps;
 use TakepartMedia\Workflows\Workflow\PublishedFlag;
@@ -80,6 +82,9 @@ class WorkflowController extends CpController
      * even when several saves happened in between.
      */
     private const SAVE_TYPES = ['draft_save'];
+
+    /** The "waiting longer than" filter's steps, in days. */
+    private const WAITING_DAYS = [3, 7, 14, 30];
 
     /**
      * Per-request memos for the unread-comment lookups, keyed by workflow name /
@@ -161,13 +166,15 @@ class WorkflowController extends CpController
         $raw = app(DefinitionLoader::class)->raw($workflow);
         $states = app(WorkflowStateStore::class)->statesFor($workflow);
         $enteredAt = app(WorkflowStateStore::class)->enteredAtLabels($workflow);
+        $enteredTimes = app(WorkflowStateStore::class)->enteredAtTimes($workflow);
+        $openPlaces = $this->openPlaces($raw);
         $assignees = app(WorkflowAssigneeStore::class)->byWorkflow($workflow);
         $sites = $this->listingSitesFor($workflow);
         $resolver = app(WorkflowResolver::class);
         $isLocalization = $resolver->isLocalizationWorkflow($raw);
 
         return $this->entryGroups($workflow, $collection)
-            ->map(function ($group, $rootId) use ($raw, $states, $enteredAt, $assignees, $sites, $workflow, $resolver, $isLocalization) {
+            ->map(function ($group, $rootId) use ($raw, $states, $enteredAt, $enteredTimes, $openPlaces, $assignees, $sites, $workflow, $resolver, $isLocalization) {
                 $byLocale = $group->keyBy(fn ($entry) => $entry->locale());
                 $root = $group->first(fn ($entry) => $entry->isRoot()) ?? $group->first()->root();
 
@@ -188,6 +195,8 @@ class WorkflowController extends CpController
                 ];
 
                 $assigneeIds = [];
+                $authorIds = [];
+                $waitingSince = null;
                 $stateList = [];
                 $urls = [];
                 $entered = [];
@@ -224,10 +233,20 @@ class WorkflowController extends CpController
                     if (isset($enteredAt[$localization->id()])) {
                         $entered[$site] = $enteredAt[$localization->id()];
                     }
+                    // The longest any version of the post has been waiting —
+                    // only in places that lead somewhere: sitting in "published"
+                    // for a month is not waiting.
+                    $time = $enteredTimes[$localization->id()] ?? null;
+                    if ($time !== null && in_array($state, $openPlaces, true) && ($waitingSince === null || $time->lt($waitingSince))) {
+                        $waitingSince = $time;
+                    }
                     // The cell's "Live preview" button, null where there is none.
                     $previewUrls[$site] = $this->previewUrlFor($localization);
                     $previewModes[$site] = EntryPreviewController::modeFor($localization);
                     $assigneeIds = array_merge($assigneeIds, $this->assigneeIds($localization, $workflow, $assignees));
+                    // Read per version: a localization may name its own author
+                    // or inherit the origin's — authors() covers both.
+                    $authorIds = array_merge($authorIds, $localization->authors()->map(fn ($a) => (string) $a)->all());
 
                     // Per site, not per row: in a pivot the useful information is
                     // WHICH site-version was commented on. The cell renders the total
@@ -265,6 +284,8 @@ class WorkflowController extends CpController
                 $row['_stale'] = $stale !== [];
                 $row['_states'] = array_values(array_unique($stateList));
                 $row['_assignee_ids'] = array_values(array_unique($assigneeIds));
+                $row['_author_ids'] = array_values(array_unique($authorIds));
+                $row['_waiting_since'] = $waitingSince?->getTimestamp();
                 // What the stat row's presets match against — see
                 // cellSubjectIds().
                 $row['_subject_ids'] = $this->cellSubjectIds($group, $sites);
@@ -1478,14 +1499,71 @@ class WorkflowController extends CpController
             'site' => $rows->pluck('site')->filter()->unique()->sort()
                 ->mapWithKeys(fn ($v) => [$v => $v])->all(),
             'state' => $stateOptions,
-            'assignee' => $rows->flatMap(fn ($r) => $r['_assignees'] ?? [])->filter()->unique()->sort()
-                ->mapWithKeys(fn ($v) => [$v => $v])->all(),
+            // The pivot carries no names, only ids — matched by id, labelled by
+            // name, so two people of the same name stay apart.
+            'assignee' => $this->isPivot($workflow, $scope)
+                ? $this->userOptions($rows, '_assignee_ids')
+                : $rows->flatMap(fn ($r) => $r['_assignees'] ?? [])->filter()->unique()->sort()
+                    ->mapWithKeys(fn ($v) => [$v => $v])->all(),
+            'author' => $this->userOptions($rows, '_author_ids'),
+            // Fixed steps rather than the rows' spread: "longer than a week" is
+            // the question, whatever the oldest post happens to be.
+            'waiting' => $rows->contains(fn ($r) => ($r['_waiting_since'] ?? null) !== null)
+                ? collect(self::WAITING_DAYS)->mapWithKeys(fn (int $days) => [
+                    (string) $days => trans_choice('workflows::messages.filter_waiting_days', $days, ['count' => $days]),
+                ])->all()
+                : [],
             // Offered only when some row actually has an out-of-date version — a
             // filter that can only ever return nothing is worse than no filter.
             'stale' => $rows->contains(fn ($r) => ($r['_stale'] ?? false) === true)
                 ? ['1' => $this->t('filter_stale_only')]
                 : [],
         ];
+    }
+
+    /**
+     * Places a subject can still move on from — those named as `from` by some
+     * transition. Time spent in any other place is not waiting.
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array<int, string>
+     */
+    private function openPlaces(array $raw): array
+    {
+        return collect($raw['transitions'] ?? [])
+            ->flatMap(fn ($transition) => (array) ($transition['from'] ?? []))
+            ->filter(fn ($place) => is_string($place))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * id => display name of every user named under `$key` in any row.
+     *
+     * @return array<string, string>
+     */
+    private function userOptions(\Illuminate\Support\Collection $rows, string $key): array
+    {
+        return $rows->flatMap(fn ($r) => $r[$key] ?? [])->filter()->unique()
+            ->mapWithKeys(function ($id) {
+                $user = User::find($id);
+
+                return $user ? [(string) $id => $user->name() ?? $user->email()] : [];
+            })
+            ->sort()
+            ->all();
+    }
+
+    /**
+     * The site-pivot listings: the dashboard overview and an entry workflow's
+     * manager page.
+     *
+     * @param  array<int, string>|null  $scope
+     */
+    private function isPivot(?string $workflow, ?array $scope): bool
+    {
+        return $scope !== null || $this->isEntryWorkflow($workflow);
     }
 
     private function isKnownWorkflow(?string $workflow): bool
@@ -1504,13 +1582,22 @@ class WorkflowController extends CpController
     {
         $options = $this->filterOptions($rows, $workflow, $scope);
 
-        // Pivot view: site becomes columns, so only the (any-site) state filter
-        // remains — plus the out-of-date question, which is a property of the post
-        // rather than of one site. The dashboard's cross-workflow pivot is the
-        // same; which workflow it shows is its buttons' business, not a filter's.
-        if ($scope !== null || $this->isEntryWorkflow($workflow)) {
+        // Pivot view: site becomes columns, so the filters are the post's, across
+        // its sites — state, assignee, author, and the out-of-date question. The
+        // dashboard's cross-workflow pivot is the same; which workflow it shows
+        // is its buttons' business, not a filter's.
+        if ($this->isPivot($workflow, $scope)) {
             return array_values(array_filter([
                 (new StateFilter)->context(['options' => $options['state']])->toArray(),
+                $options['assignee'] === []
+                    ? null
+                    : (new AssigneeFilter)->context(['options' => $options['assignee']])->toArray(),
+                $options['author'] === []
+                    ? null
+                    : (new AuthorFilter)->context(['options' => $options['author']])->toArray(),
+                $options['waiting'] === []
+                    ? null
+                    : (new WaitingFilter)->context(['options' => $options['waiting']])->toArray(),
                 $options['stale'] === []
                     ? null
                     : (new StaleFilter)->context(['options' => $options['stale']])->toArray(),
@@ -5236,6 +5323,13 @@ class WorkflowController extends CpController
             if (($active['stale']['stale'] ?? null) !== null) {
                 $rows = $rows->filter(fn (array $row) => ($row['_stale'] ?? false) === true);
             }
+            if ($assignee = $active['assignee']['assignee'] ?? null) {
+                $rows = $rows->filter(fn (array $row) => in_array((string) $assignee, $row['_assignee_ids'] ?? [], true));
+            }
+            if ($days = (int) ($active['waiting']['waiting'] ?? 0)) {
+                $cutoff = now()->subDays($days)->getTimestamp();
+                $rows = $rows->filter(fn (array $row) => ($row['_waiting_since'] ?? null) !== null && $row['_waiting_since'] <= $cutoff);
+            }
         } else {
             if ($site = $active['site']['site'] ?? null) {
                 $rows = $rows->where('site', $site);
@@ -5243,9 +5337,16 @@ class WorkflowController extends CpController
             if ($state = $active['state']['state'] ?? null) {
                 $rows = $rows->where('state', $state);
             }
+            // By name on the flat lists' own filter; by id where the entry
+            // workflow's flat lists share the pivot's filter definitions.
             if ($assignee = $active['assignee']['assignee'] ?? null) {
-                $rows = $rows->filter(fn (array $row) => in_array($assignee, $row['_assignees'] ?? [], true));
+                $rows = $rows->filter(fn (array $row) => in_array($assignee, $row['_assignees'] ?? [], true)
+                    || in_array((string) $assignee, $row['_assignee_ids'] ?? [], true));
             }
+        }
+
+        if ($author = $active['author']['author'] ?? null) {
+            $rows = $rows->filter(fn (array $row) => in_array((string) $author, $row['_author_ids'] ?? [], true));
         }
 
         // "My Queue": only rows assigned to the current user.
@@ -5324,6 +5425,8 @@ class WorkflowController extends CpController
             'site' => (new SiteFilter)->context(['options' => $options['site']]),
             'state' => (new StateFilter)->context(['options' => $options['state']]),
             'assignee' => (new AssigneeFilter)->context(['options' => $options['assignee']]),
+            'author' => (new AuthorFilter)->context(['options' => $options['author']]),
+            'waiting' => (new WaitingFilter)->context(['options' => $options['waiting']]),
             'stale' => (new StaleFilter)->context(['options' => $options['stale']]),
         ];
 

@@ -331,6 +331,7 @@ return [
     'site' => 'Website',
     'assignees' => 'Zugewiesen',
     'assignee' => 'Zugewiesen an',
+    'author' => 'Autor',
     'assigned_to' => 'Verantwortlich:',
     'edit_assignees' => 'Zuweisung bearbeiten',
     'no_assignees' => 'Niemand zugewiesen',
@@ -372,6 +373,10 @@ return [
     'all_states' => 'Alle Status',
     'all_workflows' => 'Alle Workflows',
     'all_assignees' => 'Alle Zugewiesenen',
+    'all_authors' => 'Alle Autoren',
+    'waiting' => 'Wartet länger als',
+    'all_waiting' => 'Beliebig lange',
+    'filter_waiting_days' => '1 Tag|:count Tage',
     'embedded_podcast' => 'Eingebetteter Podcast',
 
     // Workflow states
