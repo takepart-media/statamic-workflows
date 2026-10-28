@@ -57,6 +57,8 @@ return [
     'event_note_reminder_sent' => 'Reminder sent — in this state for :days days.',
     'history_event_reminder_sent' => 'Reminder sent',
     'state_since' => 'In state ":state" since :date',
+    // Short form behind the state badge in the overview.
+    'since_date' => 'since :date',
     'event_note_auto_transition' => '{1} Applied automatically — the one-day deadline passed.|[2,*] Applied automatically — the :days-day deadline passed.',
     'event_note_auto_transition_undone' => 'Automatic transition [:transition] undone.',
     'event_actor_system' => 'System',

@@ -57,6 +57,8 @@ return [
     'event_note_reminder_sent' => 'Erinnerung verschickt — seit :days Tagen in diesem Status.',
     'history_event_reminder_sent' => 'Erinnerung verschickt',
     'state_since' => 'Im Status „:state“ seit :date',
+    // Kurzform hinter dem Status-Badge in der Übersicht.
+    'since_date' => 'seit :date',
     'event_note_auto_transition' => '{1} Automatisch ausgeführt — Frist von einem Tag abgelaufen.|[2,*] Automatisch ausgeführt — Frist von :days Tagen abgelaufen.',
     'event_note_auto_transition_undone' => 'Automatische Transition [:transition] rückgängig gemacht.',
     'event_actor_system' => 'System',

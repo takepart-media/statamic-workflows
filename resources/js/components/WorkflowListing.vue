@@ -73,15 +73,6 @@
                             <span v-else-if="col.type === 'state'" class="text-gray-400 dark:text-gray-500">—</span>
                             <template v-else>{{ row[col.field] }}</template>
 
-                            <!-- Since when the version sits in this state (entered_at),
-                                 small and muted right behind the badge — before the
-                                 preview button below. -->
-                            <span
-                                v-if="col.type === 'state' && row[col.field] && row.entered_at?.[col.field]"
-                                class="ms-1.5 text-2xs text-gray-400 tabular-nums dark:text-gray-500"
-                                :title="__('workflows::messages.state_since', { state: humanize(row[col.field]), date: row.entered_at[col.field] })"
-                            >{{ row.entered_at[col.field] }}</span>
-
                             <!-- "Live preview" of this site-version, in its own window. A
                                  sibling of the chain above so it renders IN ADDITION to
                                  the cell's content: on the pivot the button sits beside
@@ -131,6 +122,15 @@
                                     <span class="font-semibold text-amber-600 dark:text-amber-400!">+{{ commentUnread(row, col) }}</span>
                                 </template>
                             </span>
+
+                            <!-- Since when the version sits in this state (entered_at),
+                                 small and muted on its own line under the badge and
+                                 its markers — last in the cell so it wraps below them. -->
+                            <span
+                                v-if="col.type === 'state' && row[col.field] && row.entered_at?.[col.field]"
+                                class="mt-0.5 block text-2xs text-gray-400 tabular-nums dark:text-gray-500"
+                                :title="__('workflows::messages.state_since', { state: humanize(row[col.field]), date: row.entered_at[col.field] })"
+                            >{{ __('workflows::messages.since_date', { date: row.entered_at[col.field] }) }}</span>
                         </template>
                     </GroupedListingTable>
                 </KeepPageHeight>

@@ -54,6 +54,8 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Geändert
 
+- Übersicht: Das Datum hinter dem Status-Badge heißt jetzt „seit …“
+  (englisch „since …“).
 - Einfache Sprache schickt nur noch die **Inhaltsfelder und den Titel**; andere
   Felder gehen nicht mehr mit.
 - Comment-Hashes werden über das neue Block-Format gebildet.
