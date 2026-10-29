@@ -22,6 +22,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $resolved_by_name
  * @property \Illuminate\Support\Carbon|null $edited_at
  * @property array<int, string>|null $mentions  mentioned user ids
+ * @property string|null $quote             the marked text (roots only); null = whole passage
+ * @property int|null    $quote_offset      where `quote` started in the passage's plain text
  */
 class WorkflowComment extends Model
 {
@@ -44,6 +46,7 @@ class WorkflowComment extends Model
         'resolved_at' => 'datetime',
         'edited_at' => 'datetime',
         'mentions' => 'array',
+        'quote_offset' => 'integer',
     ];
 
     public function isRoot(): bool

@@ -11,14 +11,15 @@
          set/row headers with handle + label + uuid, items under their field
          handle, child blocks nested below their parent with their path tail.
          Remove this branch + technicalTree() in contentBlocks.js to drop it. -->
-    <div v-if="technical" class="fw-flow space-y-2" :class="{ 'fw-flow--gutter': commentable }">
+    <div v-if="technical" ref="root" class="fw-flow space-y-2" :class="{ 'fw-flow--gutter': commentable }" @click="onMarkClick">
         <div
             v-for="(node, i) in treeNodes"
             :key="blockKey(node.block, i, keyPrefix)"
             :id="anchors ? passageId(node.block) : undefined"
             :data-ref="anchors ? node.block.uuid : undefined"
+            :data-uuid="node.block.uuid"
             class="fw-passage group relative flex items-start"
-            :class="{ 'fw-passage--active': isActive(node.block) }"
+            :class="{ 'fw-passage--active': isActive(node.block), 'fw-passage--commented': isWholeCommented(node.block) }"
             :style="{ marginInlineStart: `${node.indent * 1.25}rem` }"
         >
             <div class="fw-passage-body min-w-0 flex-1 rounded-e-md border-s-2 border-gray-200 ps-3 dark:border-gray-700!">
@@ -53,7 +54,7 @@
 
             <div v-if="commentable" class="fw-gutter">
                 <slot name="comment" :block="node.block">
-                    <CommentAction :block="node.block" :count="count(node.block)" :fresh="fresh(node.block)" @comment="$emit('comment', node.block)" />
+                    <CommentAction :block="node.block" :count="count(node.block)" :fresh="fresh(node.block)" @comment="(b, el) => $emit('comment', b, el)" />
                 </slot>
             </div>
         </div>
@@ -61,14 +62,15 @@
         <slot v-if="!treeNodes.length" name="empty" />
     </div>
 
-    <div v-else class="fw-flow space-y-6" :class="{ 'fw-flow--gutter': commentable }">
+    <div v-else ref="root" class="fw-flow space-y-6" :class="{ 'fw-flow--gutter': commentable }" @click="onMarkClick">
         <div
             v-for="(block, i) in visibleBlocks"
             :key="blockKey(block, i, keyPrefix)"
             :id="anchors ? passageId(block) : undefined"
             :data-ref="anchors ? block.uuid : undefined"
+            :data-uuid="block.uuid"
             class="fw-passage group relative flex items-start"
-            :class="{ 'fw-passage--active': isActive(block) }"
+            :class="{ 'fw-passage--active': isActive(block), 'fw-passage--commented': isWholeCommented(block) }"
         >
             <div class="fw-passage-body min-w-0 flex-1 rounded-e-md border-s-2 border-transparent ps-3">
                 <!-- Developer metadata behind the "technical details" switch: the
@@ -167,23 +169,28 @@
             </div>
 
             <!-- Comment gutter, like Word's margin: a column right of the
-                 reading flow with an always visible button on the passage's first
-                 line. Hovering / focusing it highlights the passage it belongs to.
+                 reading flow with a button on the passage's first line, shown
+                 while the passage is hovered. Hovering / focusing it highlights the passage it belongs to.
                  On narrow containers it collapses to the passage's top-right. -->
             <div v-if="commentable" class="fw-gutter">
                 <slot name="comment" :block="block">
-                    <CommentAction :block="block" :count="count(block)" :fresh="fresh(block)" @comment="$emit('comment', block)" />
+                    <CommentAction :block="block" :count="count(block)" :fresh="fresh(block)" @comment="(b, el) => $emit('comment', b, el)" />
                 </slot>
             </div>
         </div>
 
         <slot v-if="!visibleBlocks.length" name="empty" />
     </div>
+
+    <!-- Marked text → comment icon. Only where passages take comments. -->
+    <SelectionCommentButton v-if="commentable" :scope="root" @comment="onSelection" />
 </template>
 
 <script setup>
-import { computed, defineComponent, h } from 'vue';
+import { computed, defineComponent, h, nextTick, onMounted, ref, watch } from 'vue';
 import { Button, Icon } from '@statamic/cms/ui';
+import SelectionCommentButton from './comments/SelectionCommentButton.vue';
+import { clearMarks, locateQuote, wrapRange } from './comments/anchors.js';
 import { assetThumb, blockItems, blockKey, blockTitle, isHeaderOnly, itemDisplay, itemLabel, passageId, readingBlocks, technicalTree } from './contentBlocks.js';
 
 const props = defineProps({
@@ -201,10 +208,17 @@ const props = defineProps({
     // Passage whose comment thread is active in the sidebar — kept highlighted
     // (accent + tint) for as long as the thread is, unlike the brief fw-flash.
     activeUuid: { type: String, default: null },
+    // (uuid) => boolean — an open comment is about the whole passage (no marked
+    // text): the passage gets a light yellow tint, as marks do for their text.
+    wholeCommented: { type: Function, default: () => false },
+    // Marked text of comment threads: [{ thread, uuid, quote, offset, active, resolved? }].
+    marks: { type: Array, default: () => [] },
     keyPrefix: { type: String, default: '' },
 });
 
-defineEmits(['comment']);
+const emit = defineEmits(['comment', 'comment-selection', 'mark']);
+
+const root = ref(null);
 
 const link = 'text-blue-600 no-underline hover:underline';
 
@@ -220,12 +234,62 @@ const treeNodes = computed(() => (props.technical ? technicalTree(props.blocks) 
 function count(block) {
     return Number(props.commentCount(block.uuid)) || 0;
 }
+function isWholeCommented(block) {
+    return props.commentable && !!block?.uuid && !!props.wholeCommented(block.uuid);
+}
+
 function isActive(block) {
     return props.commentable && !!props.activeUuid && block?.uuid === props.activeUuid;
 }
 function fresh(block) {
     return !!props.hasNew(block.uuid);
 }
+
+// --- marked text ---------------------------------------------------------------
+
+function onSelection({ prose, quote, offset }) {
+    const uuid = prose.closest('[data-uuid]')?.dataset.uuid;
+    const block = props.blocks.find((b) => b?.uuid === uuid);
+    if (block) emit('comment-selection', block, { quote, offset });
+}
+
+function onMarkClick(e) {
+    const mark = e.target?.closest?.('mark[data-comment-thread]');
+    if (mark && !window.getSelection()?.toString()) emit('mark', mark.dataset.commentThread, mark);
+}
+
+// The prose is v-html, so the marks are put into the DOM by hand after every
+// render: cleared, then each thread's quote looked up again in its passage's
+// current text. A quote that is gone simply gets no mark — its comment stays on
+// the passage.
+function applyMarks() {
+    const el = root.value;
+    if (!el) return;
+
+    for (const prose of el.querySelectorAll('.fw-prose')) clearMarks(prose);
+    if (!props.commentable) return;
+
+    for (const mark of props.marks) {
+        const passage = [...el.querySelectorAll('[data-uuid]')].find((p) => p.dataset.uuid === mark.uuid);
+        const prose = passage?.querySelector('.fw-prose');
+        if (!prose) continue;
+
+        const range = locateQuote(prose.textContent, mark.quote, mark.offset);
+        if (!range) continue;
+
+        wrapRange(prose, range[0], range[1], {
+            thread: mark.thread,
+            className: ['fw-comment-mark', mark.active && 'fw-comment-mark--active', mark.resolved && 'fw-comment-mark--resolved'].filter(Boolean).join(' '),
+        });
+    }
+}
+
+watch(
+    () => [props.marks, props.blocks, props.technical],
+    () => nextTick(applyMarks),
+    { deep: true, flush: 'post' },
+);
+onMounted(applyMarks);
 
 // The default comment affordance, Word-style: an always visible button in the
 // gutter. Without comments a quiet speech bubble with a small "+"; with comments
@@ -254,7 +318,9 @@ const CommentAction = defineComponent({
                         ],
                         'aria-label': aria,
                         title: p.count ? aria : add,
-                        onClick: () => emit('comment', p.block),
+                        // The button goes along: with the margin hidden, the
+                        // passage's comments open in a popover right there.
+                        onClick: (e) => emit('comment', p.block, e.currentTarget),
                     },
                     [
                         h('span', { class: 'relative inline-flex' }, [
@@ -282,17 +348,17 @@ const CommentAction = defineComponent({
 <style scoped>
 /* Comment gutter (Word-style margin). The flow is a size container so the
    gutter reacts to the column it sits in (the translation view is two columns),
-   not to the viewport. A faint rule separates the gutter from the text. */
+   not to the viewport. No rule, no permanent buttons: a passage's comment
+   button shows while the passage is hovered, focused or active (its thread or
+   popover is open) — and always on touch screens, which cannot hover. */
 .fw-flow--gutter { container-type: inline-size; position: relative; }
-.fw-flow--gutter::after {
-    content: '';
-    position: absolute;
-    inset-block: 0;
-    inset-inline-end: 4rem;
-    border-inline-start: 1px dashed rgb(229 231 235);
-    pointer-events: none;
+.fw-gutter > * { opacity: 0; transition: opacity 120ms ease-out; }
+.fw-passage:hover > .fw-gutter > *,
+.fw-gutter:focus-within > *,
+.fw-passage--active > .fw-gutter > * { opacity: 1; }
+@media (hover: none) {
+    .fw-gutter > * { opacity: 1; }
 }
-:where(.dark) .fw-flow--gutter::after { border-color: rgb(55 65 81); }
 .fw-gutter {
     flex-shrink: 0;
     width: 4rem;
@@ -330,6 +396,21 @@ const CommentAction = defineComponent({
     border-radius: 9999px;
 }
 
+/* A commentable passage lights up faintly while hovered: the set its comment
+   button belongs to. One commented as a whole stays light yellow. */
+.fw-flow--gutter .fw-passage:not(.fw-passage--active):hover > .fw-passage-body { background-color: rgb(249 250 251); }
+:where(.dark) .fw-flow--gutter .fw-passage:not(.fw-passage--active):hover > .fw-passage-body { background-color: rgb(31 41 55 / 0.5); }
+.fw-passage--commented > .fw-passage-body,
+.fw-flow--gutter .fw-passage--commented:not(.fw-passage--active):hover > .fw-passage-body {
+    background-color: rgb(254 249 195 / 0.55);
+    border-inline-start-color: rgb(250 204 21) !important;
+}
+:where(.dark) .fw-passage--commented > .fw-passage-body,
+:where(.dark) .fw-flow--gutter .fw-passage--commented:not(.fw-passage--active):hover > .fw-passage-body {
+    background-color: rgb(161 98 7 / 0.2);
+    border-inline-start-color: rgb(202 138 4) !important;
+}
+
 /* Anchoring: while the button is hovered / focused, its passage lights up with a
    light background and a left accent, so it is clear which text is meant. */
 .fw-passage-body { padding-block: 0.5rem; transition: background-color 120ms ease-out, border-color 120ms ease-out; }
@@ -358,7 +439,6 @@ const CommentAction = defineComponent({
 /* Narrow column: no gutter; the button sits at the passage's top-right and the
    text keeps clear of it. */
 @container (max-width: 30rem) {
-    .fw-flow--gutter::after { display: none; }
     .fw-gutter {
         position: absolute;
         inset-block-start: 0;
@@ -380,6 +460,22 @@ const CommentAction = defineComponent({
     0% { background-color: rgb(254 240 138 / 0.7); }
     100% { background-color: transparent; }
 }
+
+/* Marked text of a comment thread, Word-style: a light highlight, stronger while
+   its thread is active in the margin. */
+.fw-prose :deep(mark.fw-comment-mark) {
+    background-color: rgb(254 240 138 / 0.55);
+    color: inherit;
+    border-bottom: 2px solid rgb(250 204 21);
+    cursor: pointer;
+    transition: background-color 120ms ease-out;
+}
+.fw-prose :deep(mark.fw-comment-mark--active) { background-color: rgb(253 224 71 / 0.85); border-bottom-color: rgb(234 179 8); }
+:where(.dark) .fw-prose :deep(mark.fw-comment-mark) { background-color: rgb(161 98 7 / 0.35); border-bottom-color: rgb(202 138 4); }
+:where(.dark) .fw-prose :deep(mark.fw-comment-mark--active) { background-color: rgb(161 98 7 / 0.6); }
+/* A resolved thread looked at again: the same place, in a quiet "done" green. */
+.fw-prose :deep(mark.fw-comment-mark--resolved) { background-color: rgb(187 247 208 / 0.7); border-bottom-color: rgb(34 197 94); }
+:where(.dark) .fw-prose :deep(mark.fw-comment-mark--resolved) { background-color: rgb(21 128 61 / 0.4); border-bottom-color: rgb(34 197 94); }
 
 /* Minimal prose styling for the augmented Bard / Markdown HTML rendered via v-html. */
 .fw-prose :deep(p) { margin: 0 0 0.75rem; line-height: 1.65; }

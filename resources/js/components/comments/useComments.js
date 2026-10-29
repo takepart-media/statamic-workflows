@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { blockTitle, passageId } from '../contentBlocks.js';
 import {
     adjacentThread,
@@ -15,11 +15,29 @@ import {
     upsertComment,
 } from './comments.js';
 
+const MARGIN_KEY = 'workflows.comments.margin';
+
+function storedMargin() {
+    try {
+        return window.localStorage.getItem(MARGIN_KEY) !== 'hidden';
+    } catch (e) {
+        return true;
+    }
+}
+
+function storeMargin(visible) {
+    try {
+        window.localStorage.setItem(MARGIN_KEY, visible ? 'shown' : 'hidden');
+    } catch (e) {
+        // Private window / blocked storage: the margin just opens again next time.
+    }
+}
+
 /**
- * State + API calls of the Word-style comment sidebar, shared by both detail
- * pages (WorkflowInstanceDetail, TranslationInstanceDetail). The page owns one
- * instance, hands its `commentCount` / `hasNew` / `activeUuid` to ContentBlocks
- * and the whole object to <CommentsSidebar :comments="…">.
+ * State + API calls of the Word-style comments, shared by both detail pages
+ * (WorkflowInstanceDetail, TranslationInstanceDetail). The page owns one
+ * instance, hands its `commentCount` / `hasNew` / `activeUuid` / `marks` to
+ * ContentBlocks and the whole object to <CommentsMargin :comments="…">.
  *
  * options:
  *   comments          initial comment list (server contract, see comments.js)
@@ -29,6 +47,8 @@ import {
  *   mentionableUsers  [{ id, name, avatar, initials }]
  *   axios             the CP's axios (fetch fallback otherwise)
  *   onAllRead         () => void — nothing unread is left (e.g. clear a version's "new" flag)
+ *   margin            false = the page has no comment margin (translation view with
+ *                     the source beside the text): everything opens in the popover
  */
 export function useComments(options) {
     const axios = options.axios;
@@ -36,23 +56,33 @@ export function useComments(options) {
     const blocks = () => (typeof options.blocks === 'function' ? options.blocks() : options.blocks) || [];
 
     const items = ref([...(options.comments || [])]);
-    const open = ref(false);
+    // Whether the page offers the comment margin at all.
+    const hasMargin = options.margin !== false;
+    // Whether the comment margin beside the content is shown. On by default,
+    // remembered per browser: hiding it is a reading preference.
+    const open = ref(hasMargin && (typeof window === 'undefined' ? true : storedMargin()));
     const filter = ref('open');
     const activeThreadId = ref(null);
-    // Passage highlighted on the page (persistent while the sidebar shows it).
+    // Passage highlighted on the page (persistent while its thread is active).
     const activeUuid = ref(null);
-    // Passage a NEW root comment is being written for: { uuid, handle } | null.
+    // Passage a NEW root comment is being written for: { uuid, handle, quote?, offset? } | null.
+    // `uuid` null = a general comment, not about any passage.
     const composer = ref(null);
     // Resolved threads the reader expanded.
     const expanded = ref(new Set());
-    // Comments read in this sidebar session — they keep their "neu" pill until
-    // the sidebar closes, although the gutter dot clears at once.
+    // Comments read while the margin is shown — they keep their "neu" pill until
+    // it is hidden, although the gutter dot clears at once.
     const readNow = ref(new Set());
-    // Something the sidebar should scroll to / focus once its DOM exists:
+    // Something the margin should scroll to / focus once its DOM exists:
     // { kind: 'thread'|'comment'|'composer', id, focusComposer?, nonce }.
     const focusRequest = ref(null);
     const pendingDelete = ref(null);
     const now = ref(Date.now());
+    // While the margin is hidden, a passage's comments open in a popover at its
+    // gutter button (or at a clicked mark): { uuid, handle, anchor: Element } | null.
+    const popover = ref(null);
+    // The popover's own "show resolved" switch (the margin's filter is not in view).
+    const popoverResolved = ref(false);
 
     const blockOrder = computed(() => blocks().map((b) => b?.uuid).filter(Boolean));
     const blockByUuid = computed(() => new Map(blocks().filter(Boolean).map((b) => [b.uuid, b])));
@@ -60,12 +90,49 @@ export function useComments(options) {
     const visibleThreads = computed(() => filterThreads(threads.value, filter.value));
     const counts = computed(() => threadCounts(threads.value));
     const rows = computed(() => sidebarRows(visibleThreads.value, blockOrder.value, composer.value?.uuid ?? null));
+    // Marked text on the page: the open, visible threads that were written about
+    // a selection. Resolved ones leave the text alone, as in Word.
+    // The text a new comment is being written about is marked too (`composer`),
+    // so it stays visible and the composer has a line to sit level with.
+    // A resolved thread is marked only while it is the active one — looking
+    // back at what it was about, without cluttering the text otherwise.
+    const marks = computed(() => {
+        const list = visibleThreads.value
+            .filter((t) => t.uuid && t.root.ref?.quote && (!t.resolved || t.id === activeThreadId.value))
+            .map((t) => ({
+                thread: t.id,
+                uuid: t.uuid,
+                quote: t.root.ref.quote,
+                offset: t.root.ref.offset ?? null,
+                active: t.id === activeThreadId.value,
+                resolved: t.resolved,
+            }));
+        // The marked text a new comment is being written about — in the margin's
+        // composer or in the popover's.
+        const c = composer.value ?? (popover.value?.quote ? popover.value : null);
+
+        return c?.uuid && c.quote
+            ? [...list, { thread: 'composer', uuid: c.uuid, quote: c.quote, offset: c.offset ?? null, active: true }]
+            : list;
+    });
+    // The popover's threads: the passage's open ones, the resolved ones on
+    // request, and a resolved one whose mark was clicked (what it was about).
+    const popoverAll = computed(() => (popover.value ? threads.value.filter((t) => t.uuid === popover.value.uuid) : []));
+    const popoverResolvedCount = computed(() => popoverAll.value.filter((t) => t.resolved).length);
+    const popoverThreads = computed(() =>
+        popoverAll.value.filter((t) => !t.resolved || popoverResolved.value || t.id === activeThreadId.value),
+    );
     const activeThread = computed(() => threads.value.find((t) => t.id === activeThreadId.value) || null);
     const mentionableUsers = computed(() => options.mentionableUsers || []);
     const locale = (typeof document !== 'undefined' && document.documentElement.lang) || undefined;
 
     function commentCount(uuid) {
         return openCommentCount(threads.value, uuid);
+    }
+
+    // An open thread about the passage as a whole (gutter button, no marked text).
+    function wholeCommented(uuid) {
+        return threads.value.some((t) => t.uuid === uuid && !t.resolved && !t.root.ref?.quote);
     }
 
     function hasNew(uuid) {
@@ -105,17 +172,30 @@ export function useComments(options) {
         }
     }
 
+    // The marked text itself, once ContentBlocks has put it in (after the next
+    // render): closer than the passage, which may be long.
+    async function revealMark(threadId) {
+        if (typeof document === 'undefined') return;
+        await nextTick();
+        await nextTick();
+        document
+            .querySelector(`mark[data-comment-thread="${CSS.escape(String(threadId))}"]`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     function requestFocus(kind, id, extra = {}) {
         focusRequest.value = { kind, id, ...extra, nonce: Date.now() + Math.random() };
     }
 
     // --- opening ------------------------------------------------------------
 
-    function openSidebar() {
+    function show() {
+        if (!hasMargin) return;
+        popover.value = null;
         open.value = true;
     }
 
-    function close() {
+    function hide() {
         open.value = false;
         composer.value = null;
         activeThreadId.value = null;
@@ -123,12 +203,56 @@ export function useComments(options) {
         readNow.value = new Set();
     }
 
-    /** Gutter button: show the passage's open threads and a fresh composer for it. */
-    function openForPassage(block) {
+    function toggle() {
+        open.value ? hide() : show();
+    }
+
+    watch(open, (visible) => {
+        if (hasMargin) storeMargin(visible);
+        // The margin takes over from a popover (selection icon, history link…).
+        if (visible) popover.value = null;
+    });
+
+    /** Popover at `anchor` with a passage's comments — the margin stays hidden.
+     *  `anchor` is an element or a function finding one (it may not be rendered
+     *  yet, e.g. a mark); `quote` makes it a new comment on that marked text. */
+    function openPopover(block, anchor, threadId = null, { quote = null, offset = null } = {}) {
+        if (!block?.uuid || !anchor) return;
+
+        composer.value = null;
+        activeThreadId.value = threadId;
+        activeUuid.value = block.uuid;
+        popover.value = { uuid: block.uuid, handle: block.handle ?? null, anchor, quote, offset };
+        markRead(block.uuid);
+    }
+
+    // Where a popover for a thread / passage sits when nothing was clicked (a
+    // selection, a history link): its mark, else the passage's comment button.
+    function anchorFor(uuid, markId = null) {
+        return () =>
+            (markId != null && document.querySelector(`mark[data-comment-thread="${CSS.escape(String(markId))}"]`)) ||
+            document.querySelector(`[data-uuid="${CSS.escape(String(uuid))}"] .fw-comment-btn`);
+    }
+
+    function closePopover() {
+        if (!popover.value) return;
+        popover.value = null;
+        activeThreadId.value = null;
+        activeUuid.value = null;
+        readNow.value = new Set();
+    }
+
+    /** Gutter button: show the passage's open threads and a fresh composer for it.
+     *  With the margin hidden, they open in a popover at the button instead. */
+    function openForPassage(block, anchor = null) {
         if (!block?.uuid) return;
+        if (!open.value && anchor) {
+            // The same button again closes it.
+            return popover.value?.anchor === anchor ? closePopover() : openPopover(block, anchor);
+        }
         if (filter.value === 'resolved') filter.value = 'open';
 
-        composer.value = { uuid: block.uuid, handle: block.handle ?? null };
+        composer.value = { uuid: block.uuid, handle: block.handle ?? null, quote: null, offset: null };
         const first = visibleThreads.value.find((t) => t.uuid === block.uuid);
         activeThreadId.value = first?.id ?? null;
         open.value = true;
@@ -137,9 +261,34 @@ export function useComments(options) {
         markRead(block.uuid);
     }
 
+    /** Marked text → comment icon: a fresh composer for exactly that text. */
+    function openForSelection(block, { quote, offset }) {
+        if (!block?.uuid || !quote) return;
+        if (!hasMargin) {
+            return openPopover(block, anchorFor(block.uuid, 'composer'), null, { quote, offset: offset ?? null });
+        }
+        if (filter.value === 'resolved') filter.value = 'open';
+
+        composer.value = { uuid: block.uuid, handle: block.handle ?? null, quote, offset: offset ?? null };
+        activeThreadId.value = null;
+        activeUuid.value = block.uuid;
+        open.value = true;
+        requestFocus('composer', block.uuid, { focusComposer: true });
+        markRead(block.uuid);
+    }
+
     /** History handoff, `?comment=<id>`: open at one comment. */
     function openAtComment(commentId, passageRef = null) {
         const thread = threadOf(threads.value, commentId);
+        if (!hasMargin) {
+            const uuid = thread?.uuid ?? passageRef;
+            if (!uuid) return;
+            if (thread?.resolved) expanded.value = new Set([...expanded.value, thread.id]);
+            openPopover({ uuid, handle: thread?.handle ?? null }, anchorFor(uuid, thread?.root.ref?.quote ? thread.id : null), thread?.id ?? null);
+            revealPassage(uuid);
+
+            return;
+        }
         if (!thread) {
             // Gone (deleted) or unknown: fall back to the passage, if any.
             open.value = true;
@@ -170,13 +319,25 @@ export function useComments(options) {
 
     // --- active thread / navigation ------------------------------------------
 
+    /** Click on marked text: its thread in the margin, or in a popover at the mark. */
+    function openForMark(id, anchor = null) {
+        if (open.value || !anchor) return activateThread(id, { scrollPage: false });
+
+        const thread = threads.value.find((t) => String(t.id) === String(id));
+        if (thread?.uuid) openPopover({ uuid: thread.uuid, handle: thread.handle ?? null }, anchor, thread.id);
+    }
+
     function activateThread(id, { scrollPage = true, focus = true } = {}) {
         const thread = threads.value.find((t) => String(t.id) === String(id));
         if (!thread) return;
 
         activeThreadId.value = thread.id;
+        // In the popover the passage is right there; moving the page would only
+        // pull the popover away from under the pointer.
+        if (popover.value) scrollPage = false;
         if (scrollPage) revealPassage(thread.uuid);
         else activeUuid.value = thread.uuid;
+        if (scrollPage && thread.root.ref?.quote) revealMark(thread.id);
         if (thread.isNew) markRead(thread.uuid);
         if (focus) requestFocus('thread', id);
     }
@@ -287,10 +448,17 @@ export function useComments(options) {
                 body: text,
                 passage_ref: passage?.uuid ?? null,
                 passage_handle: passage?.handle ?? null,
+                quote: passage?.uuid ? passage?.quote ?? null : null,
+                quote_offset: passage?.uuid && passage?.quote ? passage?.offset ?? null : null,
                 mentions: mentionIdsFor(text, mentions),
             }))?.data;
             if (data) items.value = upsertComment(items.value, data);
-            composer.value = null;
+            if (composer.value === passage) composer.value = null;
+            // Written in the popover about marked text: the popover now belongs
+            // to the new thread's own mark.
+            if (data && popover.value?.quote) {
+                popover.value = { ...popover.value, quote: null, offset: null, anchor: anchorFor(popover.value.uuid, data.id) };
+            }
             if (data) {
                 activeThreadId.value = data.id;
                 requestFocus('thread', data.id);
@@ -399,19 +567,24 @@ export function useComments(options) {
         }
     }
 
-    // Relative times tick while the sidebar is open.
+    // Relative times tick while the margin is shown.
     let timer = null;
-    watch(open, (value) => {
-        clearInterval(timer);
-        now.value = Date.now();
-        if (value) timer = setInterval(() => (now.value = Date.now()), 60_000);
-    });
+    watch(
+        () => open.value || !!popover.value,
+        (value) => {
+            clearInterval(timer);
+            now.value = Date.now();
+            if (value) timer = setInterval(() => (now.value = Date.now()), 60_000);
+        },
+        { immediate: true },
+    );
     onUnmounted(() => clearInterval(timer));
     onMounted(openFromQuery);
 
     return {
         // state
         items,
+        hasMargin,
         open,
         filter,
         activeThreadId,
@@ -421,6 +594,8 @@ export function useComments(options) {
         expanded,
         focusRequest,
         pendingDelete,
+        popover,
+        popoverResolved,
         now,
         locale,
         currentUser: options.currentUser || null,
@@ -430,18 +605,27 @@ export function useComments(options) {
         visibleThreads,
         counts,
         rows,
+        marks,
+        popoverThreads,
+        popoverResolvedCount,
         canStep,
         // helpers
         commentCount,
         hasNew,
+        wholeCommented,
         isFresh,
         passageLabel,
         passageExists,
         revealPassage,
         // actions
-        openSidebar,
-        close,
+        show,
+        hide,
+        toggle,
         openForPassage,
+        openForSelection,
+        openForMark,
+        openPopover,
+        closePopover,
         openAtComment,
         activateThread,
         step,

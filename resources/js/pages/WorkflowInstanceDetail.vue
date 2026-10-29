@@ -1,7 +1,8 @@
 <template>
     <!-- A full CP page, not an overlay. Same page shell as the translation detail
          view (TranslationInstanceDetail) so the two summaries read as one product.
-         The Stacks further down are real drawers — comments and assignees — and stay. -->
+         The Stacks further down are real drawers — history and assignees. Comments
+         sit in a margin next to the content instead. -->
     <div class="max-w-[1600px] p-6">
         <Head :title="instance.subject.title" />
 
@@ -105,15 +106,6 @@
                         :disabled="watchBusy"
                         @click="toggleWatch"
                     />
-                    <!-- All comments of the page in the Word-style sidebar. The count
-                         is open threads only, like the gutter buttons. -->
-                    <Button
-                        icon="mail-chat-bubble-text"
-                        variant="ghost"
-                        size="sm"
-                        :text="commentButtonText"
-                        @click="commentSidebar.openSidebar()"
-                    />
                     <Button
                         v-if="canViewHistory"
                         icon="time-clock"
@@ -169,24 +161,51 @@
             <WorkflowProgress :steps="steps" :orientation="progressOrientation" :class="progressLayout.bar" />
 
             <section v-if="content.length" :class="progressLayout.content">
-                <div class="mb-2.5 flex items-center gap-2">
-                    <h2 class="text-base font-semibold text-gray-700 dark:text-gray-200">{{ __('workflows::messages.content') }}</h2>
-                    <!-- Super admins only: field handles + passage uuids, remembered
-                         per browser. Off by default — editors read the content. -->
-                    <label v-if="isSuper" class="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                        <Switch size="xs" v-model="technical" />
-                        {{ __('workflows::messages.content_technical_details') }}
-                    </label>
+                <!-- Laid out on the same columns as content and margin below, so the
+                     comments toggle sits right above the comment column (and at the
+                     row's end while the column is hidden). -->
+                <div
+                    class="mb-2.5 items-center gap-x-6 gap-y-2"
+                    :class="commentSidebar.open.value ? 'grid lg:grid-cols-[minmax(0,1fr)_20rem]' : 'flex'"
+                >
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-base font-semibold text-gray-700 dark:text-gray-200">{{ __('workflows::messages.content') }}</h2>
+                        <!-- Super admins only: field handles + passage uuids, remembered
+                             per browser. Off by default — editors read the content. -->
+                        <label v-if="isSuper" class="flex cursor-pointer items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            <Switch size="xs" v-model="technical" />
+                            {{ __('workflows::messages.content_technical_details') }}
+                        </label>
+                    </div>
+                    <!-- Shows / hides the Word-style comment margin. -->
+                    <div class="ml-auto flex justify-end">
+                        <Button
+                            icon="mail-chat-bubble-text"
+                            variant="ghost"
+                            size="sm"
+                            :text="commentSidebar.open.value ? __('workflows::messages.comments_hide') : __('workflows::messages.comments_show')"
+                            @click="commentSidebar.toggle()"
+                        />
+                    </div>
                 </div>
-                <ContentBlocks
-                    :blocks="content"
-                    commentable
-                    :technical="isSuper && technical"
-                    :comment-count="commentSidebar.commentCount"
-                    :has-new="commentSidebar.hasNew"
-                    :active-uuid="commentSidebar.activeUuid.value"
-                    @comment="commentSidebar.openForPassage"
-                />
+                <!-- Content and, Word-style, its comment margin beside it. -->
+                <div class="grid gap-6" :class="{ 'lg:grid-cols-[minmax(0,1fr)_20rem]': commentSidebar.open.value }">
+                    <ContentBlocks
+                        :blocks="content"
+                        commentable
+                        :technical="isSuper && technical"
+                        :comment-count="commentSidebar.commentCount"
+                        :has-new="commentSidebar.hasNew"
+                        :active-uuid="commentSidebar.activeUuid.value"
+                        :whole-commented="commentSidebar.wholeCommented"
+                        :marks="commentSidebar.marks.value"
+                        @comment="commentSidebar.openForPassage"
+                        @comment-selection="commentSidebar.openForSelection"
+                        @mark="commentSidebar.openForMark"
+                    />
+                    <CommentsMargin v-if="commentSidebar.open.value" :comments="commentSidebar" />
+                    <CommentsPopover :comments="commentSidebar" />
+                </div>
             </section>
         </div>
 
@@ -219,10 +238,6 @@
                 @open-comment="openCommentFromHistory"
             />
         </Stack>
-
-        <!-- Word-style comment sidebar: every comment of the page, synced with the
-             passages above. Shared with TranslationInstanceDetail. -->
-        <CommentsSidebar :comments="commentSidebar" />
 
         <!-- Assignee editor drawer: assignment is owned by the workflow. -->
         <Stack
@@ -354,7 +369,7 @@
                         />
                         <span class="min-w-0 flex-1 truncate">{{ user.name }}</span>
                         <span
-                            v-if="user.notified && picker.notify"
+                            v-if="user.notified && picker.notify && picker.selected.includes(user.id)"
                             class="shrink-0 text-xs text-gray-500 dark:text-gray-400"
                             :title="__('workflows::messages.pick_assignee_notified_hint')"
                         >{{ __('workflows::messages.pick_assignee_notified') }}</span>
@@ -532,7 +547,8 @@ import WorkflowProgress from '../components/WorkflowProgress.vue';
 import VersionListing from '../components/VersionListing.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';
 import ContentBlocks from '../components/ContentBlocks.vue';
-import CommentsSidebar from '../components/comments/CommentsSidebar.vue';
+import CommentsMargin from '../components/comments/CommentsMargin.vue';
+import CommentsPopover from '../components/comments/CommentsPopover.vue';
 import { useComments } from '../components/comments/useComments.js';
 import { readTechnical, writeTechnical } from '../components/contentBlocks.js';
 // Only the registration is still needed here: it seeds the module-level colour
@@ -855,12 +871,6 @@ const commentSidebar = useComments({
     mentionableUsers: props.mentionableUsers,
     axios,
     onAllRead: clearCurrentVersionNewFlag,
-});
-
-const commentButtonText = computed(() => {
-    const open = commentSidebar.counts.value.open;
-
-    return open ? `${__('workflows::messages.comments')} (${open})` : __('workflows::messages.comments');
 });
 
 // Timeline handoff: a click on a comment_created event in the History list opens

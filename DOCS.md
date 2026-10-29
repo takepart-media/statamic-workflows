@@ -2781,9 +2781,44 @@ oder auf einen Kommentar eines anderen Beitrags/Workflows ist ein 422). Eine
 Antwort erbt `passage_ref`/`passage_handle` **und** die Hashes des Roots: der
 ganze Thread beschreibt die Passage, wie sie bei seinem Start aussah.
 
+**Markierter Text.** Markiert man Text in einer Passage, erscheint daneben ein
+Kommentar-Icon (`comments/SelectionCommentButton.vue`, nur innerhalb **einer**
+`.fw-prose`). Der Root speichert dann zusätzlich `quote` (der markierte Text) und
+`quote_offset` (Startposition in Zeichen im `textContent` der Passage); beides
+nur zusammen mit `passage_ref`, sonst verworfen, und Antworten erben es. Der
+Offset ist ein Hinweis: `anchors.js::locateQuote()` nimmt die exakte Stelle,
+sonst das nächstgelegene Vorkommen von `quote`; fehlt es ganz, hängt der Thread
+wieder an der ganzen Passage (die Änderung meldet ohnehin `content_stale`).
+`ContentBlocks` legt die Markierungen nach jedem Render als
+`<mark data-comment-thread>` über die Textknoten (`wrapRange()`, eine pro
+Textknoten, damit Markup heil bleibt) — nur für offene, sichtbare Threads; ein
+Klick darauf aktiviert den Thread. Der „+“-Button in der Gutter bleibt für ganze
+Passagen und Blöcke ohne markierbaren Text.
+
+**Randspalte statt Drawer.** `comments/CommentsMargin.vue` steht als Spalte neben
+dem Inhalt (Inhalt | Kommentare ab `lg`). Die Übersetzungsseite hat sie nur, wenn
+die Quelle per Einstellung verborgen ist (`sourceView === 'hidden'`); sonst ruft
+sie `useComments({ margin: false })` und alles – Gutter-Button, Markierung,
+markierter Text, `?comment=` – öffnet im Popover. Jede Karte will auf Höhe
+ihres Ankers stehen (Markierung, sonst `#passage-<uuid>`, allgemeine oben);
+`anchors.js::layoutMargin()` schiebt überlappende nach unten und lässt die
+aktive Karte exakt an ihrem Anker (die darüber rücken hoch). Ein
+`ResizeObserver` legt neu aus, wenn Karten oder Inhalt ihre Höhe ändern. Unterhalb
+von `floatFrom` ist die Spalte eine schlichte Liste in Dokumentreihenfolge. Der
+Header-Button blendet die Spalte ein/aus (pro Browser gemerkt,
+`workflows.comments.margin`).
+
+**Popover bei ausgeblendeter Spalte.** Ohne Randspalte öffnen Gutter-Button und
+Klick auf eine Markierung `comments/CommentsPopover.vue` am geklickten Element
+(`useComments::openForPassage(block, anchor)` / `openForMark(id, anchor)`): die
+offenen Threads der Passage (`popoverThreads`), per Schalter „Erledigte
+anzeigen“ auch die erledigten (`popoverResolved`, nur wenn es welche gibt), und
+ein Feld für einen neuen Kommentar. Derselbe
+Button, Esc oder ein Klick daneben schließt es.
+
 **Resource** (Payload `comments` und jede Antwort der Endpoints, `{data: …}`):
 `id, parent_id, at, edited_at, author{id,name,avatar,initials}, body,
-mentions[{id,name}], ref{uuid,handle}|null, resolved{at,by{id,name}}|null,
+mentions[{id,name}], ref{uuid,handle,quote,offset}|null, resolved{at,by{id,name}}|null,
 can_edit, can_delete, can_resolve, is_new, content_stale, container_changed`.
 `resolved`/`can_resolve` nur am Root (Antworten: `null`/`false`).
 

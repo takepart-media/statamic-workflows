@@ -107,15 +107,6 @@
                             aria-hidden="true"
                         />
                     </div>
-                    <!-- All comments of the page (incl. passage-less ones such as QA
-                         notes) in the Word-style sidebar; count = open threads. -->
-                    <Button
-                        icon="mail-chat-bubble-text"
-                        variant="ghost"
-                        size="sm"
-                        :text="commentButtonText"
-                        @click="commentSidebar.openSidebar()"
-                    />
                     <Button
                         v-if="canViewHistory"
                         icon="time-clock"
@@ -188,8 +179,22 @@
                     <p class="text-sm">{{ sourceChangedText }}</p>
                 </Alert>
 
-                <div class="grid gap-4" :class="showSource ? 'lg:grid-cols-2' : ''">
-                    <div v-if="showSource">
+                <!-- Source | translation. A comment margin only where the settings
+                     hide the source (as on the post page); otherwise a passage's
+                     comments open in a popover at its comment button. -->
+                <!-- Super admins only: field handles + passage uuids in both
+                     columns, remembered per browser. Off by default. A row of its
+                     own above the columns, as it concerns both. -->
+                <label v-if="isSuper" class="mb-3 flex w-fit cursor-pointer items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <Switch size="xs" v-model="technical" />
+                    {{ __('workflows::messages.content_technical_details') }}
+                </label>
+
+                <div class="grid gap-4" :class="contentGrid">
+                    <!-- The source is reference, the translation is the work: dimmed
+                         slightly, back to full while the reader is in it, and 85% of
+                         its column wide, for more room before the translation. -->
+                    <div v-if="showSource" class="lg:w-[85%] opacity-60 transition-opacity duration-150 hover:opacity-100 focus-within:opacity-100">
                         <h2 class="mb-2.5 text-base font-semibold text-gray-700 dark:text-gray-200">
                             {{ __('workflows::messages.source') }}
                             <span class="ml-1 text-2xs font-medium uppercase text-gray-400">{{ sourceName }} · {{ sourceLang }}</span>
@@ -214,20 +219,26 @@
                                  back. Session-only on purpose — the rule says how the page
                                  STARTS, what happens after is the reader's. Under `hidden` there
                                  is no source to reveal, so no button either. -->
-                            <!-- Super admins only: field handles + passage uuids in both
-                                 columns, remembered per browser. Off by default. -->
-                            <label v-if="isSuper" class="ml-auto flex cursor-pointer items-center gap-1.5 text-xs font-normal text-gray-500 dark:text-gray-400">
-                                <Switch size="xs" v-model="technical" />
-                                {{ __('workflows::messages.content_technical_details') }}
-                            </label>
                             <Button
                                 v-if="sourceView === 'collapsed' && sourceAvailable"
                                 :icon="sourceOpen ? 'eye-slash' : 'eye'"
                                 variant="ghost"
                                 size="xs"
-                                :class="{ 'ml-auto': !isSuper }"
+                                class="ml-auto"
                                 :text="sourceOpen ? __('workflows::messages.source_hide') : __('workflows::messages.source_show')"
                                 @click="sourceOpen = !sourceOpen"
+                            />
+                            <!-- While the comment margin is hidden, its toggle waits at
+                                 the end of this heading; shown, it sits above the margin.
+                                 Only without the source column (useComments `margin`). -->
+                            <Button
+                                v-if="commentSidebar.hasMargin && !commentSidebar.open.value"
+                                icon="mail-chat-bubble-text"
+                                variant="ghost"
+                                size="sm"
+                                :class="{ 'ml-auto': !(sourceView === 'collapsed' && sourceAvailable) }"
+                                :text="__('workflows::messages.comments_show')"
+                                @click="commentSidebar.toggle()"
                             />
                         </h2>
 
@@ -262,11 +273,31 @@
                             :comment-count="commentSidebar.commentCount"
                             :has-new="commentSidebar.hasNew"
                             :active-uuid="commentSidebar.activeUuid.value"
+                            :whole-commented="commentSidebar.wholeCommented"
+                            :marks="commentSidebar.marks.value"
                             @comment="commentSidebar.openForPassage"
+                            @comment-selection="commentSidebar.openForSelection"
+                            @mark="commentSidebar.openForMark"
                         >
                             <template #empty><p class="text-sm italic text-gray-400">—</p></template>
                         </ContentBlocks>
                     </div>
+
+                    <div v-if="commentSidebar.open.value">
+                        <!-- Shows / hides the Word-style comment margin, right above it —
+                             level with the column headings beside it. -->
+                        <div class="mb-2.5 flex justify-end">
+                            <Button
+                                icon="mail-chat-bubble-text"
+                                variant="ghost"
+                                size="sm"
+                                :text="__('workflows::messages.comments_hide')"
+                                @click="commentSidebar.toggle()"
+                            />
+                        </div>
+                        <CommentsMargin :comments="commentSidebar" />
+                    </div>
+                    <CommentsPopover :comments="commentSidebar" />
                 </div>
             </section>
         </div>
@@ -311,10 +342,6 @@
             <Select v-model="manualState" :options="places" size="sm" class="w-56" />
             <Button size="sm" :text="__('workflows::messages.set')" :disabled="settingState || manualState === instance.current_state" @click="setState" />
         </div>
-
-        <!-- Word-style comment sidebar, shared with WorkflowInstanceDetail. Only the
-             translation column is commentable; the source column has no comments. -->
-        <CommentsSidebar :comments="commentSidebar" />
 
         <!-- Assignee editor drawer. -->
         <Stack :open="assigneeDrawer.open" @update:open="(v) => v || closeAssignees()" :title="__('workflows::messages.edit_assignees')" icon="users" size="narrow" inset>
@@ -420,7 +447,7 @@
                         />
                         <span class="min-w-0 flex-1 truncate">{{ user.name }}</span>
                         <span
-                            v-if="user.notified && picker.notify"
+                            v-if="user.notified && picker.notify && picker.selected.includes(user.id)"
                             class="shrink-0 text-xs text-gray-500 dark:text-gray-400"
                             :title="__('workflows::messages.pick_assignee_notified_hint')"
                         >{{ __('workflows::messages.pick_assignee_notified') }}</span>
@@ -563,7 +590,8 @@ import { BOOKMARK_SLASH } from '../support/icons.js';
 import WorkflowProgress from '../components/WorkflowProgress.vue';
 import WorkflowHistory from '../components/WorkflowHistory.vue';
 import ContentBlocks from '../components/ContentBlocks.vue';
-import CommentsSidebar from '../components/comments/CommentsSidebar.vue';
+import CommentsMargin from '../components/comments/CommentsMargin.vue';
+import CommentsPopover from '../components/comments/CommentsPopover.vue';
 import { useComments } from '../components/comments/useComments.js';
 import { readTechnical, writeTechnical } from '../components/contentBlocks.js';
 // Only the registration is still needed here: it seeds the module-level colour
@@ -753,6 +781,12 @@ const sourceOpen = ref(props.sourceView !== 'collapsed');
 // name for it); the reader has it collapsed.
 const showSource = computed(() => sourceAvailable.value && props.sourceView !== 'hidden' && sourceOpen.value);
 
+const contentGrid = computed(() => {
+    if (showSource.value) return 'lg:grid-cols-2';
+
+    return commentSidebar.open.value ? 'lg:grid-cols-[minmax(0,1fr)_20rem]' : '';
+});
+
 // --- refresh interval (PlaceActions::REFRESH_INTERVAL) ---
 // Harter Reload nach dem konfigurierten Intervall, ohne Diff-Check und ohne
 // Bestätigung: der Zweck der Action ist, dass eine Seite die einen langsamen
@@ -856,6 +890,9 @@ function closeHistory() { historyDrawer.value.open = false; }
 // This page has no version listing, so there is no "NEW" badge to clear.
 const commentSidebar = useComments({
     comments: props.comments,
+    // The margin needs the room of a hidden source column (settings: `hidden`);
+    // beside the source, comments open in the popover only.
+    margin: props.sourceView === 'hidden',
     blocks: () => props.content,
     urls: {
         create: props.commentUrl,
@@ -868,12 +905,6 @@ const commentSidebar = useComments({
     currentUser: props.currentUser,
     mentionableUsers: props.mentionableUsers,
     axios,
-});
-
-const commentButtonText = computed(() => {
-    const open = commentSidebar.counts.value.open;
-
-    return open ? `${__('workflows::messages.comments')} (${open})` : __('workflows::messages.comments');
 });
 
 // Timeline handoff — see WorkflowInstanceDetail::openCommentFromHistory().

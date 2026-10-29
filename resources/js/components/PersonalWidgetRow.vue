@@ -83,6 +83,21 @@
             class="flex-none"
         />
 
+        <!-- Comment flag, the listings' own: open comments in grey, plus the
+             unseen ones as amber `+N`. Only where there are any. -->
+        <span
+            v-if="row.comment_count"
+            class="inline-flex flex-none items-center gap-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-2xs font-medium text-gray-500 dark:bg-gray-700! dark:text-gray-300!"
+            :title="row.new_comment_count ? __('workflows::messages.new_comments_hint') : __('workflows::messages.comments')"
+        >
+            <Icon name="mail-chat-bubble-text" class="size-3" />
+            {{ row.comment_count }}
+            <template v-if="row.new_comment_count">
+                <span class="text-gray-300 dark:text-gray-500!">|</span>
+                <span class="font-semibold text-amber-600 dark:text-amber-400!">+{{ row.new_comment_count }}</span>
+            </template>
+        </span>
+
         <!-- Per-row actions, after the state. Only the Watched card fills it (its
              remove button); the other cards pass nothing, so their rows render
              exactly as before. -->
@@ -91,7 +106,7 @@
 </template>
 
 <script setup>
-import { Badge } from '@statamic/cms/ui';
+import { Badge, Icon } from '@statamic/cms/ui';
 import { dotClass, railClass } from '../support/widgetColors';
 
 defineProps({

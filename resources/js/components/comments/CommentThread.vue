@@ -38,6 +38,16 @@
             </span>
         </header>
 
+        <!-- The marked text the thread is about, if it was written on a
+             selection — kept on the card, so a resolved thread still says what
+             it referred to even where the text has since changed. -->
+        <blockquote
+            v-if="thread.root.ref?.quote"
+            class="mx-3 mt-1.5 line-clamp-2 border-s-2 border-yellow-400 ps-2 text-xs italic text-gray-600 dark:text-gray-300!"
+            :class="{ 'border-gray-300 dark:border-gray-600!': thread.resolved }"
+            :title="thread.root.ref.quote"
+        >{{ thread.root.ref.quote }}</blockquote>
+
         <!-- Collapsed resolved thread: who, when, first line. -->
         <div v-if="thread.resolved && !isExpanded" class="px-3 pt-1 pb-2.5">
             <p class="truncate text-gray-600 dark:text-gray-300!">
@@ -76,25 +86,29 @@
                 </div>
             </div>
 
-            <div v-if="thread.resolved" class="flex items-center gap-2 border-t border-gray-100 px-3 py-2 text-xs text-gray-500 dark:border-gray-800! dark:text-gray-400!">
-                <Icon name="checkmark" class="size-3 text-green-600" />
-                <span :title="absoluteTime(thread.root.resolved?.at, store.locale)">{{ resolvedLine }}</span>
-                <Button
-                    v-if="thread.root.can_resolve"
-                    class="ms-auto"
-                    size="xs"
-                    variant="ghost"
-                    icon="history"
-                    :text="__('workflows::messages.comment_reopen')"
-                    @click.stop="store.setResolved(thread, false)"
-                />
-                <Button
-                    size="xs"
-                    variant="ghost"
-                    :class="{ 'ms-auto': !thread.root.can_resolve }"
-                    :text="__('workflows::messages.comment_collapse')"
-                    @click.stop="store.toggleExpanded(thread.id)"
-                />
+            <!-- Actions first, the "who resolved it" line below them: in the
+                 narrow margin column the two do not fit on one line. -->
+            <div v-if="thread.resolved" class="space-y-1 border-t border-gray-100 px-3 py-2 text-xs text-gray-500 dark:border-gray-800! dark:text-gray-400!">
+                <div class="flex items-center gap-2">
+                    <Button
+                        v-if="thread.root.can_resolve"
+                        size="xs"
+                        variant="ghost"
+                        icon="history"
+                        :text="__('workflows::messages.comment_reopen')"
+                        @click.stop="store.setResolved(thread, false)"
+                    />
+                    <Button
+                        size="xs"
+                        variant="ghost"
+                        :text="__('workflows::messages.comment_collapse')"
+                        @click.stop="store.toggleExpanded(thread.id)"
+                    />
+                </div>
+                <p class="flex items-center gap-1.5">
+                    <Icon name="checkmark" class="size-3 shrink-0 text-green-600" />
+                    <span :title="absoluteTime(thread.root.resolved?.at, store.locale)">{{ resolvedLine }}</span>
+                </p>
             </div>
 
             <div v-else class="border-t border-gray-100 px-3 py-2 dark:border-gray-800!" @click.stop>
@@ -149,7 +163,7 @@ function activate(e) {
 
 function onFocus(e) {
     // Keyboard focus on the card itself (Tab / arrow navigation) makes it active
-    // without moving the page — the arrow handler in the sidebar does that.
+    // without moving the page — the arrow handler in the margin does that.
     if (e.target === e.currentTarget && !props.active) {
         props.store.activateThread(props.thread.id, { focus: false, scrollPage: false });
     }

@@ -7,6 +7,9 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Hinzugefügt
 
+- **Kommentaranzahl in den Dashboard-Widgets** „Meine Warteschlange“, „Meine
+  Beiträge“ und „Beobachtet“: offene Kommentare grau, ungelesene als `+N` in
+  Amber — wie in den Listen.
 - **Filter „Zugewiesen an“ und „Autor“** in der Workflow-Übersicht und auf der
   Manager-Seite: zeigt nur Beiträge, bei denen die Person in irgendeiner
   Sprachfassung zugewiesen bzw. Autor ist.
@@ -61,6 +64,20 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Geändert
 
+- **Kommentare wie in Word:** Text markieren → Kommentar-Icon erscheint, der
+  Kommentar hängt an genau dieser Stelle und sie wird im Text hervorgehoben.
+  Kommentare stehen in einer Randspalte neben dem Inhalt, auf Höhe ihrer Stelle,
+  statt in einem Drawer. Antworten,
+  Abschließen, Erwähnungen und Mails bleiben wie bisher.
+- Ist die Kommentarspalte ausgeblendet, öffnet der Kommentar-Button einer
+  Passage (oder ein Klick auf markierten Text) deren Kommentare als **Popover**;
+  „Kommentare einblenden“ zeigt weiterhin alle in der Spalte.
+- Übersetzung / Einfache Sprache: Steht die Quelle daneben, gibt es keine
+  Kommentarspalte mehr – Kommentare (auch zu markiertem Text) öffnen dort immer
+  im Popover. Ist die Quelle per Einstellung verborgen, verhält sich die Seite
+  wie bei Beiträgen.
+- Sets werden beim Überfahren hervorgehoben, der Kommentar-Button erscheint nur
+  dann; ein Set mit Kommentar zum ganzen Set ist leicht gelb hinterlegt.
 - Übersicht: Das Datum hinter dem Status-Badge heißt jetzt „seit …“
   (englisch „since …“).
 - Einfache Sprache schickt nur noch die **Inhaltsfelder und den Titel**; andere

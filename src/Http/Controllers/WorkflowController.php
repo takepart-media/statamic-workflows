@@ -2419,7 +2419,12 @@ class WorkflowController extends CpController
             'body' => $comment->body,
             'mentions' => $this->commentMentions($comment),
             'ref' => $comment->passage_ref
-                ? ['uuid' => $comment->passage_ref, 'handle' => $comment->passage_handle]
+                ? [
+                    'uuid' => $comment->passage_ref,
+                    'handle' => $comment->passage_handle,
+                    'quote' => $comment->quote,
+                    'offset' => $comment->quote_offset,
+                ]
                 : null,
             'resolved' => $isRoot && $comment->isResolved()
                 ? [
@@ -5489,6 +5494,8 @@ class WorkflowController extends CpController
             'parent_id' => 'nullable|integer',
             'mentions' => 'nullable|array',
             'mentions.*' => 'string',
+            'quote' => 'nullable|string|max:2000',
+            'quote_offset' => 'nullable|integer|min:0',
         ]);
 
         $mentions = $this->validatedMentions($data['mentions'] ?? [], $entry);
@@ -5509,9 +5516,16 @@ class WorkflowController extends CpController
             $passageHandle = $parent->passage_handle;
             $contentHash = $parent->content_hash;
             $containerHash = $parent->container_hash;
+            $quote = $parent->quote;
+            $quoteOffset = $parent->quote_offset;
         } else {
             $passageRef = $data['passage_ref'] ?? null;
             $passageHandle = $data['passage_handle'] ?? null;
+
+            // The marked text inside the passage. Without a passage there is
+            // nothing to mark in, so a stray quote is dropped.
+            $quote = $passageRef !== null && trim((string) ($data['quote'] ?? '')) !== '' ? $data['quote'] : null;
+            $quoteOffset = $quote !== null ? ($data['quote_offset'] ?? null) : null;
 
             // Snapshot the passage's current content as a hash so later renders
             // can detect that the referenced content has since been edited. If
@@ -5544,6 +5558,8 @@ class WorkflowController extends CpController
             'content_hash' => $contentHash,
             'container_hash' => $containerHash,
             'mentions' => $mentions === [] ? null : $mentions,
+            'quote' => $quote,
+            'quote_offset' => $quoteOffset,
         ]);
 
         // Timeline audit trail: log a comment_created event so the workflow

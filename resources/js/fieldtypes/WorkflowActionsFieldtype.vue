@@ -86,7 +86,7 @@
                     />
                     <span class="min-w-0 flex-1 truncate">{{ user.name }}</span>
                     <span
-                        v-if="user.notified && picker.notify"
+                        v-if="user.notified && picker.notify && picker.selected.includes(user.id)"
                         class="shrink-0 text-xs text-gray-500 dark:text-gray-400"
                         :title="__('workflows::messages.pick_assignee_notified_hint')"
                     >{{ __('workflows::messages.pick_assignee_notified') }}</span>

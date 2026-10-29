@@ -70,7 +70,7 @@
                             <Badge v-if="user.site_allocation" :text="user.site_allocation" color="blue" size="sm" />
                             <span class="min-w-0 flex-1 truncate">{{ user.name }}</span>
                             <span
-                                v-if="user.notified && createModal.notify"
+                                v-if="user.notified && createModal.notify && createModal.assignees.includes(user.id)"
                                 class="shrink-0 text-xs text-gray-500 dark:text-gray-400"
                                 :title="__('workflows::messages.pick_assignee_notified_hint')"
                             >{{ __('workflows::messages.pick_assignee_notified') }}</span>

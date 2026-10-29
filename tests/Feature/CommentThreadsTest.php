@@ -71,7 +71,7 @@ it('stores a root comment in the full resource shape', function () {
         ->and($data['author'])->toMatchArray(['id' => (string) $this->alice->id(), 'name' => 'Alice Author', 'initials' => 'AA'])
         ->and($data['author'])->toHaveKey('avatar')
         ->and($data['mentions'])->toBe([])
-        ->and($data['ref'])->toBe(['uuid' => 'p1', 'handle' => 'body'])
+        ->and($data['ref'])->toBe(['uuid' => 'p1', 'handle' => 'body', 'quote' => null, 'offset' => null])
         ->and($data['resolved'])->toBeNull()
         ->and($data['can_edit'])->toBeTrue()
         ->and($data['can_delete'])->toBeTrue()
@@ -88,7 +88,7 @@ it('stores a reply that inherits the root passage', function () {
         ->assertOk();
 
     expect($response->json('data.parent_id'))->toBe($root['id'])
-        ->and($response->json('data.ref'))->toBe(['uuid' => 'p1', 'handle' => 'body'])
+        ->and($response->json('data.ref'))->toBe(['uuid' => 'p1', 'handle' => 'body', 'quote' => null, 'offset' => null])
         ->and($response->json('data.can_resolve'))->toBeFalse()
         ->and($response->json('data.resolved'))->toBeNull()
         ->and($response->json('root.id'))->toBe($root['id']);
@@ -274,4 +274,28 @@ it('renders comment events in the history and hides resolved threads from is_new
 
     $reply = collect($props['history'])->where('type', 'comment_created')->last();
     expect($reply['comment']['parent_id'])->toBe($root['id']);
+});
+
+it('keeps the marked text of a root and hands it to its replies', function () {
+    $root = postComment($this, $this->alice, [
+        'body' => 'Wording?', 'passage_ref' => 'p1', 'passage_handle' => 'body', 'quote' => 'Some', 'quote_offset' => 0,
+    ])->assertOk()->json('data');
+
+    expect($root['ref'])->toBe(['uuid' => 'p1', 'handle' => 'body', 'quote' => 'Some', 'offset' => 0]);
+
+    $reply = postComment($this, $this->bob, ['body' => 'Fine', 'parent_id' => $root['id'], 'quote' => 'other'])->json('data');
+
+    expect($reply['ref'])->toBe($root['ref']);
+});
+
+it('drops a quote that has no passage to sit in', function () {
+    $data = postComment($this, $this->alice, ['body' => 'General', 'quote' => 'Some', 'quote_offset' => 3])->assertOk()->json('data');
+
+    expect($data['ref'])->toBeNull()
+        ->and(WorkflowComment::find($data['id'])->quote)->toBeNull();
+});
+
+it('refuses a negative quote offset', function () {
+    postComment($this, $this->alice, ['body' => 'x', 'passage_ref' => 'p1', 'quote' => 'Some', 'quote_offset' => -1])
+        ->assertStatus(422);
 });

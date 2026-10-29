@@ -110,6 +110,7 @@ class PersonalWorkItems
         private InstanceUrl $urls,
         private WorkflowWatchStore $watches,
         private WorkflowStateStore $states,
+        private WorkflowCommentStore $comments,
     ) {}
 
     /**
@@ -127,6 +128,7 @@ class PersonalWorkItems
         return $this->memo['assigned|'.self::memoKey($userId, $only)] ??= $this->rows(
             fn (string $workflow) => $this->assignees->subjectIdsForUser($userId, $workflow),
             $only,
+            $userId,
             withMeta: true,
         );
     }
@@ -143,6 +145,7 @@ class PersonalWorkItems
         return $this->memo['authored|'.self::memoKey($userId, $only)] ??= $this->rows(
             fn (string $workflow) => $this->authoredSubjectIds($workflow, $userId),
             $only,
+            $userId,
         );
     }
 
@@ -185,6 +188,7 @@ class PersonalWorkItems
         return $this->memo['watched|'.self::memoKey($userId, $only)] ??= $this->rows(
             fn (string $workflow) => $this->watches->subjectIdsForUser($userId, $workflow),
             $only,
+            $userId,
         );
     }
 
@@ -225,7 +229,7 @@ class PersonalWorkItems
      * @param  array<int, string>|null  $only
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
-    private function rows(callable $subjectIdsFor, ?array $only, bool $withMeta = false): Collection
+    private function rows(callable $subjectIdsFor, ?array $only, string $userId, bool $withMeta = false): Collection
     {
         $all = $this->loader->all();
 
@@ -234,7 +238,7 @@ class PersonalWorkItems
 
         $multiSite = Site::hasMultiple();
 
-        return $workflows->flatMap(function (string $workflow) use ($subjectIdsFor, $multiSite, $all, $withMeta) {
+        return $workflows->flatMap(function (string $workflow) use ($subjectIdsFor, $multiSite, $all, $withMeta, $userId) {
             $raw = $this->loader->raw($workflow);
             $label = DefinitionLoader::navLabel($raw['metadata']['nav'] ?? [])
                 ?: (string) Str::headline($workflow);
@@ -245,13 +249,20 @@ class PersonalWorkItems
             $managerUrl = $slug === null ? null : cp_route('workflows.workflow', ['slug' => $slug]);
             // One aggregate for the whole workflow, not one query per row.
             $eventTimes = $withMeta ? $this->events->latestEventTimesByWorkflow($workflow) : [];
+            // The same two aggregates the manager listings read: open comments,
+            // and the ones the reader has not seen yet. The rows are always the
+            // reader's own, so `$userId` is whose "unseen" is meant.
+            $comments = [
+                'total' => $this->comments->countBySubject($workflow),
+                'new' => $this->comments->newCountBySubject($userId, $workflow),
+            ];
 
             return collect($subjectIdsFor($workflow))
                 ->map(fn ($id) => Entry::find($id))
                 // A store row can outlive its entry — dropped silently, the
                 // remainder count is computed after this filter.
                 ->filter()
-                ->map(fn ($entry) => $this->row($entry, $workflow, $raw, $label, $color, $managerUrl, $multiSite, $eventTimes, $withMeta))
+                ->map(fn ($entry) => $this->row($entry, $workflow, $raw, $label, $color, $managerUrl, $multiSite, $comments, $eventTimes, $withMeta))
                 ->sortBy('title', SORT_NATURAL | SORT_FLAG_CASE)
                 ->values();
         })->values();
@@ -328,10 +339,11 @@ class PersonalWorkItems
     }
 
     /**
+     * @param  array{total: array<string, int>, new: array<string, int>}  $comments
      * @param  array<string, \Carbon\Carbon>  $eventTimes
      * @return array<string, mixed>
      */
-    private function row($entry, string $workflow, array $raw, string $workflowLabel, string $workflowColor, ?string $managerUrl, bool $multiSite, array $eventTimes = [], bool $withMeta = false): array
+    private function row($entry, string $workflow, array $raw, string $workflowLabel, string $workflowColor, ?string $managerUrl, bool $multiSite, array $comments, array $eventTimes = [], bool $withMeta = false): array
     {
         $state = $this->resolver->stateFor($entry, $workflow, $raw);
         $stateColor = $state === null ? 'default' : $this->loader->stateColor($state);
@@ -365,6 +377,10 @@ class PersonalWorkItems
             // null on single-site projects, so the view skips the chip.
             'site_code' => $multiSite ? strtoupper($entry->locale()) : null,
             'url' => $this->urls->for($entry->id(), $workflow),
+            // Open comments on this version, and how many of them are unseen —
+            // the grey flag and amber `+N` the listings show.
+            'comment_count' => $comments['total'][$entry->id()] ?? 0,
+            'new_comment_count' => $comments['new'][$entry->id()] ?? 0,
         ];
     }
 }

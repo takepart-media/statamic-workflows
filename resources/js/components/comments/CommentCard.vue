@@ -26,8 +26,30 @@
                     class="shrink-0 rounded-full bg-amber-500 px-1.5 text-2xs font-semibold text-white"
                 >{{ __('workflows::messages.new') }}</span>
 
-                <div v-if="hasActions && !editing" class="ms-auto -my-1 shrink-0" @click.stop>
-                    <Dropdown align="end">
+                <!-- Resolve and edit right on the card, Word-style; only delete,
+                     the destructive one, stays behind the "…" menu. Reopening a
+                     resolved thread is the button in its footer. -->
+                <div v-if="hasActions && !editing" class="ms-auto -my-1 flex shrink-0 items-center" @click.stop>
+                    <Button
+                        v-if="canResolve"
+                        icon="checkmark"
+                        variant="ghost"
+                        size="xs"
+                        :aria-label="__('workflows::messages.comment_resolve')"
+                        :title="__('workflows::messages.comment_resolve')"
+                        class="text-green-700! dark:text-green-400!"
+                        @click="$emit('resolve')"
+                    />
+                    <Button
+                        v-if="comment.can_edit"
+                        icon="pencil"
+                        variant="ghost"
+                        size="xs"
+                        :aria-label="__('workflows::messages.edit')"
+                        :title="__('workflows::messages.edit')"
+                        @click="startEdit"
+                    />
+                    <Dropdown v-if="comment.can_delete" align="end">
                         <template #trigger>
                             <Button
                                 icon="dots"
@@ -40,25 +62,6 @@
                         </template>
                         <DropdownMenu>
                             <DropdownItem
-                                v-if="!reply && comment.can_resolve && !resolved"
-                                icon="checkmark"
-                                :text="__('workflows::messages.comment_resolve')"
-                                @click="$emit('resolve')"
-                            />
-                            <DropdownItem
-                                v-if="!reply && comment.can_resolve && resolved"
-                                icon="history"
-                                :text="__('workflows::messages.comment_reopen')"
-                                @click="$emit('reopen')"
-                            />
-                            <DropdownItem
-                                v-if="comment.can_edit"
-                                icon="pencil"
-                                :text="__('workflows::messages.edit')"
-                                @click="startEdit"
-                            />
-                            <DropdownItem
-                                v-if="comment.can_delete"
                                 icon="trash"
                                 variant="destructive"
                                 :text="__('workflows::messages.delete')"
@@ -137,9 +140,11 @@ const author = computed(() => ({
 
 const segments = computed(() => tokenizeBody(props.comment.body, props.comment.mentions));
 
-const hasActions = computed(() =>
-    props.comment.can_edit || props.comment.can_delete || (!props.reply && props.comment.can_resolve),
-);
+// Resolving belongs to the thread, so only its root offers it — and only
+// while it is open.
+const canResolve = computed(() => !props.reply && props.comment.can_resolve && !props.resolved);
+
+const hasActions = computed(() => props.comment.can_edit || props.comment.can_delete || canResolve.value);
 
 function isMe(id) {
     return id != null && props.store.currentUser && String(id) === String(props.store.currentUser.id);

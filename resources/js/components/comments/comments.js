@@ -1,12 +1,12 @@
 /**
- * Pure helpers for the Word-style comment sidebar (CommentsSidebar.vue and
+ * Pure helpers for the Word-style comment margin (CommentsMargin.vue and
  * friends). No Vue, no DOM, no `__()` — everything here is unit-tested in
  * __tests__/comments.test.js and everything stateful lives in useComments.js.
  *
  * Comment shape (server contract):
  *   { id, parent_id|null, at, edited_at|null,
  *     author: { id|null, name, avatar|null, initials },
- *     body, mentions: [{ id, name }], ref: { uuid, handle }|null,
+ *     body, mentions: [{ id, name }], ref: { uuid, handle, quote, offset }|null,
  *     resolved: { at, by: { id, name } }|null   (roots only),
  *     can_edit, can_delete, can_resolve, is_new, content_stale, container_changed }
  *
