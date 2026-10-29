@@ -1222,10 +1222,13 @@ Editor vorher nachfragt. Die Einträge selbst bleiben unverändert.
 **Collection hinzufügen** braucht keinen Backfill: Einträge ohne gespeicherten
 State fallen über `defaultState()` auf `published` bzw. `initial_place` zurück.
 Wer explizite Zeilen möchte, nimmt „Status nachtragen" an der Zeile in
-Settings > Workflows oder `php artisan workflows:seed-states` (beides idempotent). Zu beachten: `forceRevisionsOnWorkflowCollections()`
-(ServiceProvider) und `withRevisionStep()` (DefinitionLoader) greifen zur Boot-
-bzw. Lesezeit — Revisions und der `pending_revision`-Schritt sind erst ab dem
-nächsten Request aktiv.
+Settings > Workflows oder `php artisan workflows:seed-states` (beides idempotent). Zu beachten: Revisionen schaltet die Collection selbst ein
+(`revisions: true` in ihrer YAML, gesetzt über den Workflow-Schalter
+`metadata.revisions`). Der Workflow-Editor warnt
+(`collection_revisions_off`), wenn eine verwaltete Collection eines
+veröffentlichenden Workflows keine hat. `withRevisionStep()` (DefinitionLoader)
+greift zur Lesezeit: der `pending_revision`-Schritt ist erst ab dem nächsten
+Request aktiv.
 
 Verwaltet ein Workflow **mehr als eine** Collection, teilt die Manager-Seite
 „Alle Beiträge" in einen Tab pro Collection auf (§ 5.2). Bei genau einer
@@ -1926,6 +1929,61 @@ Wenn eine governed Collection Revisions aktiv hat, injiziert
 Diese Transitions werden **nie** über Buttons ausgelöst — sie sind der Kanal für
 die Auto-Sync-Listener (siehe § 6).
 
+**Revisionen einschalten (`metadata.revisions`).** Ob eine Collection Revisionen
+hat, steht in ihrer eigenen YAML (`revisions: true`). Der Workflow-Editor bietet
+dafür unter Collections › „Revisionen“ einen Schalter mit dem Hinweis „Benötigt
+Statamic Pro“:
+
+```yaml
+metadata:
+  revisions: true   # true = an, false = aus, fehlt = Collections bleiben, wie sie sind
+```
+
+- Beim Speichern schreibt `Workflow\CollectionRevisions::apply()` den Wert in
+  jede Collection des Workflows, nur wo er abweicht.
+- Solange der Schlüssel fehlt, zeigt der Schalter den Stand der Collections und
+  sagt, wenn er uneinheitlich ist.
+- Ohne Statamic Pro oder bei `STATAMIC_REVISIONS_ENABLED=false` bleiben
+  Revisionen aus. Der Editor zeigt das am Schalter, der Linter warnt
+  (`revisions_unavailable`).
+- Fehlt der Schlüssel und hat eine Collection eines veröffentlichenden Workflows
+  keine Revisionen, warnt der Linter (`collection_revisions_off`). Bei
+  `revisions: false` nicht, das ist eine Entscheidung.
+- Der Writer lehnt einen Wert ab, der nicht `true`/`false` ist
+  (`revisions_invalid`).
+- Eine Collection, die mehrere Workflows verwalten, folgt dem zuletzt
+  gespeicherten.
+
+**Wer eine Revision veröffentlichen darf (`metadata.revision_publishers`).**
+Eine Arbeitskopie geht über Statamics eigenen Button „Veröffentlichen…“ live.
+Den gibt es nur mit der `publish`-Berechtigung (`Policies\EntryPolicy`).
+
+```yaml
+metadata:
+  revision_publishers:       # Zeilen; wer auf IRGENDEINE passt, darf
+    - by: group               # group | role | user
+      handles: [redaktion]
+    - by: user
+      handles: [<user-id>, <user-id>]
+```
+
+- **Solange eine Arbeitskopie existiert:** Es dürfen Super-Admins und diese
+  Auswahl, sonst niemand, auch nicht die `privileged_groups`.
+- **Ohne Arbeitskopie** ändert sich nichts: Entwürfe gehen weiter nur über den
+  Workflow live.
+- **Ohne Block** gilt die alte Regel: Super-Admins und `privileged_groups`.
+- `Workflow\RevisionPublishers::allows()` beantwortet das für die Policy und für
+  das Fieldtype. Das Fieldtype schickt `revision_publish` mit, ebenso
+  `actionsJson`, damit der Client den nativen Button für genau diese Leute zeigt.
+- Statamic liest die Berechtigung beim Laden der Seite. Wer gerade erst die
+  Arbeitskopie angelegt hat, sieht den Button nach dem Neuladen.
+- Gepflegt im Workflow-Editor unter Collections › „Revisionen veröffentlichen
+  dürfen“, sichtbar, solange Revisionen eingeschaltet sind. Je Zeile wird eine
+  Art gewählt (Gruppe, Rolle oder Benutzer) und dazu die Einträge; Zeilen lassen
+  sich hinzufügen und entfernen. Keine Zeile heißt aus, Zeilen ohne Einträge
+  fallen beim Speichern weg. Der Writer lehnt eine Zeile ohne gültige Art oder
+  Einträge ab (`revision_publishers_invalid`).
+
 ### Bundled vs. Projekt-YAML
 
 - Das Projekt (`resources/workflows/*.yaml`) gewinnt gegenüber den Bundled-Defaults
@@ -1955,10 +2013,14 @@ Was er tut, in der Reihenfolge:
 - **`bootAddon()`**
   - `ensureDatabaseExists()` — legt die SQLite-Datei an, falls sie fehlt.
   - `loadMigrationsFrom(...)` — lädt die vier Migrationen.
-  - `forceRevisionsOnWorkflowCollections()` — schaltet auf jeder governed Collection
-    zur Laufzeit `revisionsEnabled(true)` an (nicht persistent in der Collection-YAML —
-    das läuft per Request). Ohne Pro-Lizenz bleibt es effektiv aus (die
-    Collection-eigene Prüfung faltet Pro wieder rein).
+  - Revisionen pro Collection schaltet das Addon **nicht** ein. Früher versuchte
+    `forceRevisionsOnWorkflowCollections()`, sie zur Laufzeit zu setzen. Das griff
+    nie: Statamic gibt bei jedem `Collection::find()` ein neues Objekt heraus, die
+    Einstellung ging verloren. Nötig ist `revisions: true` in der Collection-YAML,
+    dazu Statamic Pro. Gesetzt wird das über den Workflow-Schalter
+    `metadata.revisions` (§ 2, Automatischer Revisions-Loop), der beim Speichern
+    in die Collections schreibt. Fehlt beides, warnt der Workflow-Editor
+    (`DefinitionLinter::revisionsOff()`, Code `collection_revisions_off`).
   - `bootNav()` — registriert nur noch den Super-Admin-Eintrag „Settings ›
     Workflows" (Index-Seite `workflows.settings.index`), mit einem Kind je
     Workflow mit `metadata.nav`, das direkt in dessen Graph-Editor führt.

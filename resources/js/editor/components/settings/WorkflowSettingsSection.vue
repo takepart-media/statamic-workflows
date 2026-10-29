@@ -363,6 +363,73 @@
                 </ul>
                 <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.collections_hint') }}</p>
             </div>
+
+            <!-- CollectionRevisions: written into the collections on save. Off
+                 until touched means "leave the collections as they are". -->
+            <ProblemField
+                class="mt-6"
+                :label="__('workflows::messages.revisions')"
+                :instructions="__('workflows::messages.revisions_instructions')"
+                path="metadata.revisions"
+            >
+                <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                        <Checkbox solo :model-value="revisionsOn" @update:model-value="(v) => setMeta('revisions', !!v)" />
+                        <span class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.revisions_pro_required') }}</span>
+                    </div>
+                    <p v-if="!revisionsStatus.pro" class="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                        <Icon name="warning-diamond" class="mt-0.5 size-3.5 shrink-0" />
+                        {{ __('workflows::messages.revisions_pro_missing') }}
+                    </p>
+                    <p v-else-if="!revisionsStatus.enabled" class="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                        <Icon name="warning-diamond" class="mt-0.5 size-3.5 shrink-0" />
+                        {{ __('workflows::messages.revisions_globally_disabled') }}
+                    </p>
+                    <p v-if="revisionsMixed" class="text-xs text-gray-500 dark:text-gray-400">
+                        {{ __('workflows::messages.revisions_mixed', revisionsMixed) }}
+                    </p>
+                </div>
+            </ProblemField>
+
+            <!-- RevisionPublishers: who may put a working copy live. Off = the
+                 privileged, as before. -->
+            <ProblemField
+                v-if="revisionsOn"
+                class="mt-6"
+                :label="__('workflows::messages.revision_publishers')"
+                :instructions="__('workflows::messages.revision_publishers_instructions')"
+                path="metadata.revision_publishers"
+            >
+                <!-- Rows of type + entries, e.g. group X and users Y, Z. -->
+                <div class="space-y-2">
+                    <div v-for="(row, i) in revisionPublishers" :key="i" class="flex items-start gap-2">
+                        <AudiencePicker
+                            class="flex-1"
+                            :by="row.by"
+                            :handles="row.handles"
+                            :by-options="audienceOptions"
+                            :placeholder="__('workflows::messages.revision_publishers_none')"
+                            @update:by="(v) => setRevisionPublisher(i, { by: v, handles: [] })"
+                            @update:handles="(v) => setRevisionPublisher(i, { handles: v })"
+                        />
+                        <Button
+                            icon="trash"
+                            variant="ghost"
+                            size="sm"
+                            icon-only
+                            :aria-label="__('workflows::messages.revision_publishers_remove')"
+                            @click="setMeta('revision_publishers', revisionPublishers.filter((_, j) => j !== i))"
+                        />
+                    </div>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        icon="plus"
+                        :text="__('workflows::messages.revision_publishers_add')"
+                        @click="setMeta('revision_publishers', [...revisionPublishers, { by: 'group', handles: [] }])"
+                    />
+                </div>
+            </ProblemField>
         </template>
 
         <!-- Which fields of the entries are this workflow's content, in reading
@@ -585,6 +652,27 @@ const setSelfAssignment = (patch) => setMeta('self_assignment', { ...selfAssignm
 const toggleSelfAssignment = (on) => setMeta('self_assignment', on
     ? { by: 'group', handles: [], hint: '' }
     : { by: null, handles: [], hint: '' });
+
+// metadata.revisions: true/false, or absent = the collections decide. Until it
+// is set, the checkbox shows what the selected collections already have.
+const revisionsStatus = computed(() => editor.options.revisionsStatus ?? { pro: true, enabled: true, collections: {} });
+const storedRevisions = computed(() => (model.workflow.collections ?? []).map((h) => !!revisionsStatus.value.collections?.[h]));
+const revisionsOn = computed(() => (typeof meta.value.revisions === 'boolean'
+    ? meta.value.revisions
+    : storedRevisions.value.length > 0 && storedRevisions.value.every(Boolean)));
+const revisionsMixed = computed(() => {
+    if (typeof meta.value.revisions === 'boolean') return null;
+    const on = storedRevisions.value.filter(Boolean).length;
+    const off = storedRevisions.value.length - on;
+
+    return on && off ? { on, off } : null;
+});
+
+// Who may publish a working copy: rows of {by, handles}; none = off (the
+// privileged, as before).
+const revisionPublishers = computed(() => meta.value.revision_publishers ?? []);
+const setRevisionPublisher = (i, patch) => setMeta('revision_publishers',
+    revisionPublishers.value.map((row, j) => (j === i ? { ...row, ...patch } : row)));
 
 // The four-eyes guard, same shape and same switch.
 const fourEyes = computed(() => meta.value.four_eyes ?? { by: null, handles: [], hint: '' });

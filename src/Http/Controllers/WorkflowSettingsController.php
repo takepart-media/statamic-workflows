@@ -19,6 +19,7 @@ use TakepartMedia\Workflows\Mail\MailTypes;
 use TakepartMedia\Workflows\Translation\DeeplConfig;
 use TakepartMedia\Workflows\Translation\PlainLanguageConfig;
 use TakepartMedia\Workflows\Workflow\AssignmentCriteria;
+use TakepartMedia\Workflows\Workflow\CollectionRevisions;
 use TakepartMedia\Workflows\Workflow\CustomActions;
 use TakepartMedia\Workflows\Workflow\DefinitionLinter;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
@@ -530,6 +531,15 @@ class WorkflowSettingsController extends CpController
             // legitimate, but a workflow that isn't the owner only governs
             // entries with an explicitly stored state — the editor shows that
             // instead of letting it surprise someone later.
+            // The revisions setting: whether Statamic honours revisions here at
+            // all (Pro + global switch), and what each collection has stored.
+            'revisionsStatus' => [
+                'pro' => \Statamic\Statamic::pro(),
+                'enabled' => (bool) config('statamic.revisions.enabled'),
+                'collections' => (object) Collection::handles()
+                    ->mapWithKeys(fn (string $handle) => [$handle => CollectionRevisions::stored($handle)])
+                    ->all(),
+            ],
             'collectionOwners' => Collection::all()
                 ->mapWithKeys(fn ($collection) => [
                     $collection->handle() => $this->workflowForCollection($collection->handle()),
@@ -881,6 +891,9 @@ class WorkflowSettingsController extends CpController
 
         $this->logCollectionsRemoved($name, $change);
         $seeded = $this->seedAddedCollections($name, $change);
+        // metadata.revisions goes into the collections' own YAML — the only
+        // place Statamic reads it from (CollectionRevisions).
+        CollectionRevisions::apply($result['definition']);
         $after = $this->stripAutoInjected($loader->raw($name));
 
         if ($this->withoutEditorMeta($before) !== $this->withoutEditorMeta($after)) {

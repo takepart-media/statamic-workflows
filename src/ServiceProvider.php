@@ -2,7 +2,6 @@
 
 namespace TakepartMedia\Workflows;
 
-use Statamic\Facades\Collection;
 use Statamic\Facades\CP\Nav;
 use Statamic\Facades\User;
 use Statamic\Providers\AddonServiceProvider;
@@ -146,9 +145,10 @@ class ServiceProvider extends AddonServiceProvider
         ]);
 
         // The workflow engine writes a Statamic revision on every transition.
-        // Turn the global kill-switch on when opted-in via config; per-
-        // collection activation happens in bootAddon(). Revision creation
-        // still requires a Statamic Pro license.
+        // Turn the global kill-switch on when opted-in via config. Each
+        // collection still needs `revisions: true` itself (the editor warns
+        // about a governed one without — DefinitionLinter), and revision
+        // creation still requires a Statamic Pro license.
         if (config('workflows.revisions', true) && config('statamic.revisions.enabled') !== false) {
             config(['statamic.revisions.enabled' => true]);
         }
@@ -184,8 +184,6 @@ class ServiceProvider extends AddonServiceProvider
         $this->publishes([
             __DIR__.'/../config/workflows.php' => config_path('workflows.php'),
         ], 'workflows-config');
-
-        $this->forceRevisionsOnWorkflowCollections();
 
         $this->bootNav();
     }
@@ -308,28 +306,6 @@ class ServiceProvider extends AddonServiceProvider
                 ->everyMinute()
                 ->onOneServer()
                 ->withoutOverlapping();
-        }
-    }
-
-    /**
-     * Flip `revisionsEnabled` on every collection that appears under a
-     * workflow's `collections:` block. Transient — we don't write to the
-     * collection YAML. Statamic re-hydrates collections per request, and this
-     * boot hook runs on each request too, so the setting sticks in-memory.
-     * Without Statamic Pro the collection's own getter folds Pro back in and
-     * revisions stay off — same as the native behaviour.
-     */
-    private function forceRevisionsOnWorkflowCollections(): void
-    {
-        $loader = app(DefinitionLoader::class);
-
-        $handles = collect($loader->all())
-            ->flatMap(fn (string $name) => (array) ($loader->raw($name)['collections'] ?? []))
-            ->filter()
-            ->unique();
-
-        foreach ($handles as $handle) {
-            Collection::find($handle)?->revisionsEnabled(true);
         }
     }
 

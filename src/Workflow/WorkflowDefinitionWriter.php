@@ -1554,6 +1554,27 @@ class WorkflowDefinitionWriter
         $this->at('metadata.'.SourceViewRules::KEY, fn () => $this->validateSourceView($definition));
         $this->at('metadata.'.SelfAssignmentGuard::KEY, fn () => $this->validateSelfAssignment($definition));
         $this->at('metadata.'.FourEyesGuard::KEY, fn () => $this->validateFourEyes($definition));
+        $this->at('metadata.'.RevisionPublishers::KEY, function () use ($definition) {
+            if (! array_key_exists(RevisionPublishers::KEY, $definition['metadata'] ?? [])) {
+                return;
+            }
+
+            // Every row usable, and at least one: a half-filled row would
+            // quietly narrow who may publish.
+            $block = $definition['metadata'][RevisionPublishers::KEY];
+
+            if (! is_array($block) || ! array_is_list($block) || $block === []
+                || collect($block)->contains(fn ($row) => SlaSettings::audience($row) === null)) {
+                $this->fail('revision_publishers_invalid');
+            }
+        });
+        $this->at('metadata.'.CollectionRevisions::KEY, function () use ($definition) {
+            $value = $definition['metadata'][CollectionRevisions::KEY] ?? null;
+
+            if ($value !== null && ! is_bool($value)) {
+                $this->fail('revisions_invalid');
+            }
+        });
 
         // No credential keys are validated here because none belong in this file.
         // The translation services read their key and token from

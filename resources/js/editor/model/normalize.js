@@ -47,6 +47,10 @@ export function normalize(def, { labelLocales = DEFAULT_LABEL_LOCALES } = {}) {
         handles: [...(selfAssignment?.handles ?? [])],
         hint: selfAssignment?.hint ?? '',
     };
+    // Who may publish a working copy: always a list of {by, handles} rows.
+    copy.metadata.revision_publishers = Array.isArray(copy.metadata.revision_publishers)
+        ? copy.metadata.revision_publishers.map((row) => ({ by: row?.by ?? 'group', handles: [...(row?.handles ?? [])] }))
+        : [];
     // The four-eyes guard, same shape.
     const fourEyes = copy.metadata.four_eyes;
     copy.metadata.four_eyes = {

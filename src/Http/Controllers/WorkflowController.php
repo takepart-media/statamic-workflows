@@ -40,6 +40,7 @@ use TakepartMedia\Workflows\Workflow\CommentMentionNotifier;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\InstanceUrl;
 use TakepartMedia\Workflows\Workflow\FailedTranslationRetry;
+use TakepartMedia\Workflows\Workflow\RevisionPublishers;
 use TakepartMedia\Workflows\Workflow\TransitionActions;
 use TakepartMedia\Workflows\Workflow\TransitionGates;
 use TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter;
@@ -3177,6 +3178,7 @@ class WorkflowController extends CpController
             // every transition, and a refresh that dropped this one would re-hide the
             // native publish button the moment somebody clicked something.
             'gates_publishing' => app(WorkflowResolver::class)->publishPlaces($raw) !== [],
+            'revision_publish' => RevisionPublishers::allows(User::current(), $entry),
         ]);
     }
 

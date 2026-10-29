@@ -250,6 +250,8 @@ const props = defineProps({
     progressOrientationOptions: { type: Array, default: () => [] },
     collectionOptions: { type: Array, default: () => [] },
     collectionOwners: { type: Object, default: () => ({}) },
+    // {pro, enabled, collections: {handle: bool}} — the revisions setting.
+    revisionsStatus: { type: Object, default: () => ({ pro: true, enabled: true, collections: {} }) },
     // The "content" section: {collection: [{handle, label, type, supported,
     // blueprints}]} and {collection: auto-detected handle|null}, for every
     // collection of the project (ContentFieldCatalog).

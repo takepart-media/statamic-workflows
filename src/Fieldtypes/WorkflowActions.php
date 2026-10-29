@@ -7,6 +7,7 @@ use Statamic\Facades\User;
 use Statamic\Fields\Fieldtype;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\InstanceUrl;
+use TakepartMedia\Workflows\Workflow\RevisionPublishers;
 use TakepartMedia\Workflows\Workflow\WorkflowResolver;
 
 /**
@@ -83,6 +84,10 @@ class WorkflowActions extends Fieldtype
             'entry_id' => $id,
             'workflow' => $workflow,
             'is_privileged' => $isPrivileged,
+            // While a working copy exists and the workflow names who may publish
+            // it (RevisionPublishers): whether this user may — overrides the
+            // three-way publish-button rule on the client. Null otherwise.
+            'revision_publish' => RevisionPublishers::allows($user, $entry),
             'allow_publish' => $allowPublish,
             // Whether this workflow governs publishing AT ALL, i.e. declares any
             // place with `allow_publish`. Without it the client cannot tell "you may
@@ -105,8 +110,8 @@ class WorkflowActions extends Fieldtype
             'actions_url' => cp_route('workflows.api.actions', ['id' => $id, 'workflow' => $workflow]),
             'apply_url_template' => cp_route('workflows.api.apply', ['id' => $id, 'name' => '__NAME__', 'workflow' => $workflow]),
             // Populated only when the entry's collection has revisions on
-            // (which the addon force-enables for workflow-managed collections
-            // — see ServiceProvider::forceRevisionsOnWorkflowCollections). The
+            // (`revisions: true` in the collection; the editor warns about a
+            // governed collection without — DefinitionLinter). The
             // client best-effort POSTs here after a successful save to record
             // each transition as a revision.
             'revisions_enabled' => $revisionsEnabled,

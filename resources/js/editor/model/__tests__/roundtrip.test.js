@@ -252,6 +252,28 @@ describe('metadata cleanup', () => {
         expect(serialize(model).metadata.progress_orientation).toBe('vertical');
     });
 
+    it('sends revisions only as a real choice', () => {
+        expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('revisions');
+        expect(serialize(normalize({ metadata: { revisions: false } })).metadata.revisions).toBe(false);
+        expect(serialize(normalize({ metadata: { revisions: true } })).metadata.revisions).toBe(true);
+    });
+
+    it('writes revision publishers only when switched on', () => {
+        expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('revision_publishers');
+        const model = normalize({ metadata: { revision_publishers: [
+            { by: 'group', handles: ['redaktion'] },
+            { by: 'user', handles: ['7', '8'] },
+            { by: 'role', handles: [] },
+        ] } });
+        expect(serialize(model).metadata.revision_publishers).toEqual([
+            { by: 'group', handles: ['redaktion'] },
+            { by: 'user', handles: ['7', '8'] },
+        ]);
+
+        model.metadata.revision_publishers = [{ by: 'role', handles: [] }];
+        expect(serialize(model).metadata).not.toHaveProperty('revision_publishers');
+    });
+
     it('writes the four-eyes guard only when switched on, the hint only when given', () => {
         expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('four_eyes');
 

@@ -183,6 +183,8 @@ const SECTIONS = {
     plain_language_clear_fields: 'localization',
     plain_language_skip_fields: 'localization',
     content_fields: 'content',
+    revisions: 'collections',
+    revision_publishers: 'collections',
     sla: 'sla',
 };
 

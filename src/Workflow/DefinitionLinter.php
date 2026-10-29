@@ -2,6 +2,7 @@
 
 namespace TakepartMedia\Workflows\Workflow;
 
+use Statamic\Facades\Collection;
 use TakepartMedia\Workflows\Content\ContentFieldCatalog;
 
 /**
@@ -39,6 +40,7 @@ class DefinitionLinter
             $this->duplicateEdges($edges),
             $this->foreignCollections($name, $definition),
             $this->contentFields($definition),
+            $this->revisionsOff($definition),
         );
     }
 
@@ -386,6 +388,61 @@ class DefinitionLinter
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Governed collections without revisions. Then saving a published post puts
+     * the change live at once: no working copy, no "Unpublished changes" step,
+     * and the editor offers "Save & Publish".
+     *
+     * - `metadata.revisions: true` (CollectionRevisions) switches them on at
+     *   save — only a missing Statamic Pro / global switch is worth a warning.
+     * - `metadata.revisions: false` is a decision, not an oversight: quiet.
+     * - Absent: each collection without revisions is named.
+     *
+     * Only for workflows that publish (an `allow_publish` place) and only while
+     * `workflows.revisions` is on; a collection that does not exist is the
+     * writer's business.
+     *
+     * @param  array<string, mixed>  $definition
+     * @return array<int, array<string, mixed>>
+     */
+    private function revisionsOff(array $definition): array
+    {
+        if (! config('workflows.revisions', true)) {
+            return [];
+        }
+
+        $publishes = collect(is_array($definition['places'] ?? null) ? $definition['places'] : [])
+            ->contains(fn ($place) => is_array($place) && ($place['metadata']['allow_publish'] ?? false) === true);
+
+        if (! $publishes) {
+            return [];
+        }
+
+        $wanted = CollectionRevisions::wanted($definition);
+
+        if ($wanted === false) {
+            return [];
+        }
+
+        if ($wanted === true) {
+            return CollectionRevisions::available()
+                ? []
+                : [$this->warning('metadata.'.CollectionRevisions::KEY, 'revisions_unavailable', [])];
+        }
+
+        $warnings = [];
+
+        foreach (array_values((array) ($definition['collections'] ?? [])) as $index => $handle) {
+            $collection = is_string($handle) ? Collection::find($handle) : null;
+
+            if ($collection !== null && ! $collection->revisionsEnabled()) {
+                $warnings[] = $this->warning("collections.{$index}", 'collection_revisions_off', ['collection' => $handle]);
+            }
+        }
+
+        return $warnings;
     }
 
     /**

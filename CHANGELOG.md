@@ -7,6 +7,13 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Hinzugefügt
 
+- **Einstellung „Revisionen“** im Workflow-Editor (Collections): schaltet
+  Revisionen für alle Collections des Workflows ein oder aus und schreibt das
+  beim Speichern in die Collections. Mit dem Hinweis, dass Statamic Pro nötig
+  ist, und einer Warnung, wenn Pro fehlt oder Revisionen global aus sind.
+- **Einstellung „Revisionen veröffentlichen dürfen“** (Zeilen aus Art
+  und Einträgen, z. B. Gruppe X und Benutzer Y, Z): Solange eine Arbeitskopie existiert, dürfen nur Super-Admins und
+  diese Auswahl sie live stellen.
 - **4-Augen-Prinzip** (`metadata.four_eyes`, Einstellungen › Berechtigungen):
   Ein Beitrag geht bei der nächsten Transition nie an die Person zurück, die ihn
   zuletzt weitergegeben hat, weder manuell noch automatisch. Bleibt sonst
@@ -126,4 +133,13 @@ Alle nennenswerten Änderungen am Addon. Format nach
    die Auto-Erkennung.
 5. Wer die deprecated Config-Keys gesetzt hat, überträgt die betroffenen Felder
    nach `metadata.content_fields`.
+
+### Behoben
+
+- **Revisionen bei verwalteten Collections:** Das Addon hat sie nie wirklich
+  eingeschaltet. Das Setzen zur Laufzeit ging verloren, und der Editor bot
+  weiter „Speichern & Veröffentlichen“. Der wirkungslose Code ist entfernt. Der
+  Workflow-Editor warnt jetzt, wenn eine Collection eines veröffentlichenden
+  Workflows keine Revisionen hat; einzuschalten mit der neuen Einstellung
+  „Revisionen“.
 

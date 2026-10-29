@@ -262,6 +262,9 @@ const gatesPublishing = ref(!! props.value?.gates_publishing);
 // never read here — which is how the documented exception quietly stopped being
 // true.
 const isPrivileged = !! props.value?.is_privileged;
+// While a working copy exists and the workflow names who may publish it
+// (RevisionPublishers): true/false decides alone; null = the usual rule.
+const revisionPublish = ref(props.value?.revision_publish ?? null);
 const pending = ref(null);
 const loaded = ref(false);
 const teleportTarget = ref(null);
@@ -336,6 +339,7 @@ async function loadActions() {
         currentStateLabel.value = res.data.current_state_label ?? null;
         allowPublish.value = !! res.data.allow_publish;
         gatesPublishing.value = !! res.data.gates_publishing;
+        revisionPublish.value = res.data.revision_publish ?? null;
     } catch (e) {
         window.Statamic?.$toast?.error(__('workflows::messages.actions_load_error'));
     } finally {
@@ -557,6 +561,8 @@ function findEntryEditorHeader() {
 //   3. the user is not privileged. Super admins and the `admins` group keep the
 //      native flow, as the fieldtype has always documented.
 function hidesPublishing() {
+    if (revisionPublish.value !== null) return !revisionPublish.value;
+
     return gatesPublishing.value && !allowPublish.value && !isPrivileged;
 }
 

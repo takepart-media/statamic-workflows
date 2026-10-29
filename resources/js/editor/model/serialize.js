@@ -133,6 +133,18 @@ export function serializeMetadata(source) {
     } else {
         delete metadata.self_assignment;
     }
+    // Revisions: only a real choice goes along; absent leaves the collections be.
+    if (typeof metadata.revisions !== 'boolean') {
+        delete metadata.revisions;
+    }
+    // Who may publish a working copy: rows without entries are dropped; none
+    // left = off = no key.
+    metadata.revision_publishers = (metadata.revision_publishers ?? [])
+        .filter((row) => row?.by && row.handles?.length)
+        .map((row) => ({ by: row.by, handles: [...row.handles] }));
+    if (!metadata.revision_publishers.length) {
+        delete metadata.revision_publishers;
+    }
     // The four-eyes guard, same rules.
     const fourEyes = metadata.four_eyes;
     if (fourEyes?.by) {
