@@ -784,6 +784,7 @@ return [
     'mail_type_plain_language_ready' => 'Einfache Sprache ist fertig',
     'mail_type_sla' => 'Aktualisierung fällig',
     'mail_type_reminder' => 'Erinnerung: wartet noch',
+    'mail_type_published' => 'Veröffentlicht (an Beobachter)',
 
     // Texte der Mails. Ein Typ = ein Block `mail_<typ>_*`; gerendert in der
     // Sprache des EMPFÄNGERS, nicht des Auslösers — siehe Mail\WorkflowNotification.
@@ -857,6 +858,13 @@ return [
     // Die Zeile „Erinnerung" in jeder Mail, deren Status eine `reminder`-Action
     // trägt (Mail\WorkflowNotification::reminder()). Kein Du/Sie, siehe oben.
     'mail_reminder_notice' => '{1} täglich, solange der Beitrag in diesem Status steht|[2,*] alle :days Tage, solange der Beitrag in diesem Status steht',
+
+    // „Der Beitrag ist veröffentlicht." Geht nicht an die Zugewiesenen, sondern
+    // an alle, die den Beitrag beobachten (Mail\MailTypes::PUBLISHED). Bewusst
+    // allgemein: gilt für die erste Veröffentlichung wie für „wieder aktuell".
+    'mail_published_subject' => 'Veröffentlicht: :title',
+    'mail_published_heading' => 'Ein Beitrag wurde veröffentlicht',
+    'mail_published_intro' => 'Der Beitrag „:title“ wurde erfolgreich veröffentlicht.',
 
     // "Mentioned in a comment." Not a workflow mail (no definition can pick it,
     // see Mail\MailTypes::COMMENT_MENTION) and the one mail that goes to a

@@ -3677,7 +3677,7 @@ class WorkflowController extends CpController
             return [];
         }
 
-        $mails = WorkflowNotifier::stepMail($raw, $name) !== null;
+        $mails = WorkflowNotifier::mailsAssignees($raw, $name);
 
         return $pool
             ->map(fn ($user) => [

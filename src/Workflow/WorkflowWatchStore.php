@@ -45,6 +45,23 @@ class WorkflowWatchStore
     }
 
     /**
+     * Who watches one subject within a workflow — the recipients of a mail type
+     * declared `recipients: watchers` (MailTypes::PUBLISHED).
+     *
+     * @return array<int, string>
+     */
+    public function userIdsFor(string $subjectId, string $workflow): array
+    {
+        return WorkflowWatch::query()
+            ->where('subject_id', $subjectId)
+            ->where('workflow', $workflow)
+            ->orderBy('id')
+            ->pluck('user_id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+    }
+
+    /**
      * Subject ids one user watches within a workflow, most recently watched
      * first.
      *

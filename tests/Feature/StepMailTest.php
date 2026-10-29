@@ -2,12 +2,14 @@
 
 use Illuminate\Support\Facades\Mail;
 use Statamic\Facades\User;
+use TakepartMedia\Workflows\Mail\MailTypes;
 use TakepartMedia\Workflows\Mail\WorkflowNotification;
 use TakepartMedia\Workflows\Workflow\CustomActions;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\WorkflowNotifier;
 use TakepartMedia\Workflows\Workflow\WorkflowStateStore;
 use TakepartMedia\Workflows\Workflow\WorkflowTransitioner;
+use TakepartMedia\Workflows\Workflow\WorkflowWatchStore;
 
 function mailAction(?string $type = null): array
 {
@@ -83,4 +85,35 @@ it('sends no step mail when the picker switched it off', function () {
     app(WorkflowTransitioner::class)->apply($entry, 'simple', 'submit', $raw, 'actor', ['picked'], notify: false);
 
     Mail::assertNothingSent();
+});
+
+it('mails the published type to the watchers', function () {
+    config(['workflows.mail_delivery' => 'sync']);
+    Mail::fake();
+
+    $this->makeCollection('pages');
+    $this->writeWorkflow('simple', $this->minimalWorkflow(overrides: ['transitions' => ['submit' => mailAction('published')]]));
+    $entry = $this->makeEntry('pages', ['title' => 'Post']);
+    app(WorkflowStateStore::class)->set($entry->id(), 'simple', 'draft');
+
+    tap(User::make()->id('actor')->email('actor@example.com'))->save();
+    tap(User::make()->id('assignee')->email('assignee@example.com'))->save();
+    tap(User::make()->id('watcher')->email('watcher@example.com'))->save();
+    $watches = app(WorkflowWatchStore::class);
+    $watches->watch('watcher', $entry->id(), 'simple');
+    $watches->watch('actor', $entry->id(), 'simple');
+
+    $raw = app(DefinitionLoader::class)->raw('simple');
+    app(WorkflowTransitioner::class)->apply($entry, 'simple', 'submit', $raw, 'actor', ['assignee']);
+
+    // The assignee watches too (assigning makes a watcher); the actor, who
+    // watches as well, gets no mail about their own click.
+    Mail::assertSent(WorkflowNotification::class, 2);
+    Mail::assertSent(WorkflowNotification::class, fn ($mail) => $mail->hasTo('watcher@example.com'));
+    Mail::assertSent(WorkflowNotification::class, fn ($mail) => $mail->hasTo('assignee@example.com'));
+    Mail::assertNotSent(WorkflowNotification::class, fn ($mail) => $mail->hasTo('actor@example.com'));
+
+    expect(MailTypes::recipients('published'))->toBe(MailTypes::TO_WATCHERS)
+        ->and(MailTypes::recipients('assigned'))->toBe(MailTypes::TO_ASSIGNEES)
+        ->and(WorkflowNotifier::mailsAssignees($raw, 'submit'))->toBeFalse();
 });

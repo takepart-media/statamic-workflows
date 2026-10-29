@@ -776,6 +776,7 @@ return [
     'mail_type_plain_language_ready' => 'Plain language is ready',
     'mail_type_sla' => 'Update due',
     'mail_type_reminder' => 'Reminder: still waiting',
+    'mail_type_published' => 'Published (to watchers)',
 
     // Copy for the mails. One type = one `mail_<type>_*` block; rendered in the
     // RECIPIENT's language, not the actor's — see Mail\WorkflowNotification. Any
@@ -849,6 +850,13 @@ return [
     // The "Reminder" line in every mail whose state carries a `reminder` action
     // (Mail\WorkflowNotification::reminder()).
     'mail_reminder_notice' => '{1} daily, while the post stays in this state|[2,*] every :days days, while the post stays in this state',
+
+    // "The post is published." Goes not to the assignees but to everyone who
+    // watches the post (Mail\MailTypes::PUBLISHED). General on purpose: true for
+    // a first publication and for "marked current again" alike.
+    'mail_published_subject' => 'Published: :title',
+    'mail_published_heading' => 'A post has been published',
+    'mail_published_intro' => 'The post ":title" has been published successfully.',
 
     // "Mentioned in a comment." Not a workflow mail (no definition can pick it,
     // see Mail\MailTypes::COMMENT_MENTION) and the one mail that goes to a

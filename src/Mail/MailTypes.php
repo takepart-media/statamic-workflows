@@ -109,6 +109,23 @@ class MailTypes
     public const REMINDER = 'reminder';
 
     /**
+     * "This post has been published." For the step that publishes, and the one
+     * type that does not go to the assignees but to the WATCHERS — whoever
+     * bookmarked the post wants to hear that it is out, and the assignees are the
+     * people who just published it. The copy is deliberately general: it has to
+     * be true for a first publication and for "marked current again" alike.
+     */
+    public const PUBLISHED = 'published';
+
+    /** Who a type is sent to: the subject's assignees. The default. */
+    public const TO_ASSIGNEES = 'assignees';
+
+    /** Who a type is sent to: whoever watches the subject (WorkflowWatchStore). */
+    public const TO_WATCHERS = 'watchers';
+
+    public const RECIPIENTS = [self::TO_ASSIGNEES, self::TO_WATCHERS];
+
+    /**
      * "Somebody mentioned you in a comment." NOT a workflow mail: no definition
      * can pick it, so it is deliberately absent from BUILT_IN (and therefore from
      * the editor's dropdown and from the writer's list of valid `mail_type`s). It
@@ -136,6 +153,7 @@ class MailTypes
         self::PLAIN_LANGUAGE_READY => [],
         self::SLA => [],
         self::REMINDER => [],
+        self::PUBLISHED => ['recipients' => self::TO_WATCHERS],
     ];
 
     /**
@@ -152,7 +170,7 @@ class MailTypes
      * Every usable type, keyed by handle, built-in first and then the project's —
      * which is the order the editor offers them in.
      *
-     * @return array<string, array{handle: string, label: string|null, mail: class-string|null, view: string|null}>
+     * @return array<string, array{handle: string, label: string|null, mail: class-string|null, view: string|null, recipients: string}>
      */
     public static function all(): array
     {
@@ -162,7 +180,7 @@ class MailTypes
     }
 
     /**
-     * @return array{handle: string, label: string|null, mail: class-string|null, view: string|null}|null
+     * @return array{handle: string, label: string|null, mail: class-string|null, view: string|null, recipients: string}|null
      */
     public static function find(string $type): ?array
     {
@@ -172,6 +190,17 @@ class MailTypes
     public static function exists(string $type): bool
     {
         return isset(self::all()[$type]);
+    }
+
+    /**
+     * Who a type goes to — TO_ASSIGNEES unless its declaration says
+     * `recipients: watchers`. A property of the TYPE rather than of the action,
+     * because the words decide the audience: "a post is yours now" makes no
+     * sense to a watcher, "it is published" none to the people who published it.
+     */
+    public static function recipients(string $type): string
+    {
+        return self::find(self::resolve($type))['recipients'] ?? self::TO_ASSIGNEES;
     }
 
     /**
@@ -284,6 +313,10 @@ class MailTypes
                 'view' => is_string($declaration['view'] ?? null) && $declaration['view'] !== ''
                     ? $declaration['view']
                     : null,
+                // Anything but a known audience means the default one.
+                'recipients' => in_array($declaration['recipients'] ?? null, self::RECIPIENTS, true)
+                    ? $declaration['recipients']
+                    : self::TO_ASSIGNEES,
             ])
             // A `mail` that named a class is only kept if that class exists and
             // implements the contract. Declaring one and silently getting the

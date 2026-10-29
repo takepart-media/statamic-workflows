@@ -7,6 +7,9 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Hinzugefügt
 
+- **Mail „Veröffentlicht“** (`mail_type: published`) für die `mail`-Action: geht
+  an alle, die den Beitrag beobachten, nicht an die Zugewiesenen. Mail-Typen
+  können dafür `recipients: watchers` deklarieren.
 - **Kommentaranzahl in den Dashboard-Widgets** „Meine Warteschlange“, „Meine
   Beiträge“ und „Beobachtet“: offene Kommentare grau, ungelesene als `+N` in
   Amber — wie in den Listen.

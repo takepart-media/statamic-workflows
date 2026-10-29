@@ -345,6 +345,13 @@ Die `mail`-Action verschickt genau eine von mehreren Mails. Welche, sagt ihr
 | --- | --- |
 | `assigned` | Dir wurde ein Beitrag zugewiesen. Die Voreinstellung — und was eine Mail-Action ohne `mail_type` bedeutet. |
 | `plain_language_ready` | Die Einfache Sprache ist fertig. Gedacht für den Place, den ein Workflow als `plain_language_completed_place` nennt. |
+| `published` | „Der Beitrag „…“ wurde erfolgreich veröffentlicht." Geht **nicht an die Zugewiesenen, sondern an alle Beobachter** der Fassung (`WorkflowWatchStore::userIdsFor()`), wer den Schritt ausgelöst hat ausgenommen. Gedacht für die Veröffentlichen-Transition. |
+
+**Empfänger je Typ.** Eine Typ-Deklaration kann `recipients: watchers` setzen
+(Default `assignees`, `MailTypes::recipients()`) — so `published`, und genauso ein
+Projekt-Typ in `workflows.mail_types`. Der Hinweis „Erhält E-Mail" im
+Personen-Picker erscheint nur, wenn die Mail des Schritts an Zugewiesene geht
+(`WorkflowNotifier::mailsAssignees()`).
 
 **Der billige Fall ist der häufige und bleibt billig.** Ein Typ ist ein Handle plus
 ein Block Sprachkeys; eine Mailable (`Mail\WorkflowNotification`) und ein Blade

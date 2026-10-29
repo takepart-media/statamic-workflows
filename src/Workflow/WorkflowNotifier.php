@@ -51,6 +51,7 @@ class WorkflowNotifier
     public function __construct(
         private readonly WorkflowAssigneeStore $assignees,
         private readonly InstanceUrl $urls,
+        private readonly WorkflowWatchStore $watches,
     ) {}
 
     /**
@@ -128,12 +129,16 @@ class WorkflowNotifier
         ?int $waitingDays = null,
     ): int {
         $subjectId = (string) $entry->id();
+        $type = MailTypes::resolve($mailType);
 
+        // A type may be meant for the watchers instead (MailTypes::recipients()).
         // Read from the store rather than taken as an argument: the transitioner has
         // already written the new set by the time this runs, so this IS the answer to
         // "who is responsible now" — including the case where the step carries
         // no `user_assignment` at all and the previous assignees simply stayed.
-        $userIds = $this->assignees->idsFor($subjectId, $workflow);
+        $userIds = MailTypes::recipients($type) === MailTypes::TO_WATCHERS
+            ? $this->watches->userIdsFor($subjectId, $workflow)
+            : $this->assignees->idsFor($subjectId, $workflow);
 
         if ($userIds === []) {
             // A legitimate outcome, not a failure: a step may notify at a point
@@ -155,7 +160,6 @@ class WorkflowNotifier
         // through to exactly this line.
         $actor = $actorId === null ? null : User::find($actorId);
         $actorName = $this->actorName($actor);
-        $type = MailTypes::resolve($mailType);
         $sent = 0;
 
         foreach ($userIds as $userId) {
@@ -284,6 +288,20 @@ class WorkflowNotifier
         }
 
         return null;
+    }
+
+    /**
+     * Does the step's mail go to the ASSIGNEES — the question behind the picker's
+     * "receives mail" hint. False for no mail and for a type meant for the
+     * watchers (MailTypes::recipients()).
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    public static function mailsAssignees(array $raw, string $transitionName): bool
+    {
+        $mail = self::stepMail($raw, $transitionName);
+
+        return $mail !== null && MailTypes::recipients($mail['type']) === MailTypes::TO_ASSIGNEES;
     }
 
     /**
