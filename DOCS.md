@@ -780,6 +780,49 @@ metadata:
   (`self_assignment_invalid`), ebenso einen `hint`, der kein Text ist.
 - Gepflegt wird der Block im Graph-Editor unter Einstellungen › Berechtigungen
   („Selbstzuweisung verhindern").
+- Seit dem 4-Augen-Prinzip fragen die Aufrufer `Workflow\AssignmentGuard`. Das
+  ist die gemeinsame Antwort beider Regeln (siehe unten).
+
+**4-Augen-Prinzip (`metadata.four_eyes`).** Ein Beitrag geht nie an die Person
+zurück, die ihn zuletzt weitergegeben hat. A gibt den Beitrag weiter, B löst die
+nächste Transition aus: A ist dann für kein `user_assignment` Kandidat.
+
+- **Wer „A“ ist:** der `user_id` des jüngsten `transition`-Events des Beitrags
+  in diesem Workflow (`WorkflowEventStore::latestTransitionActorId()`).
+  Systemverschiebungen ohne Person (SLA-Scheduler) zählen nicht. Zuständige
+  werden nicht pro Status gespeichert; bewegen darf einen Beitrag aber nur, wer
+  zugewiesen ist (oder Rechte hat), also hielt ihn, wer ihn weitergab.
+- **Manuell:** Der Picker lässt A weg; eine Auswahl mit A lehnt der Server mit
+  `assignee_invalid` ab.
+- **Automatisch:** A wird aus der Menge gestrichen, auch wenn weitere Mitglieder
+  der Gruppe bleiben. Darin unterscheidet sich die Regel von der
+  Selbstzuweisung, die eine Gruppe mit dem Klickenden unverändert lässt.
+- **Niemand mehr übrig:** Der Picker öffnet sich mit der hier genannten
+  Zielgruppe (ohne A, bei aktiver Selbstzuweisung auch ohne den Klickenden) und
+  dem Hinweistext.
+
+```yaml
+metadata:
+  four_eyes:
+    by: group                 # group | role | user
+    handles: [chefredaktion]
+    hint: ''                  # optional; leer = four_eyes_hint_default
+```
+
+- Beide Regeln zusammen: Ausgeschlossen sind A und der Klickende. Leert A die
+  Kandidaten, gilt die 4-Augen-Zielgruppe samt Hinweis, sonst die der
+  Selbstzuweisung.
+- Ohne Klickenden greift die Regel nie (SLA-Scheduler); der manuelle
+  „Zuständige“-Drawer ist nicht betroffen. Ein neuer Beitrag wurde noch nie
+  weitergegeben, beim „Neuen Beitrag" greift sie also nicht.
+- `Workflow\AssignmentGuard` beantwortet alles: `filter()`, `applies()`,
+  `reason()`, `fallbackIds()` und `hint()`. Daraus kommen `needs_pick`,
+  `pickable_assignees` und `pick_hint` der Action und die Prüfung in
+  `applyTransition()` und `storePost()`.
+- Der Writer lehnt einen Block ohne gültige Art oder ohne Einträge ab
+  (`four_eyes_invalid`), ebenso einen `hint`, der kein Text ist.
+- Gepflegt wird der Block im Graph-Editor unter Einstellungen › Berechtigungen
+  („4-Augen-Prinzip").
 
 #### Die Sprachauswahl ist nicht konfigurierbar — aber WELCHE Transition sie trägt, ist es
 

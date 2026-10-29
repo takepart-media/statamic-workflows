@@ -7,6 +7,11 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Hinzugefügt
 
+- **4-Augen-Prinzip** (`metadata.four_eyes`, Einstellungen › Berechtigungen):
+  Ein Beitrag geht bei der nächsten Transition nie an die Person zurück, die ihn
+  zuletzt weitergegeben hat, weder manuell noch automatisch. Bleibt sonst
+  niemand, öffnet sich die Auswahl mit einer eigenen Zielgruppe (Gruppen, Rollen
+  oder Personen) und einem Hinweis.
 - **Mail „Veröffentlicht“** (`mail_type: published`) für die `mail`-Action: geht
   an alle, die den Beitrag beobachten, nicht an die Zugewiesenen. Mail-Typen
   können dafür `recipients: watchers` deklarieren.
@@ -121,3 +126,4 @@ Alle nennenswerten Änderungen am Addon. Format nach
    die Auto-Erkennung.
 5. Wer die deprecated Config-Keys gesetzt hat, überträgt die betroffenen Felder
    nach `metadata.content_fields`.
+

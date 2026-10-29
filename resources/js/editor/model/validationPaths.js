@@ -169,6 +169,8 @@ const SECTIONS = {
     post_creator_groups: 'permissions',
     create_transition: 'permissions',
     assigner_groups: 'permissions',
+    self_assignment: 'permissions',
+    four_eyes: 'permissions',
     detail: 'localization',
     plain_language_site: 'localization',
     translation_source_site: 'localization',

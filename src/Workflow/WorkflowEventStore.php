@@ -108,6 +108,25 @@ class WorkflowEventStore
     }
 
     /**
+     * Who last moved the subject on by hand: the actor of its newest `transition`
+     * event that has one, or null. System moves (the SLA scheduler, user_id null)
+     * are skipped — they hand nothing on. FourEyesGuard's "person A".
+     */
+    public function latestTransitionActorId(string $subjectId, string $workflow): ?string
+    {
+        $userId = WorkflowEvent::query()
+            ->where('subject_id', $subjectId)
+            ->where('workflow', $workflow)
+            ->where('type', 'transition')
+            ->whereNotNull('user_id')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->value('user_id');
+
+        return $userId === null || $userId === '' ? null : (string) $userId;
+    }
+
+    /**
      * When the newest event of one type written while the subject sat in `$place`
      * (`from_state`) was logged, or null. SendPlaceRemindersCommand's "last
      * reminder" — scoped to the place, so a reminder from another place never

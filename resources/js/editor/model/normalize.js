@@ -47,6 +47,13 @@ export function normalize(def, { labelLocales = DEFAULT_LABEL_LOCALES } = {}) {
         handles: [...(selfAssignment?.handles ?? [])],
         hint: selfAssignment?.hint ?? '',
     };
+    // The four-eyes guard, same shape.
+    const fourEyes = copy.metadata.four_eyes;
+    copy.metadata.four_eyes = {
+        by: fourEyes?.by ?? null,
+        handles: [...(fourEyes?.handles ?? [])],
+        hint: fourEyes?.hint ?? '',
+    };
     copy.metadata.source_draft_place = copy.metadata.source_draft_place || null;
     // Bind the Select to null rather than undefined, so clearing it is a real
     // value the save step can recognise and drop. Same reason for the

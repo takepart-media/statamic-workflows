@@ -558,6 +558,11 @@ return [
     'self_assignment_handles_none' => 'Wer soll zur Auswahl stehen?',
     'self_assignment_hint_default' => 'Du kannst dir diesen Beitrag nicht selbst zuweisen. Wähle aus, wer ihn übernehmen soll.',
     'self_assignment_hint_instructions' => 'Hinweistext über der Auswahl. Leer lassen für den Standardtext.',
+    'four_eyes' => '4-Augen-Prinzip',
+    'four_eyes_instructions' => 'Ein Beitrag geht nie an die Person zurück, die ihn zuletzt weitergegeben hat – weder manuell noch automatisch. Bliebe sonst nur sie übrig, öffnet sich die Auswahl mit diesen Personen.',
+    'four_eyes_handles_none' => 'Wer soll zur Auswahl stehen?',
+    'four_eyes_hint_default' => 'Nach dem 4-Augen-Prinzip kann der Beitrag nicht an die Person zurück, die ihn weitergegeben hat. Wähle aus, wer ihn übernehmen soll.',
+    'four_eyes_hint_instructions' => 'Hinweistext über der Auswahl. Leer lassen für den Standardtext.',
     'settings_field_initial_place' => 'Startzustand',
     // Ausrichtung der Fortschrittsleiste auf der Detailseite. Entscheidet beides:
     // Layout der Leiste UND ihre Position — waagerecht über dem Inhalt, senkrecht
@@ -917,6 +922,8 @@ return [
     'writer_sla_place_unknown' => 'SLA-Stufe [:stage] zeigt auf den unbekannten Schritt [:place].',
     'writer_self_assignment_invalid' => 'metadata.self_assignment: Die Auswahl braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
     'writer_self_assignment_hint_invalid' => 'metadata.self_assignment: hint muss ein Text sein.',
+    'writer_four_eyes_invalid' => 'metadata.four_eyes: Die Auswahl braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
+    'writer_four_eyes_hint_invalid' => 'metadata.four_eyes: hint muss ein Text sein.',
     'writer_sla_assign_invalid' => 'SLA-Stufe [:stage]: Die Zuständigkeit braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
     'writer_sla_days_order' => 'Die zweite Stufe (:outdated Tage) darf nicht vor der ersten liegen (:needs_update Tage) — beide Fristen zählen ab derselben Freigabe.',
     'writer_source_draft_not_localization' => 'Ein Rückfall-Schritt für den Entwurf der Quelle gehört in einen Lokalisierungs-Workflow — nur dessen Fassungen haben eine Quelle über sich.',

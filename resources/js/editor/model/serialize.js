@@ -133,6 +133,16 @@ export function serializeMetadata(source) {
     } else {
         delete metadata.self_assignment;
     }
+    // The four-eyes guard, same rules.
+    const fourEyes = metadata.four_eyes;
+    if (fourEyes?.by) {
+        metadata.four_eyes = { by: fourEyes.by, handles: [...(fourEyes.handles ?? [])] };
+        if (String(fourEyes.hint ?? '').trim()) {
+            metadata.four_eyes.hint = String(fourEyes.hint).trim();
+        }
+    } else {
+        delete metadata.four_eyes;
+    }
     // Nur die Abweichung wandert in die YAML. `horizontal` ist der Standard des
     // Lesers (ProgressSteps::orientation()). Auch ein leerer Wert fällt heraus:
     // ein null oder '' würde der Writer mit „unbekannter Wert [NULL]" ablehnen.

@@ -553,6 +553,11 @@ return [
     'self_assignment_handles_none' => 'Who should be offered?',
     'self_assignment_hint_default' => 'You cannot assign this post to yourself. Pick who should take it over.',
     'self_assignment_hint_instructions' => 'Note shown above the picker. Leave empty for the default text.',
+    'four_eyes' => 'Four-eyes principle',
+    'four_eyes_instructions' => 'A post never goes back to the person who passed it on last, neither manually nor automatically. If they would be the only candidate, the picker opens with these people instead.',
+    'four_eyes_handles_none' => 'Who should be offered?',
+    'four_eyes_hint_default' => 'Under the four-eyes principle this post cannot go back to the person who passed it on. Pick who should take it over.',
+    'four_eyes_hint_instructions' => 'Note shown above the picker. Leave empty for the default text.',
     'settings_field_initial_place' => 'Initial place',
     // Orientation of the progress bar on the detail page. Decides both the bar's
     // layout AND its position — horizontal above the content, vertical in a column
@@ -908,6 +913,8 @@ return [
     'writer_sla_place_unknown' => 'SLA stage [:stage] points at the unknown step [:place].',
     'writer_self_assignment_invalid' => 'metadata.self_assignment: the picker needs a type (group, role or person) and at least one entry.',
     'writer_self_assignment_hint_invalid' => 'metadata.self_assignment: hint must be text.',
+    'writer_four_eyes_invalid' => 'metadata.four_eyes: the picker needs a type (group, role or person) and at least one entry.',
+    'writer_four_eyes_hint_invalid' => 'metadata.four_eyes: hint must be text.',
     'writer_sla_assign_invalid' => 'SLA stage [:stage]: responsibility needs a type (group, role or person) and at least one entry.',
     'writer_sla_days_order' => 'The second stage (:outdated days) must not come before the first (:needs_update days) — both deadlines count from the same approval.',
     'writer_source_draft_not_localization' => 'A fallback step for the source going to draft belongs in a localization workflow — only its versions have a source above them.',

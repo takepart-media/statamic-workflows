@@ -252,6 +252,19 @@ describe('metadata cleanup', () => {
         expect(serialize(model).metadata.progress_orientation).toBe('vertical');
     });
 
+    it('writes the four-eyes guard only when switched on, the hint only when given', () => {
+        expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('four_eyes');
+
+        const model = normalize({ metadata: { four_eyes: { by: 'group', handles: ['leads'], hint: '  ' } } });
+        expect(serialize(model).metadata.four_eyes).toEqual({ by: 'group', handles: ['leads'] });
+
+        model.metadata.four_eyes.hint = ' Ask a lead. ';
+        expect(serialize(model).metadata.four_eyes).toEqual({ by: 'group', handles: ['leads'], hint: 'Ask a lead.' });
+
+        model.metadata.four_eyes.by = null;
+        expect(serialize(model).metadata).not.toHaveProperty('four_eyes');
+    });
+
     it('keeps plain-language skip fields trimmed and unique, and drops an empty list', () => {
         expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('plain_language_skip_fields');
         const model = normalize({ metadata: { plain_language_skip_fields: [' *.embed_code ', 'anchor.anchor_id', '*.embed_code', ''] } });

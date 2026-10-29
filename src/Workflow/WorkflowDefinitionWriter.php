@@ -800,6 +800,32 @@ class WorkflowDefinitionWriter
         }
     }
 
+    /**
+     * `metadata.four_eyes` — the fallback audience when the person who passed
+     * the subject on last would be the only candidate (FourEyesGuard). Refused
+     * when unusable, like self_assignment.
+     *
+     * @param  array<string, mixed>  $definition
+     */
+    private function validateFourEyes(array $definition): void
+    {
+        if (! array_key_exists(FourEyesGuard::KEY, $definition['metadata'] ?? [])) {
+            return;
+        }
+
+        $block = $definition['metadata'][FourEyesGuard::KEY];
+
+        if (! is_array($block) || SlaSettings::audience($block) === null) {
+            $this->fail('four_eyes_invalid');
+        }
+
+        $hint = $block['hint'] ?? null;
+
+        if ($hint !== null && ! is_string($hint)) {
+            $this->fail('four_eyes_hint_invalid');
+        }
+    }
+
     private function validateSla(array $definition, array $places): void
     {
         $sla = $definition['metadata'][SlaSettings::KEY] ?? null;
@@ -1527,6 +1553,7 @@ class WorkflowDefinitionWriter
 
         $this->at('metadata.'.SourceViewRules::KEY, fn () => $this->validateSourceView($definition));
         $this->at('metadata.'.SelfAssignmentGuard::KEY, fn () => $this->validateSelfAssignment($definition));
+        $this->at('metadata.'.FourEyesGuard::KEY, fn () => $this->validateFourEyes($definition));
 
         // No credential keys are validated here because none belong in this file.
         // The translation services read their key and token from

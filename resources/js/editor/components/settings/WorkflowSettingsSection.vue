@@ -106,6 +106,35 @@
                         </template>
                     </div>
                 </ProblemField>
+                <!-- FourEyesGuard: the person who passed the post on last is never a
+                     candidate; if nobody else is left, the picker opens with this audience.
+                     Off = no block in the YAML. -->
+                <ProblemField
+                    :label="__('workflows::messages.four_eyes')"
+                    :instructions="__('workflows::messages.four_eyes_instructions')"
+                    path="metadata.four_eyes"
+                >
+                    <div class="space-y-3">
+                        <Checkbox solo :model-value="!!fourEyes.by" @update:model-value="toggleFourEyes" />
+                        <template v-if="fourEyes.by">
+                            <AudiencePicker
+                                :by="fourEyes.by"
+                                :handles="fourEyes.handles"
+                                :by-options="audienceOptions"
+                                :placeholder="__('workflows::messages.four_eyes_handles_none')"
+                                @update:by="(v) => setFourEyes({ by: v, handles: [] })"
+                                @update:handles="(v) => setFourEyes({ handles: v })"
+                            />
+                            <Textarea
+                                :model-value="fourEyes.hint"
+                                :placeholder="__('workflows::messages.four_eyes_hint_default')"
+                                :rows="2"
+                                @update:model-value="(v) => setFourEyes({ hint: v ?? '' })"
+                            />
+                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('workflows::messages.four_eyes_hint_instructions') }}</p>
+                        </template>
+                    </div>
+                </ProblemField>
                 <ProblemField
                     v-if="!isLocalization"
                     :label="__('workflows::messages.post_creator_groups')"
@@ -554,6 +583,13 @@ const selfAssignment = computed(() => meta.value.self_assignment ?? { by: null, 
 const setSelfAssignment = (patch) => setMeta('self_assignment', { ...selfAssignment.value, ...patch });
 // On starts with groups, the usual answer ("project leads"); off clears it all.
 const toggleSelfAssignment = (on) => setMeta('self_assignment', on
+    ? { by: 'group', handles: [], hint: '' }
+    : { by: null, handles: [], hint: '' });
+
+// The four-eyes guard, same shape and same switch.
+const fourEyes = computed(() => meta.value.four_eyes ?? { by: null, handles: [], hint: '' });
+const setFourEyes = (patch) => setMeta('four_eyes', { ...fourEyes.value, ...patch });
+const toggleFourEyes = (on) => setMeta('four_eyes', on
     ? { by: 'group', handles: [], hint: '' }
     : { by: null, handles: [], hint: '' });
 

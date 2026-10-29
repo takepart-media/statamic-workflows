@@ -35,6 +35,7 @@ use TakepartMedia\Workflows\Translation\TranslationRunner;
 use TakepartMedia\Workflows\Translation\TranslationService;
 use TakepartMedia\Workflows\Translation\Translator;
 use TakepartMedia\Workflows\Workflow\AssignmentCandidates;
+use TakepartMedia\Workflows\Workflow\AssignmentGuard;
 use TakepartMedia\Workflows\Workflow\CommentMentionNotifier;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\InstanceUrl;
@@ -51,7 +52,6 @@ use TakepartMedia\Workflows\Workflow\Filters\WaitingFilter;
 use TakepartMedia\Workflows\Workflow\PersonalWorkItems;
 use TakepartMedia\Workflows\Workflow\ProgressSteps;
 use TakepartMedia\Workflows\Workflow\PublishedFlag;
-use TakepartMedia\Workflows\Workflow\SelfAssignmentGuard;
 use TakepartMedia\Workflows\Workflow\StatsPresets;
 use TakepartMedia\Workflows\Workflow\SubjectLinks;
 use TakepartMedia\Workflows\Workflow\WorkflowAssigneeStore;
@@ -1773,12 +1773,12 @@ class WorkflowController extends CpController
         $transition = $raw['transitions'][$cta['name']];
         $stub = $this->stubEntryFor($collection);
         $actorId = (string) (User::current()?->id() ?? '') ?: null;
-        $guarded = SelfAssignmentGuard::applies($raw, $transition, $stub, $actorId);
-        $needsPick = TransitionActions::opensUserDialog($transition) || $guarded;
+        $needsPick = TransitionActions::opensUserDialog($transition)
+            || AssignmentGuard::applies($raw, $transition, $stub, null, $actorId);
 
         return $cta + [
             'needs_pick' => $needsPick,
-            'pick_hint' => $guarded ? SelfAssignmentGuard::hint($raw) : null,
+            'pick_hint' => AssignmentGuard::hint($raw, $transition, $stub, null, $actorId),
             'sends_mail' => WorkflowNotifier::stepMail($raw, $cta['name']) !== null,
             'pickable_assignees' => $needsPick
                 ? $this->pickableAssignees($raw, $cta['name'], $stub)
@@ -3286,14 +3286,13 @@ class WorkflowController extends CpController
                 //
                 // Also true for an assignment of either mode that would hand the
                 // subject back to the clicker alone, when the workflow forbids
-                // that (SelfAssignmentGuard) — `pick_hint` then says why.
+                // that, or to the person who passed it on last under the four-eyes
+                // rule (AssignmentGuard) — `pick_hint` then says why.
                 'needs_pick' => TransitionActions::opensUserDialog($transition)
-                    || SelfAssignmentGuard::applies($raw, $transition, $entry, $actorId),
-                'pick_hint' => SelfAssignmentGuard::applies($raw, $transition, $entry, $actorId)
-                    ? SelfAssignmentGuard::hint($raw)
-                    : null,
+                    || AssignmentGuard::applies($raw, $transition, $entry, $workflow, $actorId),
+                'pick_hint' => AssignmentGuard::hint($raw, $transition, $entry, $workflow, $actorId),
                 // The action's candidates (may be empty), with site_allocation.
-                'pickable_assignees' => $this->pickableAssignees($raw, $name, $entry),
+                'pickable_assignees' => $this->pickableAssignees($raw, $name, $entry, $workflow),
                 // Whether the step mails anybody — the picker offers its "send
                 // email" toggle only then. Same answer the send uses.
                 'sends_mail' => WorkflowNotifier::stepMail($raw, $name) !== null,
@@ -3614,9 +3613,9 @@ class WorkflowController extends CpController
     /**
      * Who a pick for this transition may name, or null when the transition asks
      * nobody. Usually the MANUAL assignment's candidates (minus the clicker where
-     * the workflow forbids self-assignment); for an assignment of either mode
-     * that would hand the subject back to the clicker alone, the workflow's
-     * self-assignment fallback instead (SelfAssignmentGuard). The picker is
+     * the workflow forbids self-assignment, and minus whoever passed the subject
+     * on last under the four-eyes rule); for an assignment of either mode that
+     * leaves nobody, the fallback of the rule that emptied it (AssignmentGuard). The picker is
      * filled from here and every pick is validated against here, so "offered"
      * and "accepted" stay one set in both cases.
      *
@@ -3624,10 +3623,10 @@ class WorkflowController extends CpController
      * @param  array<string, mixed>  $transition
      * @return \Illuminate\Support\Collection<int, \Statamic\Contracts\Auth\User>|null
      */
-    private function pickPool(array $raw, array $transition, $entry, ?string $actorId): ?\Illuminate\Support\Collection
+    private function pickPool(array $raw, array $transition, $entry, ?string $workflow, ?string $actorId): ?\Illuminate\Support\Collection
     {
-        if (SelfAssignmentGuard::applies($raw, $transition, $entry, $actorId)) {
-            return collect(SelfAssignmentGuard::candidateIds($raw, $actorId))
+        if (AssignmentGuard::applies($raw, $transition, $entry, $workflow, $actorId)) {
+            return collect(AssignmentGuard::fallbackIds($raw, $transition, $entry, $workflow, $actorId))
                 ->map(fn (string $id) => User::find($id))
                 ->filter()
                 ->values();
@@ -3637,10 +3636,13 @@ class WorkflowController extends CpController
             return null;
         }
 
-        $ids = SelfAssignmentGuard::withoutClicker(
+        $ids = AssignmentGuard::filter(
             $raw,
             app(AssignmentCandidates::class)->ids(TransitionActions::userAssignment($transition), $entry),
+            $entry,
+            $workflow,
             $actorId,
+            TransitionActions::MODE_MANUAL,
         );
 
         return app(AssignmentCandidates::class)
@@ -3668,10 +3670,10 @@ class WorkflowController extends CpController
      * @param  array<string, mixed>  $raw
      * @return array<int, array<string, mixed>>
      */
-    private function pickableAssignees(array $raw, string $name, $entry): array
+    private function pickableAssignees(array $raw, string $name, $entry, ?string $workflow = null): array
     {
         $actorId = (string) (User::current()?->id() ?? '') ?: null;
-        $pool = $this->pickPool($raw, $raw['transitions'][$name] ?? [], $entry, $actorId);
+        $pool = $this->pickPool($raw, $raw['transitions'][$name] ?? [], $entry, $workflow, $actorId);
 
         if ($pool === null) {
             return [];
@@ -3742,15 +3744,16 @@ class WorkflowController extends CpController
 
         $actorId = (string) (User::current()?->id() ?? '') ?: null;
 
-        if (SelfAssignmentGuard::applies($raw, $transition, $entry, $actorId)) {
-            // An assignment (either mode) that would land on the clicker alone,
-            // in a workflow that forbids it: the picker asked the fallback
-            // audience instead, so the picks are checked against that.
+        if (AssignmentGuard::applies($raw, $transition, $entry, $workflow, $actorId)) {
+            // An assignment (either mode) that would land on nobody the workflow
+            // allows — the clicker alone, or the person who passed the post on
+            // (four eyes): the picker asked the fallback audience instead, so
+            // the picks are checked against that.
             if ($explicit === []) {
                 return response()->json(['message' => $this->t('assignee_required')], 422);
             }
 
-            $eligible = SelfAssignmentGuard::candidateIds($raw, $actorId);
+            $eligible = AssignmentGuard::fallbackIds($raw, $transition, $entry, $workflow, $actorId);
 
             foreach ($explicit as $userId) {
                 if (! in_array($userId, $eligible, true)) {
@@ -3762,7 +3765,10 @@ class WorkflowController extends CpController
             // ARE the answer. A client that posts assignees anyway is not an
             // error worth a 422 — it is simply answering a question that was
             // never put to it.
-            $explicit = app(AssignmentCandidates::class)->ids($assignment, $entry);
+            // Minus the person who passed the post on, under the four-eyes rule.
+            $explicit = AssignmentGuard::filter(
+                $raw, app(AssignmentCandidates::class)->ids($assignment, $entry), $entry, $workflow, $actorId, $assignment['mode'],
+            );
 
             // Unreachable in practice — mechanicalBlocker() already refuses the
             // transition with `assignment_no_candidates`, and canApplyTransition()
@@ -3782,8 +3788,8 @@ class WorkflowController extends CpController
             // was filled from, so "offered" and "accepted" cannot drift; criteria
             // that match nobody mean nobody qualifies, which is the same answer
             // the picker gives by showing an empty list.
-            $eligible = SelfAssignmentGuard::withoutClicker(
-                $raw, app(AssignmentCandidates::class)->ids($assignment, $entry), $actorId,
+            $eligible = AssignmentGuard::filter(
+                $raw, app(AssignmentCandidates::class)->ids($assignment, $entry), $entry, $workflow, $actorId, $assignment['mode'],
             );
 
             foreach ($explicit as $userId) {
@@ -5099,7 +5105,7 @@ class WorkflowController extends CpController
             $assignment = TransitionActions::userAssignment($ctaTransition);
             $stub = $this->stubEntryFor($collection);
             $creatorId = (string) ($currentUser?->id() ?? '') ?: null;
-            $guarded = SelfAssignmentGuard::applies($raw, $ctaTransition, $stub, $creatorId);
+            $guarded = AssignmentGuard::applies($raw, $ctaTransition, $stub, null, $creatorId);
 
             if ($assignment !== null && ($guarded || $assignment['mode'] !== TransitionActions::MODE_AUTOMATIC)) {
                 $explicitAssignees = collect((array) $request->input('assignees', []))
@@ -5114,11 +5120,12 @@ class WorkflowController extends CpController
                 }
 
                 // The same pool createCta() offered: the manual candidates, or
-                // the self-assignment fallback (SelfAssignmentGuard).
+                // the self-assignment fallback (AssignmentGuard). A new post has
+                // never been passed on, so the four-eyes rule has nobody to drop.
                 $eligible = $guarded
-                    ? SelfAssignmentGuard::candidateIds($raw, $creatorId)
-                    : SelfAssignmentGuard::withoutClicker(
-                        $raw, app(AssignmentCandidates::class)->ids($assignment, $stub), $creatorId,
+                    ? AssignmentGuard::fallbackIds($raw, $ctaTransition, $stub, null, $creatorId)
+                    : AssignmentGuard::filter(
+                        $raw, app(AssignmentCandidates::class)->ids($assignment, $stub), $stub, null, $creatorId, $assignment['mode'],
                     );
 
                 foreach ($explicitAssignees as $pickedId) {
