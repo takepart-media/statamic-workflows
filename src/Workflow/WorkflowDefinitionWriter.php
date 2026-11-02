@@ -1577,6 +1577,18 @@ class WorkflowDefinitionWriter
                 $this->fail('edit_exempt_invalid');
             }
         });
+        $this->at('metadata.'.QsNotesVisibility::KEY_VISIBLE, function () use ($definition) {
+            $value = $definition['metadata'][QsNotesVisibility::KEY_VISIBLE] ?? null;
+
+            if ($value !== null && ! is_bool($value)) {
+                $this->fail('qs_notes_visible_invalid');
+            }
+        });
+        $this->at('metadata.'.QsNotesVisibility::KEY_AUDIENCE, function () use ($definition) {
+            if (array_key_exists(QsNotesVisibility::KEY_AUDIENCE, $definition['metadata'] ?? []) && ! AudienceRows::valid($definition['metadata'][QsNotesVisibility::KEY_AUDIENCE])) {
+                $this->fail('qs_notes_audience_invalid');
+            }
+        });
         foreach (CommentPermissions::KEYS as $key) {
             $this->at('metadata.'.$key, function () use ($definition, $key) {
                 if (array_key_exists($key, $definition['metadata'] ?? []) && ! AudienceRows::valid($definition['metadata'][$key])) {

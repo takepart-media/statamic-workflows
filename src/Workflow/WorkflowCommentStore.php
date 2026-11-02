@@ -10,7 +10,8 @@ use Illuminate\Support\Collection;
 class WorkflowCommentStore
 {
     /**
-     * All comments for a subject within a workflow, oldest first.
+     * All thread comments for a subject within a workflow, oldest first — the QA
+     * report is left out (WorkflowComment::scopeInThread).
      *
      * @return Collection<int, WorkflowComment>
      */
@@ -19,6 +20,7 @@ class WorkflowCommentStore
         return WorkflowComment::query()
             ->where('subject_id', $subjectId)
             ->where('workflow', $workflow)
+            ->inThread()
             ->orderBy('created_at')
             ->orderBy('id')
             ->get();
@@ -43,6 +45,7 @@ class WorkflowCommentStore
             ->where('subject_id', $subjectId)
             ->where('workflow', $workflow)
             ->whereNull('parent_id')
+            ->inThread()
             ->first();
     }
 
@@ -136,6 +139,7 @@ class WorkflowCommentStore
         return WorkflowComment::query()
             ->where('workflow', $workflow)
             ->whereNotNull('passage_ref')
+            ->inThread()
             // Resolved threads are done — root and replies drop out of every count.
             ->openThreads()
             ->groupBy('subject_id')
@@ -182,6 +186,7 @@ class WorkflowCommentStore
         return WorkflowComment::query()
             ->where('workflow', $workflow)
             ->whereNotNull('passage_ref')
+            ->inThread()
             ->openThreads()
             // A comment you wrote yourself is never new to you. Null authors are
             // somebody else, same as commentResource()'s `user_id !== $uid`.

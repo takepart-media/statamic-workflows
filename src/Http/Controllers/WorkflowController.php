@@ -42,6 +42,7 @@ use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\EditLock;
 use TakepartMedia\Workflows\Workflow\InstanceUrl;
 use TakepartMedia\Workflows\Workflow\FailedTranslationRetry;
+use TakepartMedia\Workflows\Workflow\QsNotesVisibility;
 use TakepartMedia\Workflows\Workflow\RevisionPublishers;
 use TakepartMedia\Workflows\Workflow\TransitionActions;
 use TakepartMedia\Workflows\Workflow\TransitionGates;
@@ -3144,8 +3145,11 @@ class WorkflowController extends CpController
             //
             // Available whenever a report exists; highlighted only in
             // `plain_language_completed_place`, where the review starts reading.
-            $props['qsNotes'] = $this->qsNotesFor($id, $workflow);
-            $props['qsNotesHighlight'] = $this->qsNotesHighlight($raw, $current);
+            //
+            // Who may see it at all is the workflow's call (QsNotesVisibility).
+            $showQsNotes = QsNotesVisibility::allows($raw, User::current());
+            $props['qsNotes'] = $showQsNotes ? $this->qsNotesFor($id, $workflow) : null;
+            $props['qsNotesHighlight'] = $showQsNotes && $this->qsNotesHighlight($raw, $current);
             $props['plainLanguageFailure'] = $this->plainLanguageFailureFor($id, $workflow, $raw, $current);
             // Gates the "technical details" switch (field handle + passage uuid)
             // in the content columns — see the default summary below.
@@ -5769,6 +5773,8 @@ class WorkflowController extends CpController
             ->where('id', $comment)
             ->where('subject_id', $id)
             ->when($workflow !== null, fn ($q) => $q->where('workflow', $workflow))
+            // The QA report is no thread comment — nothing to edit, resolve or delete.
+            ->inThread()
             ->first();
 
         abort_if($model === null, 404);

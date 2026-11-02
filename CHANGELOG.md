@@ -14,6 +14,10 @@ Alle nennenswerten Änderungen am Addon. Format nach
 - **Einstellung „Revisionen veröffentlichen dürfen“** (Zeilen aus Art
   und Einträgen, z. B. Gruppe X und Benutzer Y, Z): Solange eine Arbeitskopie existiert, dürfen nur Super-Admins und
   diese Auswahl sie live stellen.
+- **Einstellung „QS-Hinweise anzeigen“** im Einfache-Sprache-Workflow
+  (`metadata.qs_notes_visible`, `metadata.qs_notes_audience`): blendet den
+  Prüfbericht für alle aus oder zeigt ihn nur Super-Admins und einer Auswahl aus
+  Gruppen, Rollen oder Benutzern.
 - **Einstellung „Nur Zuständige dürfen bearbeiten“** (`metadata.assignees_only_edit`,
   Einstellungen › Berechtigungen): Beiträge der Collections des Workflows
   bearbeiten nur die aktuell Zuständigen, alle anderen sehen sie
@@ -89,6 +93,9 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Geändert
 
+- **Der QS-Bericht des Einfache-Sprache-Dienstes steht nicht mehr im
+  Kommentar-Thread**, nur noch hinter dem Button „QS-Hinweise“. Gespeichert wird
+  er weiterhin als Kommentar.
 - **Kommentare wie in Word:** Text markieren → Kommentar-Icon erscheint, der
   Kommentar hängt an genau dieser Stelle und sie wird im Text hervorgehoben.
   Kommentare stehen in einer Randspalte neben dem Inhalt, auf Höhe ihrer Stelle,

@@ -957,17 +957,40 @@ stammt, löscht `PlainLanguageJobStore::forget()`, sobald ein Rewrite abgeschlos
 ist. Gefunden wird er über `kind`, nicht über „der ohne Autor" — das ist heute
 zufällig eindeutig und wäre es beim ersten weiteren System-Kommentar nicht mehr.
 
-**Zusätzlich als Alert oben in der Zusammenfassung**, vor dem Inhalt:
-`buildInstancePayload()` liefert dafür `qsNotes` (siehe `qsNotesFor()`), und zwar
-**nur**, solange die Fassung im `plain_language_completed_place` steht. Sonst
-wäre der Hinweis entweder verfrüht oder längst erledigt, und ein Alert, der nie
-verschwindet, wird nicht mehr gelesen. Ohne `plain_language_completed_place` gibt
-es keinen Alert — es fehlt der Moment, an dem er hängen könnte; im
-Kommentar-Thread steht der Bericht weiterhin.
+**Nur hinter dem Button „QS-Hinweise“, nicht im Thread.** `buildInstancePayload()`
+liefert `qsNotes` (siehe `qsNotesFor()`), solange es einen Bericht gibt; im
+`plain_language_completed_place` wird der Button hervorgehoben
+(`qsNotesHighlight()`). Im Kommentar-Thread erscheint der Bericht nicht:
+`WorkflowComment::scopeInThread()` lässt ihn und Antworten darauf aus dem Thread,
+aus `forSubject()`, `findRoot()`, den Zählern und den Kommentar-Endpoints
+(Bearbeiten, Abschließen, Löschen → 404) heraus. Gespeichert bleibt er.
 
-Die Überschrift trägt der Alert selbst, deshalb schneidet `qsNotesFor()` sie aus
-dem Kommentar-Body heraus (`Str::after()`, das bei fehlendem Marker den ganzen
-Text zurückgibt — ein handverändeter oder älterer Kommentar bleibt also lesbar).
+Die Überschrift trägt der Button-Dialog selbst, deshalb schneidet `qsNotesFor()`
+sie aus dem Kommentar-Body heraus (`Str::after()`, das bei fehlendem Marker den
+ganzen Text zurückgibt — ein handverändeter oder älterer Kommentar bleibt also
+lesbar).
+
+**Wer den Bericht sieht (`metadata.qs_notes_visible`, `metadata.qs_notes_audience`).**
+Einstellung des Einfache-Sprache-Workflows selbst; andere Workflows bleiben
+unberührt, weil sie aus der Definition der jeweiligen Instanz gelesen wird.
+
+```yaml
+metadata:
+  qs_notes_visible: false        # fehlt = true
+  qs_notes_audience:             # optional, Zeilen wie revision_publishers
+    - by: group
+      handles: [medical_writer]
+```
+
+- `false`: niemand sieht den Button.
+- `true` ohne Zeilen: alle, wie bisher.
+- Mit Zeilen: nur Super-Admins und wer auf eine Zeile passt.
+- `Workflow\QsNotesVisibility::allows()` entscheidet; ohne Recht sind `qsNotes`
+  `null` und `qsNotesHighlight` `false`.
+- Gepflegt im Workflow-Editor unter Lokalisierung (nur beim Einfache-Sprache-
+  Workflow). Der Writer lehnt einen Wert ab, der nicht `true`/`false` ist
+  (`qs_notes_visible_invalid`), und Zeilen ohne Art oder Einträge
+  (`qs_notes_audience_invalid`).
 
 Zwei Grenzen, die bleiben: Der Bericht wird **nur bei Erfolg** eingesammelt — ein
 Auftrag mit unbrauchbarem `output_text` geht in den Fehlerzweig, etwaige

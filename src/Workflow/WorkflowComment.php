@@ -29,8 +29,9 @@ class WorkflowComment extends Model
 {
     /**
      * The plain-language service's QA report — what it simplified, added and left
-     * out. Written by PollPlainLanguageCommand once a rewrite lands, and the one
-     * comment the instance page pulls back out to show as an alert.
+     * out. Written by PollPlainLanguageCommand once a rewrite lands. Stored as a
+     * comment because it is the durable record, but shown only behind the
+     * instance page's "QS-Hinweise" button — never in the thread (scopeInThread).
      */
     public const KIND_PLAIN_LANGUAGE_QS = 'plain_language_qs';
 
@@ -75,6 +76,21 @@ class WorkflowComment extends Model
                 fn ($sub) => $sub->select('id')->from('workflow_comments')
                     ->whereNull('parent_id')
                     ->whereNull('resolved_at'),
+            ));
+    }
+
+    /**
+     * Only what belongs in a comment thread: no QA report (KIND_PLAIN_LANGUAGE_QS),
+     * and no reply to one.
+     */
+    public function scopeInThread($query)
+    {
+        return $query
+            ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', self::KIND_PLAIN_LANGUAGE_QS))
+            ->where(fn ($q) => $q->whereNull('parent_id')->orWhereNotIn(
+                'parent_id',
+                fn ($sub) => $sub->select('id')->from('workflow_comments')
+                    ->where('kind', self::KIND_PLAIN_LANGUAGE_QS),
             ));
     }
 }

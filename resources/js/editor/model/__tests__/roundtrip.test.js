@@ -274,6 +274,16 @@ describe('metadata cleanup', () => {
         expect(serialize(model).metadata).not.toHaveProperty('revision_publishers');
     });
 
+    it('writes qs_notes_visible only when hidden, the audience only while shown', () => {
+        const shown = normalize({ metadata: { qs_notes_audience: [{ by: 'group', handles: ['medical_writer'] }] } });
+        expect(serialize(shown).metadata).not.toHaveProperty('qs_notes_visible');
+        expect(serialize(shown).metadata.qs_notes_audience).toEqual([{ by: 'group', handles: ['medical_writer'] }]);
+
+        shown.metadata.qs_notes_visible = false;
+        expect(serialize(shown).metadata.qs_notes_visible).toBe(false);
+        expect(serialize(shown).metadata).not.toHaveProperty('qs_notes_audience');
+    });
+
     it('writes the edit lock only when on, its exemptions only with it', () => {
         expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('assignees_only_edit');
 

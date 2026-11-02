@@ -306,6 +306,28 @@
                             @update:model-value="updateSkipFields"
                         />
                     </ProblemField>
+                    <!-- QsNotesVisibility: who sees the service's QA report. Absent
+                         = everyone; unchecked stores `false`. -->
+                    <ProblemField
+                        :label="__('workflows::messages.qs_notes_visible')"
+                        :instructions="__('workflows::messages.qs_notes_visible_instructions')"
+                        path="metadata.qs_notes_visible"
+                    >
+                        <Checkbox solo :model-value="meta.qs_notes_visible !== false" @update:model-value="(v) => setMeta('qs_notes_visible', v)" />
+                    </ProblemField>
+                    <ProblemField
+                        v-if="meta.qs_notes_visible !== false"
+                        :label="__('workflows::messages.qs_notes_audience')"
+                        :instructions="__('workflows::messages.qs_notes_audience_instructions')"
+                        path="metadata.qs_notes_audience"
+                    >
+                        <AudienceRows
+                            :rows="meta.qs_notes_audience ?? []"
+                            :by-options="audienceOptions"
+                            :placeholder="__('workflows::messages.qs_notes_audience_none')"
+                            @update:rows="(v) => setMeta('qs_notes_audience', v)"
+                        />
+                    </ProblemField>
                 </template>
                 <ProblemField
                     v-else

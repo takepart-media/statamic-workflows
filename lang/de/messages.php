@@ -213,7 +213,12 @@ return [
     'translation_plain_failed_toast' => 'Beitrag „:title“ konnte nicht in Einfache Sprache überführt werden.',
     'translation_plain_qs_notes' => 'Prüfbericht des Dienstes für Einfache Sprache:',
     // Button + Stack des QS-Berichts auf der Übersetzungsseite.
-    'qs_notes' => 'QS-Hinweise',
+    'qs_notes' => 'Hinweise zur KI-Überarbeitung',
+    'qs_notes_visible' => 'QS-Hinweise anzeigen',
+    'qs_notes_visible_instructions' => 'Der Prüfbericht des Dienstes für Einfache Sprache in der Detailansicht. Aus: niemand sieht ihn. An: alle – oder nur die Auswahl darunter (plus Super-Admins).',
+    'qs_notes_audience' => 'QS-Hinweise anzeigen für:',
+    'qs_notes_audience_instructions' => 'Leer: alle. Sonst sehen nur Super-Admins und wer auf irgendeine Zeile passt die QS-Hinweise. Je Zeile eine Art (Gruppe, Rolle oder Benutzer) mit Einträgen.',
+    'qs_notes_audience_none' => 'Wer sieht die QS-Hinweise?',
     'qs_notes_intro' => 'Prüfbericht des Dienstes für Einfache Sprache: was vereinfacht, ergänzt und weggelassen wurde.',
     'qs_notes_highlight_title' => 'Neuer Prüfbericht — bitte vor der Freigabe lesen.',
     // Der Auftrag ist raus, die Texte kommen erst Minuten später — der Toast sagt
@@ -950,6 +955,8 @@ return [
     'writer_four_eyes_hint_invalid' => 'metadata.four_eyes: hint muss ein Text sein.',
     'writer_assignees_only_edit_invalid' => 'metadata.assignees_only_edit muss true oder false sein.',
     'writer_edit_exempt_invalid' => 'metadata.edit_exempt: Jede Zeile braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
+    'writer_qs_notes_visible_invalid' => 'metadata.qs_notes_visible muss true oder false sein.',
+    'writer_qs_notes_audience_invalid' => 'metadata.qs_notes_audience: Jede Zeile braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
     'writer_comment_resolvers_invalid' => 'metadata.comment_resolvers: Jede Zeile braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
     'writer_comment_deleters_invalid' => 'metadata.comment_deleters: Jede Zeile braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',
     'writer_revision_publishers_invalid' => 'metadata.revision_publishers: Jede Zeile braucht eine Art (Gruppe, Rolle oder Person) und mindestens einen Eintrag.',

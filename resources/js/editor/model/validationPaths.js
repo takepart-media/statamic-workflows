@@ -189,6 +189,8 @@ const SECTIONS = {
     comment_deleters: 'permissions',
     assignees_only_edit: 'permissions',
     edit_exempt: 'permissions',
+    qs_notes_visible: 'localization',
+    qs_notes_audience: 'localization',
     sla: 'sla',
 };
 

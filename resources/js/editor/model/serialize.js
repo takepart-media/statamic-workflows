@@ -143,6 +143,12 @@ export function serializeMetadata(source) {
         delete metadata.assignees_only_edit;
         delete metadata.edit_exempt;
     }
+    // QS notes: only `false` goes along (absent = shown); hidden drops the audience.
+    if (metadata.qs_notes_visible === false) {
+        delete metadata.qs_notes_audience;
+    } else {
+        delete metadata.qs_notes_visible;
+    }
     // Audience rows: rows without entries are dropped; none left = off = no key.
     for (const key of AUDIENCE_ROW_KEYS) {
         metadata[key] = (metadata[key] ?? [])

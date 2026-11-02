@@ -209,7 +209,12 @@ return [
     'translation_plain_failed_toast' => 'The post “:title” could not be converted into plain language.',
     'translation_plain_qs_notes' => 'Plain-language service QA report:',
     // Button + stack of the QA report on the translation page.
-    'qs_notes' => 'QA notes',
+    'qs_notes' => 'Notes on the AI rewrite',
+    'qs_notes_visible' => 'Show QA notes',
+    'qs_notes_visible_instructions' => 'The plain-language service\'s QA report on the detail page. Off: nobody sees it. On: everyone – or only the selection below (plus super admins).',
+    'qs_notes_audience' => 'Show QA notes to:',
+    'qs_notes_audience_instructions' => 'Empty: everyone. Otherwise only super admins and whoever matches any row see the QA notes. One kind per row (group, role or user) with its entries.',
+    'qs_notes_audience_none' => 'Who sees the QA notes?',
     'qs_notes_intro' => 'The plain-language service’s review: what was simplified, added and left out.',
     'qs_notes_highlight_title' => 'New review report — please read before approving.',
     // The job is out, the texts arrive minutes later — say so instead of implying
@@ -941,6 +946,8 @@ return [
     'writer_four_eyes_hint_invalid' => 'metadata.four_eyes: hint must be text.',
     'writer_assignees_only_edit_invalid' => 'metadata.assignees_only_edit must be true or false.',
     'writer_edit_exempt_invalid' => 'metadata.edit_exempt: each row needs a type (group, role or person) and at least one entry.',
+    'writer_qs_notes_visible_invalid' => 'metadata.qs_notes_visible must be true or false.',
+    'writer_qs_notes_audience_invalid' => 'metadata.qs_notes_audience: each row needs a type (group, role or person) and at least one entry.',
     'writer_comment_resolvers_invalid' => 'metadata.comment_resolvers: each row needs a type (group, role or person) and at least one entry.',
     'writer_comment_deleters_invalid' => 'metadata.comment_deleters: each row needs a type (group, role or person) and at least one entry.',
     'writer_revision_publishers_invalid' => 'metadata.revision_publishers: each row needs a type (group, role or person) and at least one entry.',
