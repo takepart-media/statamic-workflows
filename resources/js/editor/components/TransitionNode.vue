@@ -80,7 +80,6 @@ const CHIP_ICONS = {
     gate: 'padlock-locked',
     assign: 'add-user',
     mail: 'mail',
-    account_reminder: 'mail-check',
     target_missing: 'warning-diamond',
     start_localization: 'earth',
     resubmit: 'sync',

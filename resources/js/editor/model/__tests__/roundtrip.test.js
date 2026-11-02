@@ -338,12 +338,12 @@ describe('metadata cleanup', () => {
         expect(payload.transitions.go.metadata).toEqual({});
     });
 
-    it('writes the account reminder as a bare action', () => {
+    it('drops the retired account_reminder action', () => {
         const model = normalize({
             places: { a: {} },
-            transitions: { go: { from: 'a', to: 'a', metadata: { actions: [{ type: 'account_reminder' }] } } },
+            transitions: { go: { from: 'a', to: 'a', metadata: { actions: [{ type: 'account_reminder' }, { type: 'mail' }] } } },
         });
-        expect(serialize(model).transitions.go.metadata.actions).toEqual([{ type: 'account_reminder' }]);
+        expect(serialize(model).transitions.go.metadata.actions).toEqual([{ type: 'mail', mail_type: 'assigned' }]);
     });
 
     it('keeps only declared values of project actions', () => {

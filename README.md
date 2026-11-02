@@ -179,6 +179,10 @@ Publish with `php artisan vendor:publish --tag=workflows-config`, then tune:
 | `translation.plain_language.max_polls` | `5` | Polls one submission is waited out before it counts as dead. One poll is one minute at the scheduled tick. Env: `PLAIN_LANGUAGE_MAX_POLLS` |
 | `translation.plain_language.max_attempts` | `3` | Submissions a rewrite gets in total, the first included. A failed submission is sent to the service again; only after the last one does the version move to the workflow's failure place. `1` disables retries. Env: `PLAIN_LANGUAGE_MAX_ATTEMPTS` |
 | `sla_scheduler`        | `true`               | Register the hourly `workflows:transition-aged` tick. Set to `false` (or `WORKFLOWS_SLA_SCHEDULER=false` in `.env`) to disable auto-aging without touching code    |
+| `account_reminder.enabled` | `true` | After every transition, mail assignees who never activated their account a fresh activation link — again only once their last link has expired. Env: `WORKFLOWS_ACCOUNT_REMINDER` |
+| `account_reminder.expire_hours` | `null` | Activation link validity in hours; `null` keeps Statamic's duration. Also applies to CP invitations when set. Env: `WORKFLOWS_ACTIVATION_EXPIRE_HOURS` |
+
+**Extending the addon:** custom action types, mail types, assignment criteria, dashboard widgets, content fields and the translation services each have their own page under [`docs/extending/en/`](docs/extending/en/README.md).
 
 ---
 

@@ -108,7 +108,7 @@ export function placeInfo(model, handle, ctx = {}) {
  *
  * chips:  { code: 'gate', by: 'group'|'role', count }
  *         { code: 'assign', mode: 'manual'|'automatic' }
- *         { code: 'mail' | 'account_reminder' | 'target_missing' | 'start_localization' | 'resubmit' }
+ *         { code: 'mail' | 'target_missing' | 'start_localization' | 'resubmit' }
  *         { code: 'custom', type }
  * badges: 'start' | 'cta' | 'system'
  */
@@ -127,9 +127,6 @@ export function transitionInfo(model, handle) {
                 break;
             case 'mail':
                 chips.push({ code: 'mail' });
-                break;
-            case 'account_reminder':
-                chips.push({ code: 'account_reminder' });
                 break;
             case 'target_missing':
                 chips.push({ code: 'target_missing' });

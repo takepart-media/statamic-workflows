@@ -618,8 +618,6 @@ return [
     // markers above it DOES something: it sends a mail. At most one per transition
     // and per place; the writer rejects a second. See Workflow\MailAction.
     'action_type_mail' => 'Send mail',
-    'action_type_account_reminder' => 'Reminder: activate account',
-    'action_account_reminder_hint' => 'Once the transition has run, every assignee who has not activated their account yet gets an email with a fresh activation link. Any older link stops working.',
     'action_mail_hint' => 'Once the transition has run, everyone assigned to the entry gets an email with a button to the entry\'s workflow summary — in their own CP language.',
     // The same text would be wrong here: on a place the trigger is not "this step
     // ran" but "a version arrived here" — including when nobody clicked. Which is
@@ -881,14 +879,16 @@ return [
     'mail_comment_mention_field_passage' => 'Section',
     'mail_comment_mention_field_workflow' => 'Area',
     'mail_comment_mention_button' => 'Open the comment',
-    // Transition action `account_reminder` (Workflow\AccountReminder).
+    // Account reminder after every transition (Workflow\AccountReminder).
     'mail_account_reminder_subject' => 'Activate your account: :title is waiting',
     'mail_account_reminder_heading' => 'An entry is waiting – account not activated yet',
     'mail_account_reminder_intro' => 'The entry :title has been assigned for editing in :workflow. To open it, the account has to be activated and a password set first.',
     'mail_account_reminder_field_workflow' => 'Area',
     'mail_account_reminder_field_actor' => 'Handed over by',
     'mail_account_reminder_button' => 'Activate account',
-    'mail_account_reminder_outro' => 'The link is only valid for a limited time. If it has expired, please contact the editorial team.',
+    'mail_account_reminder_outro' => 'The link is valid for :duration. After that, please contact the editorial team.',
+    'duration_days' => '1 day|:count days',
+    'duration_hours' => '1 hour|:count hours',
     // The notice panel of every mail whose state carries an `auto_transition`
     // (Mail\WorkflowNotification::autoTransition()).
     'mail_auto_transition_heading' => 'Automatically :transition on :date',
@@ -1027,7 +1027,6 @@ return [
     'writer_assignment_group_nested' => 'Transition [:handle]: criteria groups cannot be nested further — one level is the maximum.',
     'writer_transition_multiple_assignments' => 'Transition [:handle] declares more than one [:action] action.',
     'writer_transition_multiple_mails' => 'Transition [:handle] declares more than one [:action] action.',
-    'writer_transition_multiple_account_reminders' => 'Transition [:handle] declares more than one [:action] action.',
     'writer_transition_action_mail_unknown' => 'Transition [:handle] mail action has unknown mail type [:mail]. Known types: :known.',
     'writer_assignment_mode_unknown' => 'Transition [:handle] action [:action] has an unknown mode [:mode]. Known modes: :known.',
     'writer_assignment_match_unknown' => 'Transition [:handle] action [:action] has an unknown match [:match]. Known values: :known.',
@@ -1089,7 +1088,6 @@ return [
     'editor_chip_assign_manual' => 'Manual assignment',
     'editor_chip_assign_automatic' => 'Auto assignment',
     'editor_chip_mail' => 'Mail',
-    'editor_chip_account_reminder' => 'Account reminder',
     'editor_chip_target_missing' => 'Target missing',
     'editor_chip_start_localization' => 'Starts localization',
     'editor_chip_resubmit' => 'Resubmit',

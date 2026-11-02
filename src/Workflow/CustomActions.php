@@ -169,6 +169,7 @@ class CustomActions
             // collides with one would be folded or rejected by the readers before
             // its own declaration ever came up.
             MailAction::LEGACY_TYPE,
+            TransitionActions::RETIRED_ACCOUNT_REMINDER,
         ]);
 
         return collect($config)

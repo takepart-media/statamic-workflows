@@ -160,13 +160,14 @@ class TransitionActions
     public const MAIL = MailAction::TYPE;
 
     /**
-     * Activation reminder for assignees who never activated their account — see
-     * AccountReminder. Nothing to configure; at most one per transition.
+     * Retired: the account reminder used to be an action and now runs on every
+     * transition (AccountReminder). Old entries are ignored on read and dropped
+     * by the writer on the next save.
      */
-    public const ACCOUNT_REMINDER = AccountReminder::TYPE;
+    public const RETIRED_ACCOUNT_REMINDER = 'account_reminder';
 
     /** Every type that may be stored in `metadata.actions`. */
-    public const TYPES = [self::USER_ASSIGNMENT, self::TARGET_MISSING, self::START_LOCALIZATION, self::PLAIN_LANGUAGE_RESUBMIT, self::MAIL, self::ACCOUNT_REMINDER];
+    public const TYPES = [self::USER_ASSIGNMENT, self::TARGET_MISSING, self::START_LOCALIZATION, self::PLAIN_LANGUAGE_RESUBMIT, self::MAIL];
 
     /**
      * Types that CAN open a dialog between the click and the transition. At most
@@ -195,6 +196,7 @@ class TransitionActions
         if (isset($metadata['actions'])) {
             return collect((array) $metadata['actions'])
                 ->filter(fn ($action) => is_array($action) && is_string($action['type'] ?? null))
+                ->reject(fn (array $action) => $action['type'] === self::RETIRED_ACCOUNT_REMINDER)
                 ->map(fn (array $action) => self::normalise($action))
                 ->values()
                 ->all();
@@ -412,16 +414,6 @@ class TransitionActions
     public static function notificationMail(array $transition): ?string
     {
         return MailAction::typeIn(self::for($transition));
-    }
-
-    /**
-     * Whether the transition reminds unactivated assignees (AccountReminder).
-     *
-     * @param  array<string, mixed>  $transition
-     */
-    public static function remindsAccounts(array $transition): bool
-    {
-        return collect(self::for($transition))->contains(fn (array $action) => $action['type'] === self::ACCOUNT_REMINDER);
     }
 
     /**

@@ -20,6 +20,7 @@ class AccountReminderMail extends Mailable
         public readonly string $title,
         public readonly string $url,
         public readonly string $workflowLabel,
+        public readonly int $expireHours,
         public readonly ?string $actorName = null,
     ) {}
 
@@ -47,9 +48,17 @@ class AccountReminderMail extends Mailable
                     'field_workflow' => MailTypes::text($type, 'field_workflow'),
                     'field_actor' => MailTypes::text($type, 'field_actor'),
                     'button' => MailTypes::text($type, 'button'),
-                    'outro' => MailTypes::text($type, 'outro'),
+                    'outro' => MailTypes::text($type, 'outro', ['duration' => $this->duration()]),
                 ],
             ],
         );
+    }
+
+    /** „3 Tage" / „36 Stunden" — whole days where the hours allow it. */
+    private function duration(): string
+    {
+        return $this->expireHours % 24 === 0
+            ? trans_choice('workflows::messages.duration_days', intdiv($this->expireHours, 24), ['count' => intdiv($this->expireHours, 24)])
+            : trans_choice('workflows::messages.duration_hours', $this->expireHours, ['count' => $this->expireHours]);
     }
 }

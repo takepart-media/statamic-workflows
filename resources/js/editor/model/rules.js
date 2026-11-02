@@ -121,7 +121,6 @@ export function validate(model, ctx = {}) {
         let assignments = 0;
         let mails = 0;
         let resubmits = 0;
-        let reminders = 0;
         actions.forEach((action, index) => {
             const path = transitionPath(id, `actions.${index}`);
             switch (action?.type) {
@@ -136,9 +135,6 @@ export function validate(model, ctx = {}) {
                 }
                 case 'mail':
                     mails++;
-                    break;
-                case 'account_reminder':
-                    reminders++;
                     break;
                 case 'target_missing':
                     if (typeof action.site !== 'string' || action.site === '') {
@@ -172,9 +168,6 @@ export function validate(model, ctx = {}) {
             error('transition_multiple_assignments', listPath, id, 'writer_transition_multiple_assignments', { handle, action: 'user_assignment' });
         } else if (mails > 1) {
             error('transition_multiple_mails', listPath, id, 'writer_transition_multiple_mails', { handle, action: 'mail' });
-        }
-        if (reminders > 1) {
-            error('transition_multiple_account_reminders', listPath, id, 'writer_transition_multiple_account_reminders', { handle, action: 'account_reminder' });
         }
         if (resubmits > 1) {
             error('transition_multiple_resubmits', listPath, id, 'writer_transition_multiple_mails', { handle, action: 'plain_language_resubmit' });

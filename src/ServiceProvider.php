@@ -17,6 +17,7 @@ use TakepartMedia\Workflows\Console\SeedStatesCommand;
 use TakepartMedia\Workflows\Console\SendPlaceRemindersCommand;
 use TakepartMedia\Workflows\Console\TransitionAgedPostsCommand;
 use TakepartMedia\Workflows\Console\UndoAutoTransitionCommand;
+use TakepartMedia\Workflows\Support\ActivationBroker;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 
 class ServiceProvider extends AddonServiceProvider
@@ -178,6 +179,8 @@ class ServiceProvider extends AddonServiceProvider
     public function bootAddon()
     {
         $this->ensureDatabaseExists();
+
+        ActivationBroker::register();
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 

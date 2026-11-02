@@ -183,20 +183,19 @@ class WorkflowTransitioner
                 }
             }
 
-            // Activation reminders for assignees without an activated account.
-            // Not tied to `$notify`: the picker's toggle silences the step mail,
-            // and this is a different mail to different people.
-            if (TransitionActions::remindsAccounts($transition)) {
-                try {
-                    AccountReminder::queue($fresh, $workflow, $actorId);
-                } catch (\Throwable $e) {
-                    Log::error('Workflow account reminder failed.', [
-                        'workflow' => $workflow,
-                        'transition' => $transitionName,
-                        'subject' => $entry->id(),
-                        'exception' => $e,
-                    ]);
-                }
+            // Activation reminders for assignees without an activated account —
+            // on every step (AccountReminder::queue() checks the switch). Not
+            // tied to `$notify`: the picker's toggle silences the step mail, and
+            // this is a different mail to different people.
+            try {
+                AccountReminder::queue($fresh, $workflow, $actorId);
+            } catch (\Throwable $e) {
+                Log::error('Workflow account reminder failed.', [
+                    'workflow' => $workflow,
+                    'transition' => $transitionName,
+                    'subject' => $entry->id(),
+                    'exception' => $e,
+                ]);
             }
 
             // Project handlers last, when the transition is a completed fact —

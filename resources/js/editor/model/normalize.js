@@ -155,6 +155,11 @@ export function toActionArray(metadata) {
     if (Array.isArray(metadata.actions)) {
         actions = metadata.actions
             .filter((a) => a && typeof a === 'object')
+            // Ausgemustert: die Account-Erinnerung läuft jetzt bei jeder
+            // Transition (Workflow\AccountReminder). Spiegelt
+            // TransitionActions::RETIRED_ACCOUNT_REMINDER; das nächste Speichern
+            // entfernt den Eintrag.
+            .filter((a) => a.type !== 'account_reminder')
             .map((a) => toAction(a));
     } else {
         actions = [];

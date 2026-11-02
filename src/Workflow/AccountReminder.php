@@ -10,25 +10,23 @@ use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\User;
 use TakepartMedia\Workflows\Jobs\SendAccountReminders;
 use TakepartMedia\Workflows\Mail\AccountReminderMail;
+use TakepartMedia\Workflows\Support\ActivationBroker;
 
 /**
- * The `account_reminder` transition action — "your account is still waiting":
+ * "Your account is still waiting" — runs after every transition
+ * (`workflows.account_reminder.enabled`, on by default).
  *
- *   actions:
- *     - type: account_reminder
+ * Every assignee of the subject whose account was never activated (no password
+ * set yet) gets a mail with a fresh activation link — Statamic's own, the one
+ * the CP invitation sends. Activated users get nothing.
  *
- * Nothing to configure. After the step, every assignee of the subject whose
- * account was never activated (no password set yet) gets a mail with a fresh
- * activation link — Statamic's own, the one the CP invitation sends. Activated
- * users get nothing; they already received the step's regular mail, if any.
- *
- * A new token replaces the user's previous one, so only the latest link works.
+ * A new token replaces the user's previous one, so a person is reminded again
+ * only once their last link has expired (ActivationBroker::linkStillValid()):
+ * the link they already have keeps working, however many steps run meanwhile.
  */
 final class AccountReminder
 {
-    public const TYPE = 'account_reminder';
-
-    /** The one mail-text family this action reads (MailTypes::text()). */
+    /** The one mail-text family this reminder reads (MailTypes::text()). */
     public const MAIL = 'account_reminder';
 
     /**
@@ -37,6 +35,10 @@ final class AccountReminder
      */
     public static function queue(EntryContract $entry, string $workflow, ?string $actorId): void
     {
+        if (! config('workflows.account_reminder.enabled', true)) {
+            return;
+        }
+
         $mode = (string) config('workflows.mail_delivery', 'after_response');
 
         if ($mode === 'sync') {
@@ -52,7 +54,7 @@ final class AccountReminder
 
     /**
      * The current assignees who would get the reminder: not activated, with an
-     * address, and not the person who clicked.
+     * address, not the person who clicked, and without a link that still works.
      *
      * @return array<int, UserContract>
      */
@@ -60,7 +62,8 @@ final class AccountReminder
     {
         return collect(app(WorkflowAssigneeStore::class)->idsFor($subjectId, $workflow))
             ->map(fn ($id) => User::find($id))
-            ->filter(fn ($user) => WorkflowNotifier::reaches($user, $actorId) && self::pending($user))
+            ->filter(fn ($user) => WorkflowNotifier::reaches($user, $actorId) && self::pending($user)
+                && ! ActivationBroker::linkStillValid($user))
             ->values()
             ->all();
     }
@@ -86,6 +89,7 @@ final class AccountReminder
         $actor = $actorId === null ? null : User::find($actorId);
         $actorName = $actor === null ? null : ((string) ($actor->name() ?: $actor->email()) ?: null);
         $title = (string) ($entry->value('title') ?: $entry->slug());
+        $hours = ActivationBroker::expireHours();
         $sent = 0;
 
         foreach ($recipients as $user) {
@@ -94,7 +98,8 @@ final class AccountReminder
 
                 Mail::to($user->email(), $user->name())
                     ->locale($user->preferredLocale())
-                    ->send(new AccountReminderMail($title, $url, $label !== '' ? $label : $workflow, $actorName));
+                    ->send(new AccountReminderMail($title, $url, $label !== '' ? $label : $workflow, $hours, $actorName));
+                ActivationBroker::markSent($user);
                 $sent++;
             } catch (\Throwable $e) {
                 // Per recipient, like WorkflowNotifier::notify(): one bad address

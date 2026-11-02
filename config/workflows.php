@@ -546,6 +546,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Account reminder
+    |--------------------------------------------------------------------------
+    |
+    | After every transition, assignees whose account was never activated (no
+    | password set yet) get a mail with a fresh activation link. A person is
+    | reminded again only once their last activation link has expired — while
+    | it is still valid (including the one from Statamic's CP invitation),
+    | nothing is sent and that link keeps working.
+    |
+    |   enabled       false switches the reminder off entirely.
+    |   expire_hours  How long an activation link stays valid, in hours. null
+    |                 keeps what Statamic / the project's password broker says
+    |                 (statamic.users.passwords.activations). A number replaces
+    |                 it — for Statamic's CP invitations too, which use the
+    |                 same link.
+    |
+    */
+
+    'account_reminder' => [
+        'enabled' => env('WORKFLOWS_ACCOUNT_REMINDER', true),
+        'expire_hours' => env('WORKFLOWS_ACTIVATION_EXPIRE_HOURS'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Translation services
     |--------------------------------------------------------------------------
     |

@@ -54,13 +54,6 @@
                 <MailerStatusLine :status="editor.options.mailStatus" />
             </template>
 
-            <template v-else-if="action.type === 'account_reminder'">
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                    {{ __('workflows::messages.action_account_reminder_hint') }}
-                </p>
-                <MailerStatusLine :status="editor.options.mailStatus" />
-            </template>
-
             <!-- The mode changes what the action IS (a dialog or a silent
                  assignment); the criteria only who it concerns. -->
             <template v-else-if="action.type === 'user_assignment'">

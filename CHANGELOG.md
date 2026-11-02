@@ -7,9 +7,16 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Hinzugefügt
 
-- **Transition-Action „Erinnerung: Account aktivieren“** (`account_reminder`):
-  Zugewiesene, die ihren Account noch nicht aktiviert haben, bekommen nach der
-  Transition eine Mail mit einem frischen Aktivierungslink.
+- **Doku je Erweiterungspunkt** unter `docs/extending/` (de/en): Actions,
+  Mail-Typen, Zuweisungskriterien, Header-Verantwortliche, Dashboard-Widgets,
+  Inhaltsfelder, Übersetzung.
+- **Automatische Erinnerung „Account aktivieren“**: Nach jeder Transition
+  bekommen Zugewiesene, die ihren Account noch nicht aktiviert haben, eine Mail
+  mit einem frischen Aktivierungslink. Erneut erinnert wird erst, wenn der
+  letzte Link abgelaufen ist. Die Mail nennt die Gültigkeit konkret.
+  Einstellungen: `workflows.account_reminder.enabled` und
+  `workflows.account_reminder.expire_hours` (Stunden; Standard ist die Dauer
+  aus Statamic).
 - **Einstellung „Revisionen“** im Workflow-Editor (Collections): schaltet
   Revisionen für alle Collections des Workflows ein oder aus und schreibt das
   beim Speichern in die Collections. Mit dem Hinweis, dass Statamic Pro nötig

@@ -23,7 +23,7 @@ export const GATE_ACTION_TYPES = ['target_missing', 'start_localization', 'plain
 // beiden Namen mit hineingeschrieben wäre es an der einen Stelle falsch, an der
 // die Aufteilung überhaupt etwas entscheidet — dem Dialog-Limit in
 // actionTypeOptionsFor().
-export const EFFECT_ACTION_TYPES = ['mail', 'account_reminder'];
+export const EFFECT_ACTION_TYPES = ['mail'];
 export const ACTION_TYPES = [...DIALOG_ACTION_TYPES, ...GATE_ACTION_TYPES, ...EFFECT_ACTION_TYPES];
 
 // Typen, die BEIDE Scopes tragen — Spiegel von Workflow\MailAction::TYPE, das in

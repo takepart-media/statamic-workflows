@@ -602,6 +602,20 @@ class WorkflowDefinitionWriter
             unset($definition['transitions'][$handle]);
         }
 
+        // The retired `account_reminder` action (the reminder now runs on every
+        // transition, see AccountReminder). Dropped rather than rejected, so a
+        // definition that still carries it saves — and loses it — as is.
+        foreach ($definition['transitions'] ?? [] as $handle => $transition) {
+            if (! is_array($transition['metadata']['actions'] ?? null)) {
+                continue;
+            }
+
+            $definition['transitions'][$handle]['metadata']['actions'] = array_values(array_filter(
+                $transition['metadata']['actions'],
+                fn ($action) => ! is_array($action) || ($action['type'] ?? null) !== TransitionActions::RETIRED_ACCOUNT_REMINDER,
+            ));
+        }
+
         // Any user-authored transition that touches an auto-injected place
         // loses its meaning without the place — drop it too. This can only
         // arise from a malformed payload; the editor UI never renders those.
@@ -1730,10 +1744,9 @@ class WorkflowDefinitionWriter
         $modals = 0;
         $assignments = 0;
         $mails = 0;
-        $reminders = 0;
 
         foreach ($actions as $index => $action) {
-            $this->at("transitions.{$handle}.metadata.actions.{$index}", function () use ($handle, $action, $workflow, &$modals, &$assignments, &$mails, &$reminders) {
+            $this->at("transitions.{$handle}.metadata.actions.{$index}", function () use ($handle, $action, $workflow, &$modals, &$assignments, &$mails) {
                 if (! is_array($action)) {
                     $this->fail('transition_action_not_map', ['handle' => $handle]);
                 }
@@ -1815,10 +1828,6 @@ class WorkflowDefinitionWriter
                     $this->validateMailType('transition_action_mail_unknown', $handle, $action);
                 }
 
-                if ($type === TransitionActions::ACCOUNT_REMINDER) {
-                    $reminders++;
-                }
-
                 // The site a `target_missing` gate watches. Checked against the real
                 // site list, like plain_language_site above and for the same reason: a
                 // typo would silently turn the gate into a no-op (an unknown site never
@@ -1865,15 +1874,6 @@ class WorkflowDefinitionWriter
             $this->fail('transition_multiple_mails', [
                 'handle' => $handle,
                 'action' => TransitionActions::MAIL,
-            ]);
-        }
-
-        // Same reason: two would send each unactivated assignee two links, and
-        // only the second would still work.
-        if ($reminders > 1) {
-            $this->fail('transition_multiple_account_reminders', [
-                'handle' => $handle,
-                'action' => TransitionActions::ACCOUNT_REMINDER,
             ]);
         }
     }

@@ -461,39 +461,40 @@ Der Handle muss überhaupt deklariert sein, weil sich eine Sprachdatei nicht dan
 befragen lässt, welche Typen es gibt, ohne Key-Namen zu erraten.
 
 
-#### Erinnerung: Account aktivieren (`account_reminder`)
+#### Erinnerung: Account aktivieren (automatisch)
 
-Eine Transition-Action ohne Einstellungen:
+Nach **jeder** Transition bekommen die Zugewiesenen, die ihren Account noch nicht aktiviert haben, eine Mail mit einem frischen Aktivierungslink. Dafür muss im Workflow nichts eingestellt werden.
 
-```yaml
-transitions:
-  submit:
-    metadata:
-      actions:
-        - type: account_reminder
+- **Wer bekommt die Mail:** jeder, der dem Beitrag nach der Transition zugewiesen ist und noch kein Passwort gesetzt hat. Das sind typischerweise Benutzer, die über das CP eingeladen wurden.
+- **Wer bekommt sie nicht:**
+  - aktivierte Benutzer
+  - Benutzer ohne E-Mail-Adresse
+  - der Auslöser selbst
+  - wer noch einen gültigen Aktivierungslink hat (siehe Pause)
+- **Pause, solange ein Link gilt:** Erinnert wird erst wieder, wenn der letzte Aktivierungslink abgelaufen ist. Das gilt auch für den Link aus der ursprünglichen CP-Einladung. Solange er gilt, geht keine neue Mail raus, und der vorhandene Link bleibt gültig.
+  - Geprüft wird über die Token-Tabelle des Password-Brokers.
+  - Hat der Broker keine Tabelle (Cache-Treiber), merkt sich das Addon die letzte Erinnerung im Cache.
+- **Gültigkeit des Links:** Standardmäßig gilt die Dauer, die in Statamic bzw. im Projekt eingestellt ist (`statamic.users.passwords.activations` → `auth.passwords.<broker>.expire`). Die Mail nennt die Dauer konkret, zum Beispiel „Der Link ist 3 Tage gültig“.
+- **Einstellungen** in `config/workflows.php`:
+
+```php
+'account_reminder' => [
+    'enabled' => env('WORKFLOWS_ACCOUNT_REMINDER', true),
+    'expire_hours' => env('WORKFLOWS_ACTIVATION_EXPIRE_HOURS'), // null = Statamic-Standard
+],
 ```
 
-- **Wer bekommt die Mail:** nach der Transition jeder, der dem Beitrag *dann*
-  zugewiesen ist und seinen Account noch nicht aktiviert hat. Gemeint sind
-  Statamic-Benutzer, die noch kein Passwort gesetzt haben, typischerweise nach
-  einer Einladung über das CP.
-- **Wer bekommt sie nicht:** aktivierte Benutzer, Benutzer ohne E-Mail-Adresse und
-  der Auslöser selbst.
-- **Inhalt:** die Mail nennt den Beitrag und den Bereich. Ihr Button ist ein
-  frischer Aktivierungslink von Statamic, dieselbe Route wie bei der
-  CP-Einladung.
-- **Nur der neueste Link gilt:** ein neuer Token ersetzt den alten. Wie lange
-  der Link gültig ist, regelt `statamic.users.passwords.activations` bzw. der
-  zugehörige Password-Broker.
-- **Unabhängig von der Schritt-Mail:** die normale Schritt-Mail (`mail`) läuft
-  getrennt weiter. Auch der Schalter „Mail senden“ im Zuweisungsdialog
-  unterdrückt nur die Schritt-Mail, nicht diese Erinnerung.
+> [!WARNING]
+> Setzt du `expire_hours`, legt das Addon einen eigenen Broker `workflows_activations` an und stellt Statamic darauf um. Die neue Dauer gilt dann auch für die normalen CP-Einladungen, weil sie denselben Link verwenden.
+
 - **Versand:** über `workflows.mail_delivery`, wie alle Workflow-Mails.
-- **Einschränkungen:** höchstens eine pro Transition. Für Places gibt es diese
-  Action nicht.
-- **Texte:** `mail_account_reminder_*` in `lang/{de,en}/messages.php`.
+- **Ohne Eintrag in der Projekt-Config:** Fehlt der Block in einer bereits veröffentlichten `config/workflows.php`, gelten die Standardwerte (an, Statamic-Dauer). Zum Ändern reichen die Env-Variablen `WORKFLOWS_ACCOUNT_REMINDER` und `WORKFLOWS_ACTIVATION_EXPIRE_HOURS`, oder du trägst den Block oben ins Projekt ein.
+- **Texte:** `mail_account_reminder_*` (`subject`, `heading`, `intro`, `field_workflow`, `field_actor`, `button`, `outro`) sowie `duration_days` und `duration_hours`. Ein Projekt überschreibt sie in `lang/vendor/workflows/{de,en}/messages.php`, siehe [Integration.md › Übersetzungen anpassen](Integration.md).
+- **Früher eine Action:** Ein alter Eintrag `- type: account_reminder` in einer Workflow-YAML wird ignoriert und beim nächsten Speichern entfernt.
 
 #### Eigene Action-Typen aus dem Projekt
+
+> Für Projekte, die das erweitern wollen: [docs/extending/de/actions.md](docs/extending/de/actions.md)
 
 Die sieben eingebauten Typen (fünf an Transitions, drei an Places — `mail` steht
 in beiden Listen, weil es dieselbe Action ist) sind Verhalten,

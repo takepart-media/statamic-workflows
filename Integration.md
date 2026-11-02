@@ -123,6 +123,8 @@ Kopiert `config/workflows.php` ins Projekt. Wichtigste Keys:
 | `post_creator_groups`  | `['admins']`     | Fallback wenn Workflow keinen eigenen setzt                            |
 | `nav_section`          | `'Workflows'`    | **Deprecated, ungenutzt** — es gibt keine eigene Nav-Sektion mehr      |
 | `sla_scheduler`        | `true`           | Stündlichen SLA-Alterungs-Tick registrieren                           |
+| `account_reminder.enabled` | `true`       | Nach jeder Transition nicht aktivierte Zugewiesene per Mail erinnern. Env: `WORKFLOWS_ACCOUNT_REMINDER` |
+| `account_reminder.expire_hours` | `null`  | Gültigkeit des Aktivierungslinks in Stunden; `null` = Statamic-Dauer. Gilt dann auch für CP-Einladungen. Env: `WORKFLOWS_ACTIVATION_EXPIRE_HOURS` |
 
 > **Entfallen:** Die eigene Nav-Sektion mit einem Eintrag pro Workflow gibt es
 > nicht mehr, `nav_section` (früher `nav_parent`) wird nicht mehr gelesen. Ein

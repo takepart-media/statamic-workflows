@@ -624,8 +624,6 @@ return [
     // Höchstens einmal je Transition und je Place (der Writer lehnt eine zweite
     // ab). Siehe Workflow\MailAction.
     'action_type_mail' => 'Mail verschicken',
-    'action_type_account_reminder' => 'Erinnerung: Account aktivieren',
-    'action_account_reminder_hint' => 'Nach der Transition bekommt jeder Zugewiesene, der seinen Account noch nicht aktiviert hat, eine Mail mit einem neuen Aktivierungslink. Ein älterer Link wird damit ungültig.',
     'action_mail_hint' => 'Nach der Transition bekommt jeder, der dem Beitrag dann zugewiesen ist, eine Mail mit einem Button zur Workflow-Übersicht des Beitrags — in seiner eigenen CP-Sprache.',
     // Derselbe Text wäre hier falsch: an einem Place ist der Auslöser nicht
     // „dieser Schritt lief", sondern „eine Fassung ist hier angekommen" — auch
@@ -889,14 +887,16 @@ return [
     'mail_comment_mention_field_passage' => 'Abschnitt',
     'mail_comment_mention_field_workflow' => 'Bereich',
     'mail_comment_mention_button' => 'Kommentar öffnen',
-    // Transition-Action `account_reminder` (Workflow\AccountReminder).
+    // Account-Erinnerung nach jeder Transition (Workflow\AccountReminder).
     'mail_account_reminder_subject' => 'Account aktivieren: :title wartet',
     'mail_account_reminder_heading' => 'Ein Beitrag wartet – Account noch nicht aktiviert',
     'mail_account_reminder_intro' => 'Der Beitrag :title ist im Bereich :workflow zur Bearbeitung zugewiesen. Um ihn öffnen zu können, muss zuerst der Account aktiviert und ein Passwort gesetzt werden.',
     'mail_account_reminder_field_workflow' => 'Bereich',
     'mail_account_reminder_field_actor' => 'Weitergegeben von',
     'mail_account_reminder_button' => 'Account aktivieren',
-    'mail_account_reminder_outro' => 'Der Link ist nur begrenzt gültig. Bei abgelaufenem Link bitte an die Redaktion wenden.',
+    'mail_account_reminder_outro' => 'Der Link ist :duration gültig. Danach bitte an die Redaktion wenden.',
+    'duration_days' => '1 Tag|:count Tage',
+    'duration_hours' => '1 Stunde|:count Stunden',
     // Der Hinweiskasten jeder Mail, deren Status eine `auto_transition` trägt
     // (Mail\WorkflowNotification::autoTransition()). `:transition` ist das Label
     // der automatischen Transition, `:options` die Labels aller Wege hinaus.
@@ -1036,7 +1036,6 @@ return [
     'writer_assignment_group_nested' => 'Transition [:handle]: Kriterien-Gruppen lassen sich nicht weiter verschachteln — eine Ebene ist das Maximum.',
     'writer_transition_multiple_assignments' => 'Transition [:handle] deklariert mehr als eine [:action]-Action.',
     'writer_transition_multiple_mails' => 'Transition [:handle] deklariert mehr als eine [:action]-Action.',
-    'writer_transition_multiple_account_reminders' => 'Transition [:handle] deklariert mehr als eine [:action]-Action.',
     'writer_transition_action_mail_unknown' => 'Transition [:handle], Mail-Action: unbekannter Mail-Typ [:mail]. Bekannte Typen: :known.',
     'writer_assignment_mode_unknown' => 'Transition [:handle], Action [:action]: unbekannter mode [:mode]. Bekannte Modi: :known.',
     'writer_assignment_match_unknown' => 'Transition [:handle], Action [:action]: unbekanntes match [:match]. Erlaubte Werte: :known.',
@@ -1098,7 +1097,6 @@ return [
     'editor_chip_assign_manual' => 'Zuweisung manuell',
     'editor_chip_assign_automatic' => 'Zuweisung auto',
     'editor_chip_mail' => 'Mail',
-    'editor_chip_account_reminder' => 'Account-Erinnerung',
     'editor_chip_target_missing' => 'Ziel fehlt',
     'editor_chip_start_localization' => 'Start-Lokalisierung',
     'editor_chip_resubmit' => 'Neu erzeugen',
