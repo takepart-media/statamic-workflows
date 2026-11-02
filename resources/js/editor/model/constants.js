@@ -6,6 +6,9 @@
 export const ASSIGNMENT_MODES = ['manual', 'automatic'];
 export const ASSIGNMENT_MATCHES = ['all', 'any'];
 
+// Workflow metadata keys holding {by, handles} rows (AudienceRows.php).
+export const AUDIENCE_ROW_KEYS = ['revision_publishers', 'comment_resolvers', 'comment_deleters', 'edit_exempt'];
+
 // --- transition actions ---
 // Steps (dialogs) or preconditions (gates/markers) that run between the click
 // and the transition. Keep in step with Workflow\TransitionActions::TYPES — the

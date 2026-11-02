@@ -4,7 +4,7 @@
 //
 // The model is keyed by handle, exactly like the YAML.
 
-import { ASSIGNMENT_MATCHES, ASSIGNMENT_MODES, DEFAULT_MAIL_TYPE, SLA_STAGES } from './constants.js';
+import { ASSIGNMENT_MATCHES, ASSIGNMENT_MODES, AUDIENCE_ROW_KEYS, DEFAULT_MAIL_TYPE, SLA_STAGES } from './constants.js';
 
 export const DEFAULT_LABEL_LOCALES = ['de', 'en'];
 
@@ -47,10 +47,13 @@ export function normalize(def, { labelLocales = DEFAULT_LABEL_LOCALES } = {}) {
         handles: [...(selfAssignment?.handles ?? [])],
         hint: selfAssignment?.hint ?? '',
     };
-    // Who may publish a working copy: always a list of {by, handles} rows.
-    copy.metadata.revision_publishers = Array.isArray(copy.metadata.revision_publishers)
-        ? copy.metadata.revision_publishers.map((row) => ({ by: row?.by ?? 'group', handles: [...(row?.handles ?? [])] }))
-        : [];
+    // Audience rows (who may publish a working copy, resolve or delete
+    // comments): always a list of {by, handles} rows.
+    for (const key of AUDIENCE_ROW_KEYS) {
+        copy.metadata[key] = Array.isArray(copy.metadata[key])
+            ? copy.metadata[key].map((row) => ({ by: row?.by ?? 'group', handles: [...(row?.handles ?? [])] }))
+            : [];
+    }
     // The four-eyes guard, same shape.
     const fourEyes = copy.metadata.four_eyes;
     copy.metadata.four_eyes = {

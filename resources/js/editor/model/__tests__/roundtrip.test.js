@@ -274,6 +274,30 @@ describe('metadata cleanup', () => {
         expect(serialize(model).metadata).not.toHaveProperty('revision_publishers');
     });
 
+    it('writes the edit lock only when on, its exemptions only with it', () => {
+        expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('assignees_only_edit');
+
+        const on = normalize({ metadata: { assignees_only_edit: true, edit_exempt: [{ by: 'group', handles: ['chief'] }] } });
+        expect(serialize(on).metadata).toMatchObject({ assignees_only_edit: true, edit_exempt: [{ by: 'group', handles: ['chief'] }] });
+
+        on.metadata.assignees_only_edit = false;
+        expect(serialize(on).metadata).not.toHaveProperty('assignees_only_edit');
+        expect(serialize(on).metadata).not.toHaveProperty('edit_exempt');
+    });
+
+    it('writes comment resolvers and deleters only when they name someone', () => {
+        const empty = serialize(normalize({ metadata: {} })).metadata;
+        expect(empty).not.toHaveProperty('comment_resolvers');
+        expect(empty).not.toHaveProperty('comment_deleters');
+
+        const model = normalize({ metadata: {
+            comment_resolvers: [{ by: 'group', handles: ['redaktion'] }, { by: 'user', handles: [] }],
+            comment_deleters: [{ by: 'role', handles: ['chief'] }],
+        } });
+        expect(serialize(model).metadata.comment_resolvers).toEqual([{ by: 'group', handles: ['redaktion'] }]);
+        expect(serialize(model).metadata.comment_deleters).toEqual([{ by: 'role', handles: ['chief'] }]);
+    });
+
     it('writes the four-eyes guard only when switched on, the hint only when given', () => {
         expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('four_eyes');
 

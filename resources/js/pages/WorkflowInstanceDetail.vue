@@ -68,7 +68,8 @@
                      threw on `activeLocalization.status` / `.livePreviewUrl`). A link
                      cannot drift out of sync with a Statamic release. `cp_url` is null
                      unless the user may actually edit — Statamic's own entry permission
-                     plus site access, see WorkflowController::canOpenEntryEditor(). -->
+                     plus site access and the workflow's edit lock, see
+                     WorkflowController::canOpenEntryEditor(). -->
                 <div class="mt-2 flex flex-wrap items-center gap-2">
                     <Button
                         v-if="instance.subject.cp_url"

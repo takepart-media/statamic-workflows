@@ -185,6 +185,10 @@ const SECTIONS = {
     content_fields: 'content',
     revisions: 'collections',
     revision_publishers: 'collections',
+    comment_resolvers: 'permissions',
+    comment_deleters: 'permissions',
+    assignees_only_edit: 'permissions',
+    edit_exempt: 'permissions',
     sla: 'sla',
 };
 

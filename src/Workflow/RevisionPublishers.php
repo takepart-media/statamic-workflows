@@ -30,29 +30,14 @@ final class RevisionPublishers
 
     /**
      * The rows, cleaned — null when the block is absent or names nobody
-     * (feature off). Each row is one `{by, handles}` audience, read like an
-     * SLA take-over (SlaSettings::audience()); unusable rows are dropped.
+     * (feature off). See AudienceRows.
      *
      * @param  array<string, mixed>  $raw
      * @return array<int, array{by: string, handles: array<int, string>}>|null
      */
     public static function settings(array $raw): ?array
     {
-        return self::clean($raw['metadata'][self::KEY] ?? null);
-    }
-
-    /**
-     * @return array<int, array{by: string, handles: array<int, string>}>|null
-     */
-    public static function clean(mixed $block): ?array
-    {
-        if (! is_array($block) || ! array_is_list($block)) {
-            return null;
-        }
-
-        $rows = array_values(array_filter(array_map(fn ($row) => SlaSettings::audience($row), $block)));
-
-        return $rows === [] ? null : $rows;
+        return AudienceRows::clean($raw['metadata'][self::KEY] ?? null);
     }
 
     /**
@@ -84,12 +69,6 @@ final class RevisionPublishers
             return false;
         }
 
-        return $user->isSuper() || collect($settings)->contains(fn (array $row) => collect($row['handles'])->contains(
-            fn (string $handle) => match ($row['by']) {
-                SourceViewRules::BY_USER => (string) $user->id() === $handle,
-                SourceViewRules::BY_GROUP => (bool) $user->isInGroup($handle),
-                default => (bool) $user->hasRole($handle),
-            },
-        ));
+        return $user->isSuper() || AudienceRows::matches($user, $settings);
     }
 }

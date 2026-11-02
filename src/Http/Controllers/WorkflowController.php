@@ -37,7 +37,9 @@ use TakepartMedia\Workflows\Translation\Translator;
 use TakepartMedia\Workflows\Workflow\AssignmentCandidates;
 use TakepartMedia\Workflows\Workflow\AssignmentGuard;
 use TakepartMedia\Workflows\Workflow\CommentMentionNotifier;
+use TakepartMedia\Workflows\Workflow\CommentPermissions;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
+use TakepartMedia\Workflows\Workflow\EditLock;
 use TakepartMedia\Workflows\Workflow\InstanceUrl;
 use TakepartMedia\Workflows\Workflow\FailedTranslationRetry;
 use TakepartMedia\Workflows\Workflow\RevisionPublishers;
@@ -1141,7 +1143,8 @@ class WorkflowController extends CpController
      * Whether the current user can actually open Statamic's entry editor for this
      * entry — checked before handing out an edit link anywhere.
      *
-     * Needs the entry ability AND access to the entry's own site. The site part is
+     * Needs the entry ability AND access to the entry's own site, and no edit
+     * lock in the way. The site part is
      * the one that bites: EntriesController builds the publish form's
      * `localizations` from the sites the user may access, so without
      * `access <site> site` the entry's own site is missing, no localization is
@@ -1158,7 +1161,11 @@ class WorkflowController extends CpController
             return false;
         }
 
-        return $user->can('view', $entry) && $this->canAccessEntrySite($entry);
+        // "Edit" leads nowhere useful for someone the workflow's edit lock
+        // (EditLock) keeps out — the editor would only open read-only.
+        return $user->can('view', $entry)
+            && $this->canAccessEntrySite($entry)
+            && (EditLock::allows($user, $entry) ?? true);
     }
 
     /**
@@ -1228,38 +1235,71 @@ class WorkflowController extends CpController
         return false;
     }
 
-    /** Memo for canModerateComments() — it is asked once per rendered comment. */
-    private ?bool $canModerateComments = null;
+    /**
+     * @var array<string, bool> "user|workflow" => canModerateComments(), asked once
+     *      per rendered comment. Keyed by user too: the controller instance can
+     *      outlive a request (it is cached on its route).
+     */
+    private array $canModerateComments = [];
 
     /**
-     * Whether the current user may delete ANY comment, not just their own. Super
-     * admins always may; everyone else needs one of `config/workflows.php →
-     * comment_moderator_groups` (default `['admins']`). Empty means SUPER ADMINS
-     * ONLY. Like canViewHistory(), deliberately not `isPrivilegedUser()`.
+     * Whether the current user may delete ANY comment in this workflow, not just
+     * their own. Super admins always may. A workflow with `comment_deleters`
+     * names everyone else (CommentPermissions); without it, one of
+     * `config/workflows.php → comment_moderator_groups` (default `['admins']`)
+     * is needed — empty means SUPER ADMINS ONLY. Like canViewHistory(),
+     * deliberately not `isPrivilegedUser()`.
      */
-    private function canModerateComments(): bool
+    private function canModerateComments(?string $workflow): bool
     {
-        if ($this->canModerateComments !== null) {
-            return $this->canModerateComments;
-        }
-
         $user = User::current();
 
         if ($user === null) {
             return false;
         }
 
+        $key = $user->id().'|'.$workflow;
+
+        if (array_key_exists($key, $this->canModerateComments)) {
+            return $this->canModerateComments[$key];
+        }
+
+        $configured = CommentPermissions::allows($this->commentWorkflowRaw($workflow), CommentPermissions::DELETERS, $user);
+
+        if ($configured !== null) {
+            return $this->canModerateComments[$key] = $configured;
+        }
+
         if ($user->isSuper()) {
-            return $this->canModerateComments = true;
+            return $this->canModerateComments[$key] = true;
         }
 
         foreach ((array) config('workflows.comment_moderator_groups', []) as $group) {
             if (is_string($group) && $group !== '' && (bool) $user->isInGroup($group)) {
-                return $this->canModerateComments = true;
+                return $this->canModerateComments[$key] = true;
             }
         }
 
-        return $this->canModerateComments = false;
+        return $this->canModerateComments[$key] = false;
+    }
+
+    /**
+     * The definition a comment's permissions are read from — empty for a
+     * comment of a workflow that no longer exists, so the defaults apply.
+     *
+     * @return array<string, mixed>
+     */
+    private function commentWorkflowRaw(?string $workflow): array
+    {
+        if ($workflow === null || $workflow === '') {
+            return [];
+        }
+
+        try {
+            return app(DefinitionLoader::class)->raw($workflow);
+        } catch (\InvalidArgumentException) {
+            return [];
+        }
     }
 
     /**
@@ -2361,7 +2401,8 @@ class WorkflowController extends CpController
      * - `resolved` and `can_resolve` concern the THREAD and live on its root;
      *   replies carry null / false.
      * - `can_edit`: the author only (a system comment has none). `can_delete`:
-     *   the author or a moderator (canModerateComments()). `can_resolve`: see
+     *   the author or a moderator of the comment's workflow
+     *   (canModerateComments()). `can_resolve`: see
      *   canResolveThread().
      * - `is_new`: by someone else, after the user last viewed that passage
      *   (per-user read state) — and never inside a resolved thread, so a closed
@@ -2439,7 +2480,7 @@ class WorkflowController extends CpController
                 ]
                 : null,
             'can_edit' => $isAuthor,
-            'can_delete' => $isAuthor || $this->canModerateComments(),
+            'can_delete' => $isAuthor || $this->canModerateComments($comment->workflow),
             'can_resolve' => $isRoot && $this->canResolveThread($comment, $uid),
             'is_new' => (bool) $isNew,
             'content_stale' => $contentStale,
@@ -2556,7 +2597,8 @@ class WorkflowController extends CpController
     /**
      * Who may resolve or reopen a thread (ROOT comments only): its author, a
      * comment moderator, or anyone currently assigned to the entry in this
-     * workflow — the people whose job the discussion is about.
+     * workflow — the people whose job the discussion is about. A workflow with
+     * `comment_resolvers` replaces all three (CommentPermissions).
      */
     private function canResolveThread(WorkflowComment $root, ?string $uid): bool
     {
@@ -2564,11 +2606,22 @@ class WorkflowController extends CpController
             return false;
         }
 
+        // A workflow naming its resolvers decides alone (CommentPermissions).
+        $configured = CommentPermissions::allows(
+            $this->commentWorkflowRaw((string) $root->workflow),
+            CommentPermissions::RESOLVERS,
+            User::current(),
+        );
+
+        if ($configured !== null) {
+            return $configured;
+        }
+
         if ($root->user_id !== null && (string) $root->user_id === $uid) {
             return true;
         }
 
-        if ($this->canModerateComments()) {
+        if ($this->canModerateComments((string) $root->workflow)) {
             return true;
         }
 
@@ -5688,8 +5741,8 @@ class WorkflowController extends CpController
     {
         [$model] = $this->findCommentForRequest($request, $id, $comment);
 
-        // The author, or a comment moderator — see canModerateComments().
-        abort_unless($this->isCommentAuthor($model) || $this->canModerateComments(), 403);
+        // The author, or a comment moderator of this workflow — see canModerateComments().
+        abort_unless($this->isCommentAuthor($model) || $this->canModerateComments($model->workflow), 403);
 
         $snapshotSource = clone $model;
         $deleted = app(WorkflowCommentStore::class)->deleteThread($model);

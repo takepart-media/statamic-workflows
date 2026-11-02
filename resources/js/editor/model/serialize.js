@@ -13,6 +13,7 @@
 //   }
 
 import {
+    AUDIENCE_ROW_KEYS,
     CREDENTIAL_METADATA_KEYS,
     DEFAULT_MAIL_TYPE,
     DEFAULT_PROGRESS_ORIENTATION,
@@ -137,13 +138,19 @@ export function serializeMetadata(source) {
     if (typeof metadata.revisions !== 'boolean') {
         delete metadata.revisions;
     }
-    // Who may publish a working copy: rows without entries are dropped; none
-    // left = off = no key.
-    metadata.revision_publishers = (metadata.revision_publishers ?? [])
-        .filter((row) => row?.by && row.handles?.length)
-        .map((row) => ({ by: row.by, handles: [...row.handles] }));
-    if (!metadata.revision_publishers.length) {
-        delete metadata.revision_publishers;
+    // The edit lock: only `true` goes along; off drops it and its exemptions.
+    if (metadata.assignees_only_edit !== true) {
+        delete metadata.assignees_only_edit;
+        delete metadata.edit_exempt;
+    }
+    // Audience rows: rows without entries are dropped; none left = off = no key.
+    for (const key of AUDIENCE_ROW_KEYS) {
+        metadata[key] = (metadata[key] ?? [])
+            .filter((row) => row?.by && row.handles?.length)
+            .map((row) => ({ by: row.by, handles: [...row.handles] }));
+        if (!metadata[key].length) {
+            delete metadata[key];
+        }
     }
     // The four-eyes guard, same rules.
     const fourEyes = metadata.four_eyes;

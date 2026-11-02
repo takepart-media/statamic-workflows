@@ -824,6 +824,35 @@ metadata:
 - Gepflegt wird der Block im Graph-Editor unter Einstellungen › Berechtigungen
   („4-Augen-Prinzip").
 
+**Nur Zuständige bearbeiten (`metadata.assignees_only_edit`).** Ohne diese
+Einstellung darf jeder einen Beitrag bearbeiten, dem seine Statamic-Rolle das
+erlaubt (`edit {collection} entries`, `edit other authors …`), egal wem er
+zugewiesen ist. Nur Transitions und Veröffentlichen prüft das Addon.
+
+```yaml
+metadata:
+  assignees_only_edit: true
+  edit_exempt:               # optional, Zeilen wie revision_publishers
+    - by: group
+      handles: [chefredaktion]
+```
+
+- Gilt nur für Collections dieses Workflows (`WorkflowResolver::forEntry()`)
+  und nur, solange die Sprachfassung in einem Status steht.
+- Bearbeiten dürfen dann nur die aktuell Zuständigen dieser Fassung, Super-Admins
+  und wer auf `edit_exempt` passt. Alle anderen öffnen den Beitrag
+  schreibgeschützt; das Transition-Panel bleibt bedienbar.
+- `Policies\EntryPolicy::edit()` (und damit `update`) fragt
+  `Workflow\EditLock::allows()`. Die Sperre engt Statamics Antwort nur ein, sie
+  gibt nie mehr Rechte als die Rolle. `view` bleibt unberührt.
+- Ein Status ohne Zuständige (z. B. „Veröffentlicht“) ist damit für alle außer
+  Super-Admins und `edit_exempt` gesperrt.
+- Der Writer lehnt einen Wert ab, der nicht `true`/`false` ist
+  (`assignees_only_edit_invalid`), und Zeilen ohne Art oder Einträge
+  (`edit_exempt_invalid`).
+- Gepflegt unter Einstellungen › Berechtigungen („Nur Zuständige dürfen
+  bearbeiten“, darunter „Ausgenommen“).
+
 #### Die Sprachauswahl ist nicht konfigurierbar — aber WELCHE Transition sie trägt, ist es
 
 Sie steht in keiner `actions`-Liste und lässt sich auch nicht in eine schreiben —
@@ -2937,9 +2966,35 @@ can_edit, can_delete, can_resolve, is_new, content_stale, container_changed`.
 | Aktion | Wer | Verhalten |
 |---|---|---|
 | Bearbeiten (`PATCH`) | nur Autor (auch kein Moderator) | setzt `edited_at`; `mentions` weggelassen = unverändert |
-| Löschen | Autor oder `comment_moderator_groups` | Root löscht seine Antworten mit, Antwort `{deleted: [ids]}` |
-| Abschließen / Öffnen | Root-Autor, Moderatoren, aktuelle Assignees des Beitrags in diesem Workflow | nur Roots (Antwort-ID → 422), idempotent, Antwort = Root |
+| Löschen | Autor, Super-Admins und `comment_deleters` des Workflows; ohne Block `comment_moderator_groups` | Root löscht seine Antworten mit, Antwort `{deleted: [ids]}` |
+| Abschließen / Öffnen | Super-Admins und `comment_resolvers` des Workflows; ohne Block Root-Autor, Moderatoren, aktuelle Assignees des Beitrags in diesem Workflow | nur Roots (Antwort-ID → 422), idempotent, Antwort = Root |
 | Antworten auf abgeschlossenen Thread | wie Kommentieren | erlaubt, **öffnet den Thread wieder** (Event `comment_reopened`, Snapshot `auto: true`); Antwort enthält zusätzlich `root` |
+
+**Wer abschließen und löschen darf (`metadata.comment_resolvers`,
+`metadata.comment_deleters`).** Zwei optionale Zeilen-Blöcke wie
+`revision_publishers` (`Workflow\AudienceRows`):
+
+```yaml
+metadata:
+  comment_resolvers:         # dürfen Threads als erledigt markieren und öffnen
+    - by: group               # group | role | user
+      handles: [redaktion]
+  comment_deleters:          # dürfen BELIEBIGE Kommentare löschen
+    - by: role
+      handles: [chefredaktion]
+```
+
+- Super-Admins dürfen beides immer; eigene Kommentare darf jeder löschen.
+- **Mit `comment_resolvers`** entscheidet nur diese Auswahl (plus Super-Admins):
+  Autor und Assignees verlieren das Recht, das ihnen die alte Regel gab.
+- **Mit `comment_deleters`** ersetzt der Block `comment_moderator_groups` für
+  diesen Workflow, auch bei der alten Abschließen-Regel („Moderatoren“).
+- Ohne Block gilt jeweils die alte Regel aus der Tabelle oben.
+- `Workflow\CommentPermissions::allows()` beantwortet das; der Controller
+  liefert passend `can_resolve`/`can_delete`.
+- Gepflegt im Workflow-Editor unter Berechtigungen. Der Writer lehnt eine Zeile
+  ohne gültige Art oder Einträge ab (`comment_resolvers_invalid`,
+  `comment_deleters_invalid`).
 
 **Zählen nur offene Threads.** `countBySubject()`, `newCountBySubject()`,
 `newCommentCount()`/`hasNewComments()` und `is_new` ignorieren abgeschlossene Roots

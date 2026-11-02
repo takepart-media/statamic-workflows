@@ -135,6 +135,54 @@
                         </template>
                     </div>
                 </ProblemField>
+                <!-- EditLock: only the assignees edit; edit_exempt may regardless.
+                     Off = no key in the YAML. -->
+                <ProblemField
+                    :label="__('workflows::messages.assignees_only_edit')"
+                    :instructions="__('workflows::messages.assignees_only_edit_instructions')"
+                    path="metadata.assignees_only_edit"
+                >
+                    <Checkbox solo :model-value="!!meta.assignees_only_edit" @update:model-value="(v) => setMeta('assignees_only_edit', v)" />
+                </ProblemField>
+                <ProblemField
+                    v-if="meta.assignees_only_edit"
+                    :label="__('workflows::messages.edit_exempt')"
+                    :instructions="__('workflows::messages.edit_exempt_instructions')"
+                    path="metadata.edit_exempt"
+                >
+                    <AudienceRows
+                        :rows="meta.edit_exempt ?? []"
+                        :by-options="audienceOptions"
+                        :placeholder="__('workflows::messages.edit_exempt_none')"
+                        @update:rows="(v) => setMeta('edit_exempt', v)"
+                    />
+                </ProblemField>
+                <!-- CommentPermissions: who may resolve and who may delete ANY comment.
+                     No rows = the old rules; everyone still deletes their own. -->
+                <ProblemField
+                    :label="__('workflows::messages.comment_resolvers')"
+                    :instructions="__('workflows::messages.comment_resolvers_instructions')"
+                    path="metadata.comment_resolvers"
+                >
+                    <AudienceRows
+                        :rows="meta.comment_resolvers ?? []"
+                        :by-options="audienceOptions"
+                        :placeholder="__('workflows::messages.comment_resolvers_none')"
+                        @update:rows="(v) => setMeta('comment_resolvers', v)"
+                    />
+                </ProblemField>
+                <ProblemField
+                    :label="__('workflows::messages.comment_deleters')"
+                    :instructions="__('workflows::messages.comment_deleters_instructions')"
+                    path="metadata.comment_deleters"
+                >
+                    <AudienceRows
+                        :rows="meta.comment_deleters ?? []"
+                        :by-options="audienceOptions"
+                        :placeholder="__('workflows::messages.comment_deleters_none')"
+                        @update:rows="(v) => setMeta('comment_deleters', v)"
+                    />
+                </ProblemField>
                 <ProblemField
                     v-if="!isLocalization"
                     :label="__('workflows::messages.post_creator_groups')"
@@ -400,35 +448,12 @@
                 :instructions="__('workflows::messages.revision_publishers_instructions')"
                 path="metadata.revision_publishers"
             >
-                <!-- Rows of type + entries, e.g. group X and users Y, Z. -->
-                <div class="space-y-2">
-                    <div v-for="(row, i) in revisionPublishers" :key="i" class="flex items-start gap-2">
-                        <AudiencePicker
-                            class="flex-1"
-                            :by="row.by"
-                            :handles="row.handles"
-                            :by-options="audienceOptions"
-                            :placeholder="__('workflows::messages.revision_publishers_none')"
-                            @update:by="(v) => setRevisionPublisher(i, { by: v, handles: [] })"
-                            @update:handles="(v) => setRevisionPublisher(i, { handles: v })"
-                        />
-                        <Button
-                            icon="trash"
-                            variant="ghost"
-                            size="sm"
-                            icon-only
-                            :aria-label="__('workflows::messages.revision_publishers_remove')"
-                            @click="setMeta('revision_publishers', revisionPublishers.filter((_, j) => j !== i))"
-                        />
-                    </div>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        icon="plus"
-                        :text="__('workflows::messages.revision_publishers_add')"
-                        @click="setMeta('revision_publishers', [...revisionPublishers, { by: 'group', handles: [] }])"
-                    />
-                </div>
+                <AudienceRows
+                    :rows="revisionPublishers"
+                    :by-options="audienceOptions"
+                    :placeholder="__('workflows::messages.revision_publishers_none')"
+                    @update:rows="(v) => setMeta('revision_publishers', v)"
+                />
             </ProblemField>
         </template>
 
@@ -586,6 +611,7 @@ import { keyOf } from '../../model/editorModel.js';
 import { placeDisplayName } from '../../model/labels.js';
 import { EDITOR_CONTEXT } from '../context.js';
 import AudiencePicker from '../shared/AudiencePicker.vue';
+import AudienceRows from '../shared/AudienceRows.vue';
 import ProblemField from '../shared/ProblemField.vue';
 import OrderList from '../panels/OrderList.vue';
 import ContentFieldList from './ContentFieldList.vue';
@@ -671,8 +697,6 @@ const revisionsMixed = computed(() => {
 // Who may publish a working copy: rows of {by, handles}; none = off (the
 // privileged, as before).
 const revisionPublishers = computed(() => meta.value.revision_publishers ?? []);
-const setRevisionPublisher = (i, patch) => setMeta('revision_publishers',
-    revisionPublishers.value.map((row, j) => (j === i ? { ...row, ...patch } : row)));
 
 // The four-eyes guard, same shape and same switch.
 const fourEyes = computed(() => meta.value.four_eyes ?? { by: null, handles: [], hint: '' });

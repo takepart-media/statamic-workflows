@@ -1559,15 +1559,31 @@ class WorkflowDefinitionWriter
                 return;
             }
 
-            // Every row usable, and at least one: a half-filled row would
-            // quietly narrow who may publish.
             $block = $definition['metadata'][RevisionPublishers::KEY];
 
-            if (! is_array($block) || ! array_is_list($block) || $block === []
-                || collect($block)->contains(fn ($row) => SlaSettings::audience($row) === null)) {
+            if (! AudienceRows::valid($block)) {
                 $this->fail('revision_publishers_invalid');
             }
         });
+        $this->at('metadata.'.EditLock::KEY, function () use ($definition) {
+            $value = $definition['metadata'][EditLock::KEY] ?? null;
+
+            if ($value !== null && ! is_bool($value)) {
+                $this->fail('assignees_only_edit_invalid');
+            }
+        });
+        $this->at('metadata.'.EditLock::EXEMPT, function () use ($definition) {
+            if (array_key_exists(EditLock::EXEMPT, $definition['metadata'] ?? []) && ! AudienceRows::valid($definition['metadata'][EditLock::EXEMPT])) {
+                $this->fail('edit_exempt_invalid');
+            }
+        });
+        foreach (CommentPermissions::KEYS as $key) {
+            $this->at('metadata.'.$key, function () use ($definition, $key) {
+                if (array_key_exists($key, $definition['metadata'] ?? []) && ! AudienceRows::valid($definition['metadata'][$key])) {
+                    $this->fail($key.'_invalid');
+                }
+            });
+        }
         $this->at('metadata.'.CollectionRevisions::KEY, function () use ($definition) {
             $value = $definition['metadata'][CollectionRevisions::KEY] ?? null;
 

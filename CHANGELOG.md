@@ -14,6 +14,16 @@ Alle nennenswerten Änderungen am Addon. Format nach
 - **Einstellung „Revisionen veröffentlichen dürfen“** (Zeilen aus Art
   und Einträgen, z. B. Gruppe X und Benutzer Y, Z): Solange eine Arbeitskopie existiert, dürfen nur Super-Admins und
   diese Auswahl sie live stellen.
+- **Einstellung „Nur Zuständige dürfen bearbeiten“** (`metadata.assignees_only_edit`,
+  Einstellungen › Berechtigungen): Beiträge der Collections des Workflows
+  bearbeiten nur die aktuell Zuständigen, alle anderen sehen sie
+  schreibgeschützt. Super-Admins und eine einstellbare Ausnahme (`edit_exempt`,
+  Gruppen, Rollen oder Benutzer) dürfen immer.
+- **Einstellungen „Kommentare als erledigt markieren dürfen“ und „Kommentare
+  löschen dürfen“** (`metadata.comment_resolvers`, `metadata.comment_deleters`,
+  Einstellungen › Berechtigungen; Zeilen aus Art und Einträgen). Super-Admins
+  dürfen immer, eigene Kommentare darf jeder löschen. Ohne Einstellung gilt die
+  bisherige Regel.
 - **4-Augen-Prinzip** (`metadata.four_eyes`, Einstellungen › Berechtigungen):
   Ein Beitrag geht bei der nächsten Transition nie an die Person zurück, die ihn
   zuletzt weitergegeben hat, weder manuell noch automatisch. Bleibt sonst
@@ -136,6 +146,9 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Behoben
 
+- Ob jemand Kommentare moderieren darf, wurde im Controller ohne Benutzer
+  zwischengespeichert und konnte so für den nächsten Benutzer derselben
+  Controller-Instanz gelten.
 - **Revisionen bei verwalteten Collections:** Das Addon hat sie nie wirklich
   eingeschaltet. Das Setzen zur Laufzeit ging verloren, und der Editor bot
   weiter „Speichern & Veröffentlichen“. Der wirkungslose Code ist entfernt. Der
