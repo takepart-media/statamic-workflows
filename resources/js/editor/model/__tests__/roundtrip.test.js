@@ -338,6 +338,14 @@ describe('metadata cleanup', () => {
         expect(payload.transitions.go.metadata).toEqual({});
     });
 
+    it('writes the account reminder as a bare action', () => {
+        const model = normalize({
+            places: { a: {} },
+            transitions: { go: { from: 'a', to: 'a', metadata: { actions: [{ type: 'account_reminder' }] } } },
+        });
+        expect(serialize(model).transitions.go.metadata.actions).toEqual([{ type: 'account_reminder' }]);
+    });
+
     it('keeps only declared values of project actions', () => {
         const customActions = {
             transition: [{ value: 'notify_slack', fields: [{ handle: 'channel' }, { handle: 'tags' }] }],

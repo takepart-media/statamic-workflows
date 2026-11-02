@@ -159,8 +159,14 @@ class TransitionActions
      */
     public const MAIL = MailAction::TYPE;
 
+    /**
+     * Activation reminder for assignees who never activated their account — see
+     * AccountReminder. Nothing to configure; at most one per transition.
+     */
+    public const ACCOUNT_REMINDER = AccountReminder::TYPE;
+
     /** Every type that may be stored in `metadata.actions`. */
-    public const TYPES = [self::USER_ASSIGNMENT, self::TARGET_MISSING, self::START_LOCALIZATION, self::PLAIN_LANGUAGE_RESUBMIT, self::MAIL];
+    public const TYPES = [self::USER_ASSIGNMENT, self::TARGET_MISSING, self::START_LOCALIZATION, self::PLAIN_LANGUAGE_RESUBMIT, self::MAIL, self::ACCOUNT_REMINDER];
 
     /**
      * Types that CAN open a dialog between the click and the transition. At most
@@ -406,6 +412,16 @@ class TransitionActions
     public static function notificationMail(array $transition): ?string
     {
         return MailAction::typeIn(self::for($transition));
+    }
+
+    /**
+     * Whether the transition reminds unactivated assignees (AccountReminder).
+     *
+     * @param  array<string, mixed>  $transition
+     */
+    public static function remindsAccounts(array $transition): bool
+    {
+        return collect(self::for($transition))->contains(fn (array $action) => $action['type'] === self::ACCOUNT_REMINDER);
     }
 
     /**

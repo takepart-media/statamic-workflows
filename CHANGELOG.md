@@ -7,6 +7,9 @@ Alle nennenswerten Änderungen am Addon. Format nach
 
 ### Hinzugefügt
 
+- **Transition-Action „Erinnerung: Account aktivieren“** (`account_reminder`):
+  Zugewiesene, die ihren Account noch nicht aktiviert haben, bekommen nach der
+  Transition eine Mail mit einem frischen Aktivierungslink.
 - **Einstellung „Revisionen“** im Workflow-Editor (Collections): schaltet
   Revisionen für alle Collections des Workflows ein oder aus und schreibt das
   beim Speichern in die Collections. Mit dem Hinweis, dass Statamic Pro nötig

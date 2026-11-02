@@ -72,7 +72,7 @@ export function startLocalizationUsedElsewhere(model, current) {
 // rejects a second), `start_localization` outside a localization workflow or when
 // ANY OTHER transition already has one, `plain_language_resubmit` when this
 // transition already carries one or can't use it at all, `mail` once per
-// transition. Excluding rather than disabling the option — a stray disabled entry
+// transition, `account_reminder` likewise. Excluding rather than disabling the option — a stray disabled entry
 // sitting in a dropdown reads as a bug, not a rule.
 export function actionTypeOptionsFor(model, handle, current, ctx = {}) {
     const transition = model.transitions?.[handle];
@@ -83,6 +83,7 @@ export function actionTypeOptionsFor(model, handle, current, ctx = {}) {
     // Wie `resubmitTaken`, nur ohne Workflow-Bedingung: mailen lässt sich in jedem
     // Workflow, aber je Transition nur einmal.
     const mailTaken = actions.some((a) => a !== current && a.type === 'mail');
+    const reminderTaken = actions.some((a) => a !== current && a.type === 'account_reminder');
     const localization = isLocalizationWorkflow(model);
 
     return (ctx.actionTypeOptions ?? asOptions(ACTION_TYPES)).filter((o) => {
@@ -90,6 +91,7 @@ export function actionTypeOptionsFor(model, handle, current, ctx = {}) {
         if (o.value === 'start_localization' && (startTaken || !localization)) return false;
         if (o.value === 'plain_language_resubmit' && (resubmitTaken || !canResubmitPlainLanguage(model, handle))) return false;
         if (o.value === 'mail' && mailTaken) return false;
+        if (o.value === 'account_reminder' && reminderTaken) return false;
 
         return true;
     });

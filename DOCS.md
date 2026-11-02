@@ -459,6 +459,38 @@ Der Handle muss überhaupt deklariert sein, weil sich eine Sprachdatei nicht dan
 befragen lässt, welche Typen es gibt, ohne Key-Namen zu erraten.
 
 
+#### Erinnerung: Account aktivieren (`account_reminder`)
+
+Eine Transition-Action ohne Einstellungen:
+
+```yaml
+transitions:
+  submit:
+    metadata:
+      actions:
+        - type: account_reminder
+```
+
+- **Wer bekommt die Mail:** nach der Transition jeder, der dem Beitrag *dann*
+  zugewiesen ist und seinen Account noch nicht aktiviert hat. Gemeint sind
+  Statamic-Benutzer, die noch kein Passwort gesetzt haben, typischerweise nach
+  einer Einladung über das CP.
+- **Wer bekommt sie nicht:** aktivierte Benutzer, Benutzer ohne E-Mail-Adresse und
+  der Auslöser selbst.
+- **Inhalt:** die Mail nennt den Beitrag und den Bereich. Ihr Button ist ein
+  frischer Aktivierungslink von Statamic, dieselbe Route wie bei der
+  CP-Einladung.
+- **Nur der neueste Link gilt:** ein neuer Token ersetzt den alten. Wie lange
+  der Link gültig ist, regelt `statamic.users.passwords.activations` bzw. der
+  zugehörige Password-Broker.
+- **Unabhängig von der Schritt-Mail:** die normale Schritt-Mail (`mail`) läuft
+  getrennt weiter. Auch der Schalter „Mail senden“ im Zuweisungsdialog
+  unterdrückt nur die Schritt-Mail, nicht diese Erinnerung.
+- **Versand:** über `workflows.mail_delivery`, wie alle Workflow-Mails.
+- **Einschränkungen:** höchstens eine pro Transition. Für Places gibt es diese
+  Action nicht.
+- **Texte:** `mail_account_reminder_*` in `lang/{de,en}/messages.php`.
+
 #### Eigene Action-Typen aus dem Projekt
 
 Die sieben eingebauten Typen (fünf an Transitions, drei an Places — `mail` steht

@@ -342,6 +342,7 @@ export function cleanTransitionActions(transitions, ctx = {}) {
                 if (a.type === 'target_missing') return { type: a.type, site: a.site ?? null };
                 // Der einzige Schlüssel, den die Mail-Action trägt.
                 if (a.type === 'mail') return { type: a.type, mail_type: a.mail_type ?? DEFAULT_MAIL_TYPE };
+                if (a.type === 'account_reminder') return { type: a.type };
 
                 return customActionEntry(ctx.customActions, 'transition', a);
             });

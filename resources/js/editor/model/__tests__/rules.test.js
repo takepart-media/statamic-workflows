@@ -169,11 +169,11 @@ describe('action rules', () => {
         const m = model();
         const values = (handle, current = null) => actionTypeOptionsFor(m, handle, current).map((o) => o.value);
         // start_localization is taken by `back`; everything else is free on `submit`.
-        expect(values('submit')).toEqual(['user_assignment', 'target_missing', 'plain_language_resubmit', 'mail']);
+        expect(values('submit')).toEqual(['user_assignment', 'target_missing', 'plain_language_resubmit', 'mail', 'account_reminder']);
         // `back` may keep its own start_localization but not resubmit (it IS the start).
-        expect(values('back', m.transitions.back.metadata.actions[0])).toEqual(['user_assignment', 'target_missing', 'start_localization', 'mail']);
+        expect(values('back', m.transitions.back.metadata.actions[0])).toEqual(['user_assignment', 'target_missing', 'start_localization', 'mail', 'account_reminder']);
 
-        m.transitions.submit.metadata.actions.push({ type: 'user_assignment' }, { type: 'mail' });
+        m.transitions.submit.metadata.actions.push({ type: 'user_assignment' }, { type: 'mail' }, { type: 'account_reminder' });
         expect(values('submit')).toEqual(['target_missing', 'plain_language_resubmit']);
 
         m.metadata.detail = null;
