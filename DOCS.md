@@ -338,6 +338,8 @@ Picker nicht — das steht in den Workflow-Einstellungen (`mailStatus`).
 
 #### Mail-Typen (`mail_type:`)
 
+> Für Projekte, die das erweitern wollen: [docs/extending/de/mail-types.md](docs/extending/de/mail-types.md)
+
 Die `mail`-Action verschickt genau eine von mehreren Mails. Welche, sagt ihr
 `mail_type`-Schlüssel — die einzige Einstellung, die sie hat. Mitgeliefert:
 
@@ -577,6 +579,8 @@ bot bisher niemanden an, künftig alle — siehe die Regel zur leeren Kriterienl
 unten.
 
 #### Zuweisungs-Kriterien
+
+> Für Projekte, die das erweitern wollen: [docs/extending/de/assignment-criteria.md](docs/extending/de/assignment-criteria.md)
 
 Eine Zeile aus `criteria` ist ein Tripel: **welche Eigenschaft** des Nutzers
 (`field`), **wie verglichen** wird (`operator`) und **womit** (`value`).
@@ -1319,6 +1323,8 @@ Verwaltet ein Workflow **mehr als eine** Collection, teilt die Manager-Seite
 Collection bleibt es eine einzelne Liste.
 
 ### Lokalisierungs-Workflows (`detail: translation`)
+
+> Für Projekte, die das erweitern wollen: [docs/extending/de/translation.md](docs/extending/de/translation.md)
 
 `WorkflowResolver::isLocalizationWorkflow()` ist der einzige Ort, der das
 entscheidet. Die Aussage dahinter: *das Subjekt dieses Workflows ist die
@@ -3465,6 +3471,8 @@ Deep-Link (`instance.subject.cp_url`).
 
 ### Config `content_fields`
 
+> Für Projekte, die das erweitern wollen: [docs/extending/de/content-fields.md](docs/extending/de/content-fields.md)
+
 `config/workflows.php → content_fields` sagt **nicht mehr, welche** Felder Inhalt
 sind (das ist `metadata.content_fields` pro Workflow), sondern nennt nur noch globale
 Rollen:
@@ -3540,6 +3548,8 @@ Vue beim Wechsel neu rendert.
 ---
 
 ## 9. Dashboard-Widgets
+
+> Für Projekte, die das erweitern wollen: [docs/extending/de/dashboard-widgets.md](docs/extending/de/dashboard-widgets.md)
 
 Acht Widgets, alle im ServiceProvider registriert (`$widgets`). Ohne eigene
 Einträge in `config/statamic/cp.php → widgets` (Statamic-Default: leer) setzt das
@@ -4320,6 +4330,8 @@ Create-Buttons können so nicht von dem abweichen, was der Endpoint antwortet
 - **Sichtbarkeit:** für alle CP-User, wie das Listing selbst (§ 12).
 
 ### `UserHeader` (`workflows_user_header`)
+
+> Für Projekte, die das erweitern wollen: [docs/extending/de/header-responsibles.md](docs/extending/de/header-responsibles.md)
 
 `src/Widgets/UserHeader.php` — persönlicher Kopfbereich: Name des Users als
 Überschrift, darunter drei Label/Werte-Zeilen. Zuerst „Funktionen" (die

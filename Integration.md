@@ -130,6 +130,12 @@ Kopiert `config/workflows.php` ins Projekt. Wichtigste Keys:
 > Fehler. Die Manager bleiben unter `/cp/workflows/<slug>` erreichbar; im CP
 > gibt es nur noch „Settings > Workflows" für Super-Admins.
 
+### Erweitern
+
+Eigene Action-Typen, Mail-Typen, Zuweisungskriterien, Dashboard-Widgets,
+Inhaltsfelder und die Übersetzungsdienste: je eine Datei pro
+Erweiterungspunkt unter [`docs/extending/de/`](./docs/extending/de/README.md).
+
 ---
 
 ## Übersetzungen anpassen
@@ -269,3 +275,4 @@ Optional zusätzlich `lang/vendor/workflows/`, `config/workflows.php` falls publ
 
 - [`README.md`](./README.md) — Feature-Übersicht, Command-Referenz, Konfigurations-Details
 - [`DOCS.md`](./DOCS.md) — Architektur, Datenmodell, vollständiges YAML-Schema
+- [`docs/extending/de/`](./docs/extending/de/README.md) — was ein Projekt erweitern kann, je Erweiterungspunkt eine Datei

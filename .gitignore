@@ -8,3 +8,4 @@ resources/dist/dev
 CLAUDE.local.md
 .phpunit.cache
 phpunit.xml
+docs/internal/
