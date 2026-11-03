@@ -1,6 +1,6 @@
 # Assignment criteria
 
-🇩🇪 [Deutsch](../de/assignment-criteria.md)
+🇩🇪 [Deutsch](../../de/extending/assignment-criteria.md)
 
 Custom assignment criteria let you decide who gets an entry based on fields on the person and on the entry.
 
@@ -212,7 +212,8 @@ actions:
 ## See also
 
 - [Dashboard header responsibles](header-responsibles.md)
-- [DOCS.md](../../../DOCS.md), section "Zuweisungs-Kriterien"
+- [Defining workflows](../workflows.md) – the `user_assignment` action
+- [Workflow editor](../editor.md) – picking criteria in the settings editor
 - [config/workflows.php](../../../config/workflows.php), comment on `assignment_criteria`
 - [src/Workflow/AssignmentCriteria.php](../../../src/Workflow/AssignmentCriteria.php)
 - [src/Workflow/AssignmentCandidates.php](../../../src/Workflow/AssignmentCandidates.php)

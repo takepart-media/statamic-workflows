@@ -1,6 +1,6 @@
 # Workflows erweitern
 
-🇬🇧 [English](../en/README.md)
+🇬🇧 [English](../../en/extending/README.md)
 
 Passe das Workflows-Addon an dein Projekt an: mit eigenen Aktionen, Mails, Zuweisungsregeln, Dashboard-Widgets und Übersetzungsdiensten. Am Addon selbst änderst du dafür nichts.
 
@@ -33,9 +33,9 @@ Danach trägst du die gewünschten Erweiterungen in `config/workflows.php` ein.
 
 ## Nicht auf diesen Seiten
 
-- **Projektweite Gruppen und Schalter** wie `privileged_groups`, `mail_delivery`, `sla_scheduler` oder `account_reminder`: Sie sind in den Kommentaren von [`config/workflows.php`](../../../config/workflows.php) beschrieben, die wichtigsten auch im [Integration Guide](../../../Integration.md).
-- **Einstellungen pro Workflow** wie Vier-Augen-Prinzip oder Kommentar-Rechte: Du stellst sie im Workflow-Editor ein, beschrieben sind sie in [DOCS.md](../../../DOCS.md).
+- **Projektweite Gruppen und Schalter** wie `privileged_groups`, `mail_delivery`, `sla_scheduler` oder `account_reminder`: Sie sind in den Kommentaren von [`config/workflows.php`](../../../config/workflows.php) beschrieben, die wichtigsten auch unter [Konfiguration](../configuration.md).
+- **Einstellungen pro Workflow** wie Vier-Augen-Prinzip oder Kommentar-Rechte: Du stellst sie im Workflow-Editor ein, beschrieben sind sie unter [Workflow-Editor](../editor.md).
 
 ---
 
-[Los geht's: Eigene Action-Typen](actions.md) →
+← [Doku-Start](../README.md) · [Los geht's: Eigene Action-Typen](actions.md) →

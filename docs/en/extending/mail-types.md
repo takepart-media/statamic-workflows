@@ -1,6 +1,6 @@
 # Custom mail types
 
-🇩🇪 [Deutsch](../de/mail-types.md)
+🇩🇪 [Deutsch](../../de/extending/mail-types.md)
 
 Send your own mails from your workflows, with your own copy, your own data and, if needed, your own template.
 
@@ -345,7 +345,7 @@ return [
 ## See also
 
 - [Custom action types](actions.md)
-- [DOCS.md](../../../DOCS.md), sections "Mail-Typen (`mail_type:`)" and "Eigene Daten und eigenes Template" (German)
+- [Notifications](../notifications.md) – the built-in mail types and the `mail` action
 - [config/workflows.php](../../../config/workflows.php) – comment blocks above `mail_types` and `mail_delivery`
 - [src/Contracts/WorkflowMail.php](../../../src/Contracts/WorkflowMail.php)
 - [src/Mail/MailContext.php](../../../src/Mail/MailContext.php)

@@ -1,6 +1,6 @@
 # Eigene Action-Typen
 
-🇬🇧 [English](../en/actions.md)
+🇬🇧 [English](../../en/extending/actions.md)
 
 Hänge eigene Actions an Transitions und Places und führe beim Ausführen einer Transition deinen eigenen Projektcode aus.
 
@@ -307,7 +307,8 @@ $reviewed = collect($placeActions)->contains('type', 'legally_reviewed');
 
 - [Eigene Mail-Typen](mail-types.md)
 - [Zuweisungskriterien](assignment-criteria.md) – dieselben `options`-Formen
-- [DOCS.md](../../../DOCS.md), Abschnitt „Eigene Action-Typen aus dem Projekt“
+- [Workflows definieren](../workflows.md) – wo Actions an Transitions und Places hängen
+- [Workflow-Editor](../editor.md) – Actions im Einstellungs-Editor hinzufügen
 - [config/workflows.php](../../../config/workflows.php) – Kommentarblock über `actions`
 - [src/Contracts/WorkflowAction.php](../../../src/Contracts/WorkflowAction.php)
 - [src/Workflow/ActionContext.php](../../../src/Workflow/ActionContext.php)
@@ -315,4 +316,4 @@ $reviewed = collect($placeActions)->contains('type', 'legally_reviewed');
 
 ---
 
-[Übersicht](README.md) · [Eigene Mail-Typen](mail-types.md) →
+← [Fehlerbehebung](../troubleshooting.md) · [Übersicht](README.md) · [Eigene Mail-Typen](mail-types.md) →

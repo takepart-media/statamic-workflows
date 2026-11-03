@@ -1,6 +1,6 @@
 # Dashboard header responsibles
 
-🇩🇪 [Deutsch](../de/header-responsibles.md)
+🇩🇪 [Deutsch](../../de/extending/header-responsibles.md)
 
 Show in the dashboard header whom a person can turn to with questions about their topics.
 
@@ -115,7 +115,8 @@ An editor with `entity: [health]` sees the title of the "health" term under "Aff
 
 - [Assignment criteria](assignment-criteria.md)
 - [Dashboard widgets](dashboard-widgets.md)
-- [DOCS.md](../../../DOCS.md), section "`UserHeader` (`workflows_user_header`)"
+- [Working with workflows](../using.md) – the dashboard and its widgets
+- [Configuration](../configuration.md)
 - [config/workflows.php](../../../config/workflows.php), comment on `header_responsibles`
 - [src/Widgets/UserHeader.php](../../../src/Widgets/UserHeader.php)
 

@@ -1,6 +1,6 @@
 # Übersetzung & Einfache Sprache
 
-🇬🇧 [English](../en/translation.md)
+🇬🇧 [English](../../en/extending/translation.md)
 
 Verbinde Lokalisierungs-Workflows mit DeepL für Übersetzungen und mit einem Dienst für Einfache Sprache.
 
@@ -186,7 +186,8 @@ Log-Schlüssel: `workflows.translation.plain_language_request`, `…_response`, 
 ## Siehe auch
 
 - [Inhaltsfelder](content-fields.md)
-- [DOCS.md](../../../DOCS.md): „Lokalisierungs-Workflows (`detail: translation`)“, „Rückschreiben pro Textblatt (Format `sections`)“, „SEO-Texte gehen nur an DeepL“, „Einfache Sprache leitet title/description ab“, „Bestandsdaten: `workflows:backfill-plain-language`“, §15 (Scheduler-Cron)
+- [Übersetzung & Einfache Sprache](../localization.md) – Lokalisierungs-Workflows, SEO-Behandlung und der Backfill-Befehl
+- [Befehle & Scheduler](../commands.md) – Scheduler-Cron und `workflows:backfill-plain-language`
 - [config/workflows.php](../../../config/workflows.php)
 - [src/Translation/DeeplConfig.php](../../../src/Translation/DeeplConfig.php)
 - [src/Translation/DeeplTranslator.php](../../../src/Translation/DeeplTranslator.php)

@@ -1,432 +1,84 @@
-# Workflows — Statamic Addon
+# Workflows for Statamic
 
-Editorial workflow engine and CP dashboard for **Statamic 6**. Ships a
-Symfony-Workflow-based state machine, per-workflow CP managers, group-gated
-transitions, assignees, comments, content-diff history, and a translation
-manager that groups an entry's site-versions by base site.
+🇩🇪 [Deutsch](README.de.md)
 
-Every project defines its own workflows in `resources/workflows/*.yaml`. The
-addon ships two example definitions (`postmanager`, `translation`) as
-templates — pick one during install. The addon never generates content itself:
-every subject in a workflow is a real Statamic entry.
+Editorial workflows for **Statamic 6**. Move entries through review and approval steps, assign the right people, discuss changes in context, get notified and keep content fresh, all in the Control Panel.
 
-For architecture, data model, and the full YAML schema see [`DOCS.md`](./DOCS.md).
+[![Packagist Version](https://img.shields.io/packagist/v/takepart-media/workflows)](https://packagist.org/packages/takepart-media/workflows)
+[![Statamic 6](https://img.shields.io/badge/Statamic-6-ff269e)](https://statamic.com)
+[![PHP 8.3+](https://img.shields.io/badge/PHP-8.3%2B-777bb4)](https://www.php.net)
 
----
+## Features
+
+- **Workflows as a state machine.** Define places and transitions per collection in YAML or in a visual graph editor. Every subject is a real Statamic entry.
+- **Assignments and approvals.** Assign people manually or by rules, gate transitions by group or role, and enforce the four-eyes principle.
+- **Controlled publishing.** Replace Statamic's publish button with workflow steps. Optionally lock editing to the current assignees and control who may publish revisions.
+- **Comments in context.** Comment on whole entries or individual passages, mention colleagues, and resolve threads.
+- **Notifications.** Step mails, scheduled reminders, mention mails and automatic reminders for users who have not activated their account yet.
+- **Dashboard and managers.** Personal queues, statistics and per-workflow listings with filters, history and content diffs.
+- **Content ageing (SLA).** Automatically flag published content as outdated after a configurable time.
+- **Translation and plain language.** Manage site versions per base entry, translate with DeepL and send content to a plain-language service.
+- **Extensible.** Add your own actions, mail types, assignment criteria, widgets and content field mappings.
 
 ## Requirements
 
 - PHP 8.3+
-- Statamic 6 (`statamic/cms: ^6.0`)
-- Laravel 11+ (Prompts and multi-select support)
-- Statamic Pro for the revision-loop feature (optional; everything else works
-  without Pro)
-
----
+- Statamic 6 (Laravel 12.40+ or 13)
+- Statamic Pro for revisions (optional; everything else works without it)
 
 ## Installation
 
-### 1. Require the package
-
-The addon is on [Packagist](https://packagist.org/packages/takepart-media/workflows):
-
 ```bash
 composer require takepart-media/workflows
-```
-
-The addon carries pre-built frontend assets in `resources/dist/build/`, so you
-do **not** need Node or `npm run build` on the target machine.
-
-Releases follow [Semantic Versioning](https://semver.org/). `composer require`
-pins to the current major version (e.g. `^1.0`); see
-[`CHANGELOG.md`](./CHANGELOG.md) before upgrading across a major version.
-
-### 2. Bootstrap the addon
-
-```bash
 php artisan workflows:install
 ```
 
-This runs the addon's migrations against a dedicated SQLite database
-(`database/workflow.sqlite`, auto-provisioned), publishes the CP JS/CSS, and
-then walks you through an interactive setup:
+The installer runs the migrations, publishes the CP assets and walks you through creating your first workflow. The package ships pre-built assets, so you don't need Node on your server.
 
-1. Pick a workflow type from the shipped examples.
-2. **Multi-select** which collections (from your Statamic project) this
-   workflow should govern — arrow keys to navigate, space to toggle, enter to
-   confirm.
-3. Optionally backfill existing entries into the workflow's initial or
-   finished state.
+Read the [installation guide](docs/en/installation.md) for prerequisites, dashboard setup and updates.
 
-The command is safe to re-run: if `resources/workflows/<type>.yaml` already
-exists it aborts without overwriting.
+## Documentation
 
----
-
-## Alternative: Local path repo (for developing the addon in-place)
-
-If you're actively working on the addon and want its edits to appear in the
-consuming project without a `git push` / `composer update` cycle:
-
-```json
-{
-  "repositories": [
-    { "type": "path", "url": "../statamic-workflows", "options": { "symlink": true } }
-  ],
-  "require": {
-    "takepart-media/workflows": "*"
-  }
-}
-```
-
-Then `composer update takepart-media/workflows`. Composer symlinks
-`vendor/takepart-media/workflows` to the local checkout, so `npm run build` in
-the addon repo makes changes visible after a browser reload — no publish step
-in between.
-
-For this setup you may also want `public/vendor/workflows/build/` as a symlink
-into the addon so newly built assets show up immediately:
-
-```bash
-rm -rf public/vendor/workflows/build
-ln -s ../../../../statamic-workflows/resources/dist/build public/vendor/workflows/build
-```
-
-**Caveat:** `php artisan vendor:publish --tag=workflows --force` (which
-`statamic:install` runs internally) overwrites this symlink with a real copy.
-After such commands, re-establish the symlink.
-
----
-
-## Upgrading
-
-```bash
-composer update takepart-media/workflows
-php artisan vendor:publish --tag=workflows --force
-```
-
-The addon carries its own migrations; they run on each `workflows:install`.
-When a release adds a migration (see [`CHANGELOG.md`](./CHANGELOG.md)), run
-`php artisan migrate` after the update. Running `workflows:install` again is
-safe too — it aborts on existing definitions and never overwrites.
-
----
-
-## Commands
-
-| Command                                                       | Purpose                                                                   |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `workflows:install`                                           | Interactive first-run setup: migrate, publish, pick type, pick collections, offer backfill |
-| `workflows:make <name>`                                       | Scaffold a blank workflow YAML (same scaffolder as "Create workflow" in the CP) |
-| `workflows:make <name> --from=postmanager`                    | Scaffold from a shipped example                                           |
-| `workflows:seed-states`                                       | Backfill workflow states for existing entries (idempotent)                |
-| `workflows:seed-states --workflow=<name>`                     | Restrict backfill to one workflow                                         |
-| `workflows:seed-states --redo`                                | Re-derive states even for previously seeded entries (untouched by humans) |
-| `workflows:transition-aged [--dry-run] [--workflow=<name>]`   | Auto-age published entries per `metadata.sla` (see [Scheduler](#scheduler)) |
-| `workflows:backfill-content-timestamp [--dry-run] [--workflow=<name>]` | Seed `content_updated_at` from Statamic's last-modified date for entries that have none yet — the clock the ageing counts from |
-| `workflow:dump <name> --format=mermaid`                       | Print a Mermaid state diagram for a workflow                              |
-| `php artisan vendor:publish --tag=workflows-config`           | Publish `config/workflows.php` for tuning                                  |
-| `php artisan vendor:publish --tag=workflows-translations`     | Publish `lang/de` + `lang/en` for translation overrides                    |
-
----
-
-## Configuration (`config/workflows.php`)
-
-Publish with `php artisan vendor:publish --tag=workflows-config`, then tune:
-
-| Key                    | Default              | Purpose                                                                                                                                                            |
-| ---------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `database`             | dedicated SQLite     | Redirect workflow state to your primary DB if you don't want a separate file                                                                                       |
-| `revisions`            | `true`               | Whether the engine writes Statamic revisions on transitions (needs Statamic Pro)                                                                                   |
-| `privileged_groups`    | `['admins']`         | Groups that bypass every workflow gate                                                                                                                              |
-| `post_creator_groups`  | `['admins']`         | Fallback group for the "New post" button when a workflow does not set `metadata.post_creator_groups`                                                                |
-| `nav_section`          | `'Workflows'`        | **Deprecated, unused.** The addon no longer has its own nav section; the managers are reached from the `workflows_overview` dashboard widget                      |
-| `dashboard_widgets`    | 7 workflow widgets   | Dashboard layout used when `config/statamic/cp.php → widgets` is empty; your own list replaces it, `false` disables it (DOCS.md § 9) |
-| `header_responsibles`  | both `null`          | The "Responsible" row of the user-header dashboard card: `group` plus the `user_field` read on both sides. A member of the group counts as responsible when their values in that field overlap the current user's. Both `null` → no row |
-| `translation.plain_language.max_polls` | `5` | Polls one submission is waited out before it counts as dead. One poll is one minute at the scheduled tick. Env: `PLAIN_LANGUAGE_MAX_POLLS` |
-| `translation.plain_language.max_attempts` | `3` | Submissions a rewrite gets in total, the first included. A failed submission is sent to the service again; only after the last one does the version move to the workflow's failure place. `1` disables retries. Env: `PLAIN_LANGUAGE_MAX_ATTEMPTS` |
-| `sla_scheduler`        | `true`               | Register the hourly `workflows:transition-aged` tick. Set to `false` (or `WORKFLOWS_SLA_SCHEDULER=false` in `.env`) to disable auto-aging without touching code    |
-| `account_reminder.enabled` | `true` | After every transition, mail assignees who never activated their account a fresh activation link — again only once their last link has expired. Env: `WORKFLOWS_ACCOUNT_REMINDER` |
-| `account_reminder.expire_hours` | `null` | Activation link validity in hours; `null` keeps Statamic's duration. Also applies to CP invitations when set. Env: `WORKFLOWS_ACTIVATION_EXPIRE_HOURS` |
-
-**Extending the addon:** custom action types, mail types, assignment criteria, dashboard widgets, content fields and the translation services each have their own page under [`docs/extending/en/`](docs/extending/en/README.md).
-
----
-
-## Localization
-
-Frontend labels in the CP use the addon's `workflows::messages` translation
-namespace. To override for your project, publish and edit:
-
-```bash
-php artisan vendor:publish --tag=workflows-translations
-```
-
-Files land in `lang/vendor/workflows/{de,en}/messages.php`. Add keys like
-`state_<place_handle>` and `action_<transition_handle>` to name your custom
-places and transitions in each locale. Missing translations fall back to the
-YAML `label` field, then to a humanized handle — nothing crashes, just gets
-less pretty.
-
----
-
-## Writing a workflow
-
-Minimal example (edit `resources/workflows/my_flow.yaml`):
-
-```yaml
-name: my_flow
-type: state_machine
-marking_store: { type: method, property: current_state }
-collections: [posts]
-initial_place: draft
-metadata:
-  label: 'Post Update'
-  nav: { label: 'Posts', slug: post-manager, icon: newspaper, order: 1 }
-places:
-  draft:
-    label: Draft
-    metadata: { required_group: editor }
-  published:
-    label: Published
-    metadata: { required_group: editor, allow_publish: true }
-transitions:
-  publish:
-    from: draft
-    to: published
-    metadata: { label: 'Publish', required_group: editor }
-```
-
-Key metadata fields the addon reads:
-
-- `metadata.label`, `metadata.description` — human-readable workflow name
-- `metadata.nav.{label,slug,icon,order}` — gives this workflow its manager page at `/cp/workflows/<slug>` (linked from the `workflows_overview` widget) and a child under the super-admin "Settings > Workflows" nav entry. `label` wins over the `nav.<slug>` translation and then applies in every CP language; leave it empty to let the translation supply a language-following title
-- `metadata.detail: translation` — activates the site-by-site translation UI
-- `metadata.default_assignee_group` — group used for auto-assignments and
-  cross-site distribution
-- `metadata.assign_creator: true` — assign the entry's creator on top of
-  `default_assignee_group` at creation
-- `metadata.post_creator_groups` — groups allowed to see "New post" in this
-  workflow's manager (overrides the config default)
-- `metadata.seed_published_place` — override which place counts as "finished"
-  for backfill (only needed when no place has `allow_publish: true`)
-- `place.metadata.required_group` — group required to work in this place
-- `place.metadata.allow_publish: true` — entering this place publishes the entry
-- `place.metadata.assign_group` — group auto-assigned on entering this place
-- `transition.metadata.required_group` / `required_assignee` — gate the button
-- `transition.metadata.label` — human-readable transition label
-- `transition.metadata.variant` — `default`, `primary`, `danger`, or `filled`
-  for the transition button color
-
-### Content fields (Inhaltsfelder)
-
-`metadata.content_fields` lists, in reading order, the top-level blueprint
-fields that are a workflow's content. The instance summary, comment anchors
-and the plain-language rewrite read only these fields; nested structure inside
-them (Replicator, Grid, Group, Bard sets) is walked automatically. Leave it
-empty for auto-detection: `content_fields.intro` + `body` from the config if
-the blueprint has them, otherwise the first Bard, Markdown or Replicator field.
-Pick them in the graph editor (workflow settings, section **Content**) or in the "Create
-workflow" modal. Details: [`DOCS.md`](./DOCS.md) §§ 2 and 7.
-
-Any group handle referenced must exist in `resources/users/groups.yaml`. The
-install command does not seed groups — that's the project's responsibility.
-
-The full schema, including SLA, history-fields, and the revision loop, is in
-[`DOCS.md`](./DOCS.md).
-
----
-
-## Workflow editor
-
-Super admins don't have to edit YAML by hand: **Settings › Workflows** lists
-every workflow (active or not), and each row opens a graph editor at
-`/cp/workflows/settings/<handle>`.
-
-- **Graph** — places and transitions are both nodes; lines connect a place to
-  a transition (`from`) and a transition to a place (`to`). Drawing a line from
-  place to place creates the transition in between. Node positions are stored
-  in `metadata.editor` (no runtime effect); without them the graph is laid out
-  automatically.
-- **Panels** — select a node to edit it in the side panel (general,
-  permissions, actions, connections & usage). Workflow-wide settings
-  (permissions, localization or SLA, collections, order, advanced) open in a
-  stack from the toolbar.
-- **Saving** — one save writes the whole definition (with a backup under
-  `storage/app/workflows/backups/`, see `editor_backups`). Problems are shown
-  live at the node and the field; the server validates again on save. Deleting
-  a place is deferred until the save, and entries still in it must be moved to
-  another place. A save over a file changed in the meantime asks first (409).
-- **Handles are immutable** once saved — labels are what people see.
-- **Creating workflows** — "Create workflow" on the index: blank, from a
-  shipped example, or as a copy of an existing one. New workflows start
-  **inactive**; switch them on from their row (or the editor's toolbar) once
-  they are ready. `workflows:make` does the same from the CLI.
-- **Unsaved changes** are guarded (leaving the page asks first); undo/redo
-  covers every edit.
-
-| Shortcut | Action |
+| | |
 | --- | --- |
-| `Ctrl/⌘+S` | Save |
-| `Ctrl/⌘+Z`, `Ctrl/⌘+Shift+Z` / `Ctrl+Y` | Undo, redo |
-| `Ctrl/⌘+,` | Workflow settings |
-| `Esc` | Close settings / menu, deselect, collapse the panel |
-| `Delete` / `Backspace` | Delete the selection |
-| `Tab` | Add menu next to the selected node |
-| `Enter` | Open the focused node's panel |
-| Arrow keys (`Shift`: further) | Nudge the node |
-| `1` / `0` / `+` / `-` | Fit / 100 % / zoom in / zoom out |
-| `Shift+L` | Arrange automatically |
+| [Installation](docs/en/installation.md) | Requirements, installer, updates |
+| [Configuration](docs/en/configuration.md) | Every option in `config/workflows.php` |
+| [Defining workflows](docs/en/workflows.md) | YAML structure and metadata reference |
+| [Workflow editor](docs/en/editor.md) | The graph editor and workflow settings |
+| [Working with workflows](docs/en/using.md) | Dashboard, managers, detail page, comments |
+| [Notifications](docs/en/notifications.md) | Mails, reminders and delivery |
+| [Translation & plain language](docs/en/localization.md) | Localization workflows, DeepL, plain language |
+| [Content ageing (SLA)](docs/en/sla.md) | Flagging and moving outdated content |
+| [Permissions](docs/en/permissions.md) | Who can do what |
+| [Commands & scheduler](docs/en/commands.md) | Artisan commands and scheduled tasks |
+| [Troubleshooting](docs/en/troubleshooting.md) | Common problems |
+| [Extending](docs/en/extending/README.md) | Custom actions, mail types and more |
 
-Details (payload, validation, versioning, architecture) are in
-[`DOCS.md`](./DOCS.md) §§ 4, 5.9 and 11.
+The documentation is also available [in German](docs/de/README.md).
 
----
+## Changelog
 
-## Scheduler
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
-The SLA aging feature (moving long-published entries into the ageing steps the
-workflow declares in `metadata.sla`) runs on Laravel's scheduler. The addon
-registers the hourly tick itself in `ServiceProvider::schedule()`; Laravel only
-fires it when `php artisan schedule:run` is called on cron in the host project.
+## Contributing
 
-**Production** — add one crontab entry as the PHP user:
+Bug reports and feature requests are welcome as [GitHub issues](https://github.com/takepart-media/statamic-workflows/issues).
 
-```
-* * * * * cd /path/to/project && php artisan schedule:run >> /dev/null 2>&1
-```
-
-Managed hosts (Forge, Ploi, Runcloud, …) usually have a "Scheduled Jobs" UI
-that adds exactly this line — pick "every minute".
-
-**Local development** — Herd/Valet don't run cron. Options:
-
-```bash
-php artisan schedule:run    # fire anything due right now
-php artisan schedule:work   # foreground worker, ticks every minute until Ctrl+C
-```
-
-`schedule:work` is what you want while testing SLA thresholds. Without either,
-`workflows:transition-aged` runs only when invoked by hand — `--dry-run` shows
-what it would do.
-
----
-
-## Multi-site
-
-The queue table renders one column per site and reads each site's flag from
-its own `shortLocale()` (via the shipped `flag-icons` CSS). The translation
-manager additionally groups an entry's localizations by base site, following
-the `{base}_{lang}` convention (e.g. `main` + `main_en`). Override
-`WorkflowController::siteGroup()` if your project needs a different scheme.
-
----
-
-## Fieldtypes and widgets
-
-**Fieldtypes**:
-
-- `workflow_actions` — the transition-button panel inside the entry editor.
-  **Auto-injected** into every blueprint of a governed collection via the
-  `EntryBlueprintFound` listener; no manual blueprint edit needed.
-- `revision_status` — optional listing column showing whether a Statamic
-  revision is pending. Add it to a blueprint if you want it.
-
-**Widgets**:
-
-If `config/statamic/cp.php → widgets` is empty (Statamic's default), the addon
-fills the dashboard from `workflows.dashboard_widgets` — the layout below. Any
-widget list of your own there replaces that default entirely; set
-`'dashboard_widgets' => false` to disable it (details in DOCS.md § 9):
-
-```php
-'widgets' => [
-    ['type' => 'workflows_user_header', 'width' => 100],
-    ['type' => 'workflows_queue_stats', 'width' => 100],
-    ['type' => 'workflows_my_queue', 'width' => 100, 'limit' => 7],
-    ['type' => 'workflows_watched', 'width' => 50, 'limit' => 5],
-    ['type' => 'workflows_created_by_me', 'width' => 50, 'limit' => 5],
-    ['type' => 'workflows_overview', 'width' => 100, 'per_page' => 25],
-    ['type' => 'workflows_status', 'width' => 100],
-],
-```
-
-- `workflows_user_header` — the current user's name, groups and responsibles.
-- `workflows_queue_stats` — four key figures (my queue, project-wide counts, failed translations with a retry button).
-- `workflows_status` — one doughnut per workflow with its state distribution.
-- `workflows_my_queue` — posts assigned to the current user, across all workflows, paginated (`limit` = rows per page, `workflows`).
-- `workflows_created_by_me` — posts the current user created, paginated (`limit` = rows per page, `workflows`).
-- `workflows_watched` — posts the current user watches, paginated (`limit` = rows per page, `workflows`).
-- `workflows_overview` — "All posts": one table across every active workflow (new workflows appear automatically), with a workflow column linking to each manager, one state column per site, workflow/state/stale filters and "new post" buttons. Config: `workflows` (restrict), `per_page` (default 15). This is the entry point to the per-workflow managers, which have no nav entry.
-- `workflows_assigned_posts` — posts assigned to the current user in ONE workflow, resolved from `collection` (`limit`).
-
----
-
-## Diagrams
-
-```bash
-# Print Mermaid source for a workflow
-php artisan workflow:dump postmanager --format=mermaid
-
-# Render all workflows to SVG + index.html (needs npm deps)
-cd vendor/takepart-media/workflows
-npm install
-npm run workflows:build
-```
-
----
-
-## Contributing / developing the addon itself
-
-The addon repo is standalone — clone it separately from any consuming project:
+To work on the addon itself:
 
 ```bash
 git clone git@github.com:takepart-media/statamic-workflows.git
 cd statamic-workflows
-npm install
+composer install && npm install
+vendor/bin/pest && npm test
 ```
 
-For live development against a real project, use the local-path-repo setup
-described under [Installation → Local path repo](#alternative-local-path-repo-for-developing-the-addon-in-place).
+After changing anything in `resources/js` or `resources/css`, run `npm run build` and commit the result in `resources/dist/build`. To test against a real project, see [Develop the addon locally](docs/en/installation.md#develop-the-addon-locally).
 
-**Frontend edits** — after every change to `resources/js/**` or
-`resources/css/**`, run:
+## Support
 
-```bash
-npm run build
-```
-
-The graph editor is a separate lazy chunk (`WorkflowEditor-*.js`); the main
-`addon-*.js` bundle must not grow with it. Neither may import Vue itself —
-after a build, `grep -c 'from"vue"\|from "vue"' resources/dist/build/assets/*.js`
-must print 0 for every file.
-
-**Tests** — PHP (Pest on Orchestra Testbench, in-memory workflow DB and a
-temp Stache, never your real content) and the frontend model (vitest):
-
-```bash
-composer install
-vendor/bin/pest      # or: composer test
-npm test
-```
-
-Harness: `tests/TestCase.php`, `tests/Concerns/CreatesContent.php`,
-`tests/Support/TestDefinitionLoader.php` (DOCS.md § 11 → Tests).
-
-The bundle under `resources/dist/build/` is **committed** to the repo so
-consumers don't need Node. Include the resulting diff in your commit. If you
-forget, consuming projects will boot with a stale manifest and your changes
-will not reach the browser.
-
-Merge conflicts inside `resources/dist/build/` are noise — never resolve them
-by hand. Always take one side, then re-run `npm run build` and commit.
-
-**Backend edits** — pure PHP changes need no build. Composer's symlink (in the
-consuming project) picks them up on the next request.
-
----
+Questions and licensing: [it@takepart-media.de](mailto:it@takepart-media.de)
 
 ## License
 
-Proprietary — © TAKEPART Media Science + GmbH. The source is public for
-inspection; using it requires a license. See [`LICENSE.md`](./LICENSE.md).
+Workflows is commercial software by TAKEPART Media Science + GmbH. The source code is public for inspection; using it requires a license. See [LICENSE.md](LICENSE.md).

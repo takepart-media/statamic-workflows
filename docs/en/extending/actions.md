@@ -1,6 +1,6 @@
 # Custom action types
 
-🇩🇪 [Deutsch](../de/actions.md)
+🇩🇪 [Deutsch](../../de/extending/actions.md)
 
 Attach your own actions to transitions and places, and run your own project code whenever a transition is applied.
 
@@ -307,7 +307,8 @@ $reviewed = collect($placeActions)->contains('type', 'legally_reviewed');
 
 - [Custom mail types](mail-types.md)
 - [Assignment criteria](assignment-criteria.md) – the same `options` shapes
-- [DOCS.md](../../../DOCS.md), section "Eigene Action-Typen aus dem Projekt" (German)
+- [Defining workflows](../workflows.md) – where actions sit on transitions and places
+- [Workflow editor](../editor.md) – adding actions in the settings editor
 - [config/workflows.php](../../../config/workflows.php) – comment block above `actions`
 - [src/Contracts/WorkflowAction.php](../../../src/Contracts/WorkflowAction.php)
 - [src/Workflow/ActionContext.php](../../../src/Workflow/ActionContext.php)
@@ -315,4 +316,4 @@ $reviewed = collect($placeActions)->contains('type', 'legally_reviewed');
 
 ---
 
-[Overview](README.md) · [Custom mail types](mail-types.md) →
+← [Troubleshooting](../troubleshooting.md) · [Overview](README.md) · [Custom mail types](mail-types.md) →

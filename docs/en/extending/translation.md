@@ -1,6 +1,6 @@
 # Translation & plain language
 
-🇩🇪 [Deutsch](../de/translation.md)
+🇩🇪 [Deutsch](../../de/extending/translation.md)
 
 Connect localization workflows to DeepL for translations and to a plain-language service ("Einfache Sprache").
 
@@ -186,7 +186,8 @@ Log keys: `workflows.translation.plain_language_request`, `…_response`, `…_u
 ## See also
 
 - [Content fields](content-fields.md)
-- [DOCS.md](../../../DOCS.md): "Lokalisierungs-Workflows (`detail: translation`)", "Rückschreiben pro Textblatt (Format `sections`)", "SEO-Texte gehen nur an DeepL", "Einfache Sprache leitet title/description ab", "Bestandsdaten: `workflows:backfill-plain-language`", §15 (scheduler cron)
+- [Translation & plain language](../localization.md) – localization workflows, SEO handling and the backfill command
+- [Commands & scheduler](../commands.md) – scheduler cron and `workflows:backfill-plain-language`
 - [config/workflows.php](../../../config/workflows.php)
 - [src/Translation/DeeplConfig.php](../../../src/Translation/DeeplConfig.php)
 - [src/Translation/DeeplTranslator.php](../../../src/Translation/DeeplTranslator.php)

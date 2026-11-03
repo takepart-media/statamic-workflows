@@ -1,6 +1,6 @@
 # Verantwortliche im Dashboard-Header
 
-🇬🇧 [English](../en/header-responsibles.md)
+🇬🇧 [English](../../en/extending/header-responsibles.md)
 
 Zeige im Dashboard-Header, an wen sich eine Person bei Fragen zu ihren Themen wenden kann.
 
@@ -115,7 +115,8 @@ Eine Redakteurin mit `entity: [gesundheit]` sieht unter „Zugehörigkeit“ den
 
 - [Zuweisungskriterien](assignment-criteria.md)
 - [Dashboard-Widgets](dashboard-widgets.md)
-- [DOCS.md](../../../DOCS.md), Abschnitt „`UserHeader` (`workflows_user_header`)“
+- [Mit Workflows arbeiten](../using.md) – das Dashboard und seine Widgets
+- [Konfiguration](../configuration.md)
 - [config/workflows.php](../../../config/workflows.php), Kommentar zu `header_responsibles`
 - [src/Widgets/UserHeader.php](../../../src/Widgets/UserHeader.php)
 

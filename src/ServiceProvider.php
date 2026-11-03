@@ -272,7 +272,7 @@ class ServiceProvider extends AddonServiceProvider
      * Register scheduled tasks with the Laravel scheduler. Statamic's
      * AddonServiceProvider calls this from bootSchedule() guarded by
      * runningInConsole(). Requires `php artisan schedule:run` on cron in the
-     * host project — see DOCS.md §15.
+     * host project — see docs/en/commands.md.
      */
     public function schedule(\Illuminate\Console\Scheduling\Schedule $schedule): void
     {

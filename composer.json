@@ -41,7 +41,7 @@
         "email": "it@takepart-media.de",
         "issues": "https://github.com/takepart-media/statamic-workflows/issues",
         "source": "https://github.com/takepart-media/statamic-workflows",
-        "docs": "https://github.com/takepart-media/statamic-workflows/blob/main/README.md"
+        "docs": "https://github.com/takepart-media/statamic-workflows/blob/main/docs/en/README.md"
     },
     "extra": {
         "statamic": {

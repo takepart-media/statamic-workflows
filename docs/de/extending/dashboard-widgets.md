@@ -1,6 +1,6 @@
 # Dashboard-Widgets
 
-🇬🇧 [English](../en/dashboard-widgets.md)
+🇬🇧 [English](../../en/extending/dashboard-widgets.md)
 
 Stelle das CP-Dashboard aus den acht Workflow-Widgets des Addons zusammen.
 
@@ -142,7 +142,7 @@ Setze bei `workflows_queue_stats` und `workflows_overview` dieselbe Liste, damit
 > Bei den Listen-Widgets ist `limit` die Seitengröße. Alle Zeilen werden ausgeliefert und im Browser seitenweise angezeigt.
 
 > [!NOTE]
-> Das Beispiel in DOCS.md setzt `'per_page' => 25`. Der mitgelieferte Standard setzt keinen Wert, es gilt also `15`.
+> Der mitgelieferte Standard setzt kein `per_page`, es gilt also `15`.
 
 ## Fehlerbehebung
 
@@ -156,8 +156,8 @@ Setze bei `workflows_queue_stats` und `workflows_overview` dieselbe Liste, damit
 ## Siehe auch
 
 - [Verantwortliche im Dashboard-Header](header-responsibles.md)
-- [DOCS.md](../../../DOCS.md), Abschnitt „Dashboard-Widgets“
-- [Integration.md](../../../Integration.md), Abschnitt „Dashboard-Widget“
+- [Mit Workflows arbeiten](../using.md) – was jedes Widget zeigt
+- [Installation](../installation.md) – die Widgets ins Dashboard einbinden
 - [config/workflows.php](../../../config/workflows.php), Kommentar zu `dashboard_widgets`
 - [src/ServiceProvider.php](../../../src/ServiceProvider.php)
 - [src/Widgets/](../../../src/Widgets/)

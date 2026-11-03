@@ -1,6 +1,6 @@
 # Extending Workflows
 
-🇩🇪 [Deutsch](../de/README.md)
+🇩🇪 [Deutsch](../../de/extending/README.md)
 
 Tailor the Workflows addon to your project with your own actions, mails, assignment rules, dashboard widgets and translation services, without changing the addon itself.
 
@@ -33,9 +33,9 @@ Then add the extensions you need to `config/workflows.php`.
 
 ## Not on these pages
 
-- **Project-wide groups and switches** such as `privileged_groups`, `mail_delivery`, `sla_scheduler` or `account_reminder` are described in the comments of [`config/workflows.php`](../../../config/workflows.php). The main ones are also in the [Integration Guide](../../../Integration.md).
-- **Per-workflow settings** such as the four-eyes principle or comment permissions are set in the workflow editor and described in [DOCS.md](../../../DOCS.md).
+- **Project-wide groups and switches** such as `privileged_groups`, `mail_delivery`, `sla_scheduler` or `account_reminder` are described in the comments of [`config/workflows.php`](../../../config/workflows.php). The main ones are also covered in [Configuration](../configuration.md).
+- **Per-workflow settings** such as the four-eyes principle or comment permissions are set in the workflow editor and described in [Workflow editor](../editor.md).
 
 ---
 
-[Get started: Custom action types](actions.md) →
+← [Docs home](../README.md) · [Get started: Custom action types](actions.md) →

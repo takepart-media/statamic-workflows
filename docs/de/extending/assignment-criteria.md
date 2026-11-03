@@ -1,6 +1,6 @@
 # Zuweisungskriterien
 
-🇬🇧 [English](../en/assignment-criteria.md)
+🇬🇧 [English](../../en/extending/assignment-criteria.md)
 
 Mit eigenen Zuweisungskriterien entscheidest du anhand von Feldern an Person und Beitrag, wem ein Beitrag zugewiesen wird.
 
@@ -212,7 +212,8 @@ actions:
 ## Siehe auch
 
 - [Verantwortliche im Dashboard-Header](header-responsibles.md)
-- [DOCS.md](../../../DOCS.md), Abschnitt „Zuweisungs-Kriterien“
+- [Workflows definieren](../workflows.md) – die Action `user_assignment`
+- [Workflow-Editor](../editor.md) – Kriterien im Einstellungs-Editor wählen
 - [config/workflows.php](../../../config/workflows.php), Kommentar zu `assignment_criteria`
 - [src/Workflow/AssignmentCriteria.php](../../../src/Workflow/AssignmentCriteria.php)
 - [src/Workflow/AssignmentCandidates.php](../../../src/Workflow/AssignmentCandidates.php)

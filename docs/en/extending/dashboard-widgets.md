@@ -1,6 +1,6 @@
 # Dashboard widgets
 
-🇩🇪 [Deutsch](../de/dashboard-widgets.md)
+🇩🇪 [Deutsch](../../de/extending/dashboard-widgets.md)
 
 Build the CP dashboard from the addon's eight workflow widgets.
 
@@ -142,7 +142,7 @@ Set the same list on `workflows_queue_stats` and `workflows_overview` so the fig
 > For the list widgets, `limit` is the page size. All rows are delivered and paged in the browser.
 
 > [!NOTE]
-> The example in DOCS.md sets `'per_page' => 25`. The shipped default sets no value, so `15` applies.
+> The shipped default sets no `per_page`, so `15` applies.
 
 ## Troubleshooting
 
@@ -156,8 +156,8 @@ Set the same list on `workflows_queue_stats` and `workflows_overview` so the fig
 ## See also
 
 - [Dashboard header responsibles](header-responsibles.md)
-- [DOCS.md](../../../DOCS.md), section "Dashboard-Widgets"
-- [Integration.md](../../../Integration.md), section "Dashboard-Widget"
+- [Working with workflows](../using.md) – what each widget shows
+- [Installation](../installation.md) – adding the widgets to the dashboard
 - [config/workflows.php](../../../config/workflows.php), comment on `dashboard_widgets`
 - [src/ServiceProvider.php](../../../src/ServiceProvider.php)
 - [src/Widgets/](../../../src/Widgets/)

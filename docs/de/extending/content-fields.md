@@ -1,6 +1,6 @@
 # Inhaltsfelder
 
-🇬🇧 [English](../en/content-fields.md)
+🇬🇧 [English](../../en/extending/content-fields.md)
 
 Mit `content_fields` sagst du dem Addon, wie die Felder deiner Blueprints heißen: Titel, Intro, Body, SEO und Entity-Bezug.
 
@@ -131,7 +131,9 @@ Der Einfache-Sprache-Dienst bekommt die Module als `modules` und jeden beschrän
 ## Siehe auch
 
 - [Übersetzung & Einfache Sprache](translation.md)
-- [DOCS.md](../../../DOCS.md): §7 „Content-Preview: `EntryContentPreview`“, „Config `content_fields`“, §5.10 „Content-Preview & History-Diff“, „Rückschreiben pro Textblatt (Format `sections`)“
+- [Workflow-Editor](../editor.md) – die Inhaltsfelder eines Workflows wählen
+- [Mit Workflows arbeiten](../using.md) – Inhaltsvorschau und Verlaufs-Diff
+- [Übersetzung & Einfache Sprache](../localization.md) – wie die Inhaltsfelder übersetzt und umgeschrieben werden
 - [README.md](../../../README.md): „Content fields (Inhaltsfelder)“
 - [config/workflows.php](../../../config/workflows.php)
 - [src/Support/ContentFields.php](../../../src/Support/ContentFields.php)

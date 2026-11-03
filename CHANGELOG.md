@@ -1,182 +1,181 @@
 # Changelog
 
-Alle nennenswerten Änderungen am Addon. Format nach
-[Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionen nach
-[Semantic Versioning](https://semver.org/lang/de/).
+All notable changes to this addon. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
 ## [1.0.0] - 2026-11-03
 
-Erstes Release auf Packagist.
+First release on Packagist.
 
-### Hinzugefügt
+### Added
 
-- **Doku je Erweiterungspunkt** unter `docs/extending/` (de/en): Actions,
-  Mail-Typen, Zuweisungskriterien, Header-Verantwortliche, Dashboard-Widgets,
-  Inhaltsfelder, Übersetzung.
-- **Automatische Erinnerung „Account aktivieren“**: Nach jeder Transition
-  bekommen Zugewiesene, die ihren Account noch nicht aktiviert haben, eine Mail
-  mit einem frischen Aktivierungslink. Erneut erinnert wird erst, wenn der
-  letzte Link abgelaufen ist. Die Mail nennt die Gültigkeit konkret.
-  Einstellungen: `workflows.account_reminder.enabled` und
-  `workflows.account_reminder.expire_hours` (Stunden; Standard ist die Dauer
-  aus Statamic).
-- **Einstellung „Revisionen“** im Workflow-Editor (Collections): schaltet
-  Revisionen für alle Collections des Workflows ein oder aus und schreibt das
-  beim Speichern in die Collections. Mit dem Hinweis, dass Statamic Pro nötig
-  ist, und einer Warnung, wenn Pro fehlt oder Revisionen global aus sind.
-- **Einstellung „Revisionen veröffentlichen dürfen“** (Zeilen aus Art
-  und Einträgen, z. B. Gruppe X und Benutzer Y, Z): Solange eine Arbeitskopie existiert, dürfen nur Super-Admins und
-  diese Auswahl sie live stellen.
-- **Einstellung „QS-Hinweise anzeigen“** im Einfache-Sprache-Workflow
-  (`metadata.qs_notes_visible`, `metadata.qs_notes_audience`): blendet den
-  Prüfbericht für alle aus oder zeigt ihn nur Super-Admins und einer Auswahl aus
-  Gruppen, Rollen oder Benutzern.
-- **Einstellung „Nur Zuständige dürfen bearbeiten“** (`metadata.assignees_only_edit`,
-  Einstellungen › Berechtigungen): Beiträge der Collections des Workflows
-  bearbeiten nur die aktuell Zuständigen, alle anderen sehen sie
-  schreibgeschützt. Super-Admins und eine einstellbare Ausnahme (`edit_exempt`,
-  Gruppen, Rollen oder Benutzer) dürfen immer.
-- **Einstellungen „Kommentare als erledigt markieren dürfen“ und „Kommentare
-  löschen dürfen“** (`metadata.comment_resolvers`, `metadata.comment_deleters`,
-  Einstellungen › Berechtigungen; Zeilen aus Art und Einträgen). Super-Admins
-  dürfen immer, eigene Kommentare darf jeder löschen. Ohne Einstellung gilt die
-  bisherige Regel.
-- **4-Augen-Prinzip** (`metadata.four_eyes`, Einstellungen › Berechtigungen):
-  Ein Beitrag geht bei der nächsten Transition nie an die Person zurück, die ihn
-  zuletzt weitergegeben hat, weder manuell noch automatisch. Bleibt sonst
-  niemand, öffnet sich die Auswahl mit einer eigenen Zielgruppe (Gruppen, Rollen
-  oder Personen) und einem Hinweis.
-- **Mail „Veröffentlicht“** (`mail_type: published`) für die `mail`-Action: geht
-  an alle, die den Beitrag beobachten, nicht an die Zugewiesenen. Mail-Typen
-  können dafür `recipients: watchers` deklarieren.
-- **Kommentaranzahl in den Dashboard-Widgets** „Meine Warteschlange“, „Meine
-  Beiträge“ und „Beobachtet“: offene Kommentare grau, ungelesene als `+N` in
-  Amber — wie in den Listen.
-- **Filter „Zugewiesen an“ und „Autor“** in der Workflow-Übersicht und auf der
-  Manager-Seite: zeigt nur Beiträge, bei denen die Person in irgendeiner
-  Sprachfassung zugewiesen bzw. Autor ist.
-- **Filter „Wartet länger als“** (3 / 7 / 14 / 30 Tage) in der Workflow-Übersicht
-  und auf der Manager-Seite: Beiträge, von denen eine Sprachfassung länger als
-  das im aktuellen Status steht. Status ohne ausgehende Transition (z. B.
-  „Veröffentlicht“) zählen nicht als Warten.
-- **Graph-Editor** für Workflows unter Settings › Workflows › `<Workflow>`:
-  Places und Transitions als Knoten, Bearbeiten in Seitenpanels, Undo/Redo,
-  Tastaturkürzel, Live-Validierung, versioniertes Speichern mit Backups,
-  verzögertes Löschen von Places mit Migration. Ersetzt den früheren
-  Formular-Editor. „Workflow anlegen" (leer, aus Vorlage, als Kopie) im CP und
-  per `workflows:make`. (DOCS.md § 4, § 5.9, § 11)
-- **Inhaltsfelder pro Workflow** (`metadata.content_fields`): geordnete Liste der
-  Top-Level-Felder, die Zusammenfassung, Kommentare und Einfache Sprache lesen.
-  Ohne Angabe Auto-Erkennung (`content_fields.intro`/`body` aus der Config, sonst
-  erstes Bard-/Markdown-/Replicator-Feld). Validierung im Writer
-  (`writer_content_field*`), Linter-Warnungen (`lint_content_field_partial`,
-  `lint_content_field_auto_none`). Auswahl im Editor (Einstellungen › „Inhalt")
-  und im Anlegen-Modal. (DOCS.md § 2)
-- **Generische Inhalts-Zusammenfassung** (`ContentWalker`): liest jede Struktur
-  der Inhaltsfelder (Replicator, Grid, Group, Bard-Sets, beliebig verschachtelt)
-  ohne projektspezifische Set-Zuordnung. Darstellung als Lesefluss; für
-  Super-Admins Handle-/UUID-Chips hinter „Technische Details". (DOCS.md § 7)
-- **Einfache Sprache pro Textblatt**: jedes Stück Prosa der Inhaltsfelder geht
-  einzeln markiert an den Dienst (`<section data-wf-leaf>`) und wird strikt
-  zurückgeschrieben — fehlende oder fremde Abschnitte verwerfen die Antwort,
-  der Retry reicht neu ein. Neue Option `metadata.plain_language_skip_fields`.
-  Diagnose per `workflows:plain-language-poll --dry-run` / `--diff`.
-  (DOCS.md § 2 → „Rückschreiben pro Textblatt")
-- **Mail-Hinweis im Assignee-Picker**: Bei manueller Zuweisung steht neben jeder
-  Person „Erhält E-Mail", wenn der Schritt ihr eine Benachrichtigung schickt.
-  Entschieden von denselben Regeln wie der Versand
-  (`WorkflowNotifier::stepMail()` / `reaches()`). (DOCS.md § „Hinweis im
-  Assignee-Picker")
-- **Mail-Schalter im Assignee-Picker**: „Benachrichtigung per E-Mail senden",
-  standardmäßig an. Aus = der Schritt übergibt ohne Mail (`notify: false` →
-  `WorkflowTransitioner::apply(notify: false)`). (DOCS.md § „Mail-Schalter im
-  Assignee-Picker")
-- **Selbstzuweisung verhindern** (`metadata.self_assignment`): Im manuellen
-  Picker fehlt die klickende Person. Würde eine Zuweisung den Beitrag nur an
-  sie zurückgeben, öffnet sich stattdessen der Picker mit einer einstellbaren Zielgruppe
-  (Gruppe, Rolle oder Person, ohne den Klickenden). Darüber steht ein
-  anpassbarer Hinweistext. Einstellbar im Graph-Editor unter Einstellungen ›
-  Berechtigungen. (DOCS.md § „Selbstzuweisung verhindern")
-- **Zuweisen heißt beobachten**: Wer einem Beitrag neu zugewiesen wird,
-  beobachtet ihn automatisch (`WorkflowAssigneeStore::set()`). Bewusstes
-  Entbeobachten bleibt bestehen. Nicht-mehr-Beobachten zeigt jetzt ein
-  durchgestrichenes Lesezeichen. (DOCS.md § `Watched`)
-- **PHP-Testsuite** (Pest + Orchestra Testbench, in-memory DB, temporärer
-  Stache): `vendor/bin/pest` bzw. `composer test`. (DOCS.md § 11 → Tests)
+- **Documentation** in English ([`docs/en`](docs/en/README.md)) and German
+  ([`docs/de`](docs/de/README.md)): installation, configuration, defining
+  workflows, the editor, daily use, notifications, translation, content ageing,
+  permissions, commands, troubleshooting and one page per extension point.
+- **Automatic "Activate account" reminder**: after every transition, assignees
+  who have not yet activated their account get an email with a fresh
+  activation link. They are reminded again only once the last link has
+  expired. The email states the exact validity period. Settings:
+  `workflows.account_reminder.enabled` and
+  `workflows.account_reminder.expire_hours` (hours; defaults to Statamic's
+  duration).
+- **"Revisions" setting** in the workflow editor (Collections): turns
+  revisions on or off for all collections of the workflow and writes this to
+  the collections on save. Includes a note that Statamic Pro is required, and
+  a warning if Pro is missing or revisions are disabled globally.
+- **"May publish revisions" setting** (rows of kind and entries, e.g. group X
+  and users Y, Z): while a working copy exists, only super admins and this
+  selection may publish it.
+- **"Show QA notes" setting** in the plain-language workflow
+  (`metadata.qs_notes_visible`, `metadata.qs_notes_audience`): hides the QA
+  report for everyone or shows it only to super admins and a selection of
+  groups, roles or users.
+- **"Only assignees may edit" setting** (`metadata.assignees_only_edit`,
+  Settings › Permissions): entries in the workflow's collections can only be
+  edited by their current assignees; everyone else sees them read-only. Super
+  admins and a configurable exemption (`edit_exempt`, groups, roles or users)
+  can always edit.
+- **"May mark comments as done" and "May delete comments" settings**
+  (`metadata.comment_resolvers`, `metadata.comment_deleters`, Settings ›
+  Permissions; rows of kind and entries). Super admins always may, and anyone
+  may delete their own comments. Without a setting, the previous rule applies.
+- **Four-eyes principle** (`metadata.four_eyes`, Settings › Permissions): on
+  the next transition an entry never goes back to the person who last passed
+  it on, neither manually nor automatically. If no one else is left, the
+  picker opens with its own target audience (groups, roles or people) and a
+  note.
+- **"Published" mail** (`mail_type: published`) for the `mail` action: sent to
+  everyone watching the entry, not to the assignees. Mail types can declare
+  `recipients: watchers` for this.
+- **Comment counts in the dashboard widgets** "My queue", "My posts" and
+  "Watched": open comments in grey, unread ones as `+N` in amber — as in the
+  listings.
+- **"Assignee" and "Author" filters** in the workflow overview and on the
+  manager page: show only entries where the person is assignee or author in
+  any localization.
+- **"Waiting longer than" filter** (3 / 7 / 14 / 30 days) in the workflow
+  overview and on the manager page: entries with a localization that has been
+  in its current state for longer than that. States without an outgoing
+  transition (e.g. "Published") do not count as waiting.
+- **Graph editor** for workflows under Settings › Workflows › `<Workflow>`:
+  places and transitions as nodes, editing in side panels, undo/redo, keyboard
+  shortcuts, live validation, versioned saving with backups, deferred deletion
+  of places with migration. Replaces the former form editor. "Create workflow"
+  (empty, from template, as copy) in the CP and via `workflows:make`. (See
+  [docs/en/README.md](docs/en/README.md).)
+- **Content fields per workflow** (`metadata.content_fields`): ordered list of
+  the top-level fields read by the summary, comments and plain language. If
+  unset, auto-detection (`content_fields.intro`/`body` from the config,
+  otherwise the first Bard/Markdown/Replicator field). Validation in the
+  writer (`writer_content_field*`), linter warnings
+  (`lint_content_field_partial`, `lint_content_field_auto_none`). Selection in
+  the editor (Settings › "Content") and in the create modal. (See
+  [docs/en/README.md](docs/en/README.md).)
+- **Generic content summary** (`ContentWalker`): reads any structure of the
+  content fields (Replicator, Grid, Group, Bard sets, nested arbitrarily)
+  without project-specific set mapping. Rendered as reading flow; for super
+  admins, handle/UUID chips behind "Technical details". (See
+  [docs/en/README.md](docs/en/README.md).)
+- **Plain language per text leaf**: each piece of prose in the content fields
+  is sent to the service individually marked (`<section data-wf-leaf>`) and
+  written back strictly — missing or unknown sections discard the response,
+  and the retry resubmits. New option `metadata.plain_language_skip_fields`.
+  Diagnostics via `workflows:plain-language-poll --dry-run` / `--diff`. (See
+  [docs/en/README.md](docs/en/README.md).)
+- **Mail hint in the assignee picker**: on manual assignment, each person
+  shows "Gets an email" if the step sends them a notification. Decided by the
+  same rules as delivery (`WorkflowNotifier::stepMail()` / `reaches()`). (See
+  [docs/en/README.md](docs/en/README.md).)
+- **Mail toggle in the assignee picker**: "Send email notification", on by
+  default. Off = the step hands over without mail (`notify: false` →
+  `WorkflowTransitioner::apply(notify: false)`). (See
+  [docs/en/README.md](docs/en/README.md).)
+- **Prevent self-assignment** (`metadata.self_assignment`): the clicking
+  person is omitted from the manual picker. If an assignment would only return
+  the entry to them, the picker opens instead with a configurable target
+  audience (group, role or person, excluding the clicking user), topped by a
+  customizable note. Configurable in the graph editor under Settings ›
+  Permissions. (See [docs/en/README.md](docs/en/README.md).)
+- **Assigning means watching**: anyone newly assigned to an entry
+  automatically watches it (`WorkflowAssigneeStore::set()`). Deliberately
+  unwatching is respected. Not watching is now shown as a crossed-out
+  bookmark. (See [docs/en/README.md](docs/en/README.md).)
+- **PHP test suite** (Pest + Orchestra Testbench, in-memory DB, temporary
+  Stache): `vendor/bin/pest` or `composer test`. (See
+  [docs/en/README.md](docs/en/README.md).)
 
-### Geändert
+### Changed
 
-- **Der QS-Bericht des Einfache-Sprache-Dienstes steht nicht mehr im
-  Kommentar-Thread**, nur noch hinter dem Button „QS-Hinweise“. Gespeichert wird
-  er weiterhin als Kommentar.
-- **Kommentare wie in Word:** Text markieren → Kommentar-Icon erscheint, der
-  Kommentar hängt an genau dieser Stelle und sie wird im Text hervorgehoben.
-  Kommentare stehen in einer Randspalte neben dem Inhalt, auf Höhe ihrer Stelle,
-  statt in einem Drawer. Antworten,
-  Abschließen, Erwähnungen und Mails bleiben wie bisher.
-- Ist die Kommentarspalte ausgeblendet, öffnet der Kommentar-Button einer
-  Passage (oder ein Klick auf markierten Text) deren Kommentare als **Popover**;
-  „Kommentare einblenden“ zeigt weiterhin alle in der Spalte.
-- Übersetzung / Einfache Sprache: Steht die Quelle daneben, gibt es keine
-  Kommentarspalte mehr – Kommentare (auch zu markiertem Text) öffnen dort immer
-  im Popover. Ist die Quelle per Einstellung verborgen, verhält sich die Seite
-  wie bei Beiträgen.
-- Sets werden beim Überfahren hervorgehoben, der Kommentar-Button erscheint nur
-  dann; ein Set mit Kommentar zum ganzen Set ist leicht gelb hinterlegt.
-- Übersicht: Das Datum hinter dem Status-Badge heißt jetzt „seit …“
-  (englisch „since …“).
-- Einfache Sprache schickt nur noch die **Inhaltsfelder und den Titel**; andere
-  Felder gehen nicht mehr mit.
-- Comment-Hashes werden über das neue Block-Format gebildet.
-- Laufende Einfache-Sprache-Jobs von vor dem Update (`format = null`) schreibt
-  weiter das alte Verfahren zurück (`LegacyPlainLanguageDocument`).
-- „Von mir erstellt“ heißt jetzt **„Meine Beiträge“** und zeigt die Beiträge,
-  bei denen der aktuelle Benutzer als **Autor** (`author`-Feld) eingetragen ist,
-  statt der Beiträge, die er angelegt hat (Dashboard-Kachel und Manager-Seite).
-- „Meine Warteschlange“ heißt jetzt **„Mir zugewiesen“** (auch die Kennzahl-Karte).
+- **The plain-language service's QA report no longer appears in the comment
+  thread**, only behind the "QA notes" button. It is still stored as a
+  comment.
+- **Comments like in Word:** select text → a comment icon appears, the
+  comment is anchored to exactly that passage, which is highlighted in the
+  text. Comments sit in a margin column next to the content, level with their
+  passage, instead of in a drawer. Replies, resolving, mentions and mails work
+  as before.
+- When the comment column is hidden, a passage's comment button (or a click on
+  highlighted text) opens its comments in a **popover**; "Show comments" still
+  shows all of them in the column.
+- Translation / plain language: when the source is shown alongside, there is
+  no comment column — comments (including on selected text) always open in a
+  popover there. If the source is hidden via setting, the page behaves like
+  regular entries.
+- Sets are highlighted on hover and the comment button only appears then; a
+  set with a comment on the whole set has a light yellow background.
+- Overview: the date after the status badge now reads "since …".
+- Plain language now sends only the **content fields and the title**; other
+  fields are no longer included.
+- Comment hashes are computed over the new block format.
+- Plain-language jobs still running from before the update (`format = null`)
+  are written back using the old method (`LegacyPlainLanguageDocument`).
+- "Created by me" is now **"My posts"** and shows entries in which the current
+  user is set as **author** (`author` field) instead of entries they created
+  (dashboard tile and manager page).
+- "My queue" is now **"Assigned to me"** (including the stats card).
 
 ### Deprecated
 
 - `config/workflows.php → content_fields`: `sets`, `sources_title`,
-  `sources_text`, `podcast_link`, `podcast_code`. Werden noch geladen, aber nicht
-  mehr gelesen — die Felder gehören stattdessen in `metadata.content_fields`.
-  Weiterhin gültig: `title`, `intro`, `body`, `seo`, `entity`, `scope`.
+  `sources_text`, `podcast_link`, `podcast_code`. Still loaded but no longer
+  read — these fields belong in `metadata.content_fields` instead. Still
+  valid: `title`, `intro`, `body`, `seo`, `entity`, `scope`.
 
-### Entfernt
+### Removed
 
-- Installations-UI im CP. Neue Workflows entstehen über das Anlegen-Modal;
-  `php artisan workflows:install` bleibt für die Erstinstallation.
-- Der alte Formular-Editor (`pages/WorkflowSettings.vue`) und seine Endpoints.
+- Installation UI in the CP. New workflows are created via the create modal;
+  `php artisan workflows:install` remains for the initial installation.
+- The old form editor (`pages/WorkflowSettings.vue`) and its endpoints.
 
-### Upgrade-Hinweise
+### Upgrade notes
 
-1. Im Host-Projekt `composer update takepart-media/workflows` — neue
-   Abhängigkeit `league/html-to-markdown`.
-2. Migrationen des Addons ausführen (`php artisan migrate`): neue Spalten
-   `format` und `plan` in `workflow_plain_language_jobs`.
-3. Bestehende Kommentare zeigen **einmalig** den Text-geändert-Hinweis, weil ihre
-   gespeicherten Hashes noch das alte Block-Format haben. Kein Fehler, nichts zu
-   tun.
-4. Einfache Sprache sendet nur noch Inhaltsfelder + Titel. Projekte, die bisher
-   weitere Felder umschreiben ließen (z. B. forus), prüfen
-   `metadata.content_fields` ihres Einfache-Sprache-Workflows — ohne Angabe gilt
-   die Auto-Erkennung.
-5. Wer die deprecated Config-Keys gesetzt hat, überträgt die betroffenen Felder
-   nach `metadata.content_fields`.
+1. In the host project, run `composer update takepart-media/workflows` — new
+   dependency `league/html-to-markdown`.
+2. Run the addon's migrations (`php artisan migrate`): new columns `format`
+   and `plan` in `workflow_plain_language_jobs`.
+3. Existing comments show the text-changed notice **once**, because their
+   stored hashes still use the old block format. Not an error, nothing to do.
+4. Plain language now sends only content fields + title. Projects that
+   previously had additional fields rewritten (e.g. forus) should check
+   `metadata.content_fields` of their plain-language workflow — if unset,
+   auto-detection applies.
+5. If you set the deprecated config keys, move the affected fields to
+   `metadata.content_fields`.
 
-### Behoben
+### Fixed
 
-- Ob jemand Kommentare moderieren darf, wurde im Controller ohne Benutzer
-  zwischengespeichert und konnte so für den nächsten Benutzer derselben
-  Controller-Instanz gelten.
-- **Revisionen bei verwalteten Collections:** Das Addon hat sie nie wirklich
-  eingeschaltet. Das Setzen zur Laufzeit ging verloren, und der Editor bot
-  weiter „Speichern & Veröffentlichen“. Der wirkungslose Code ist entfernt. Der
-  Workflow-Editor warnt jetzt, wenn eine Collection eines veröffentlichenden
-  Workflows keine Revisionen hat; einzuschalten mit der neuen Einstellung
-  „Revisionen“.
+- Whether someone may moderate comments was cached in the controller without
+  the user and could therefore apply to the next user of the same controller
+  instance.
+- **Revisions on managed collections:** the addon never actually enabled
+  them. Setting them at runtime was lost, and the editor kept offering "Save &
+  Publish". The ineffective code has been removed. The workflow editor now
+  warns when a collection of a publishing workflow has no revisions; enable
+  them with the new "Revisions" setting.
 
 [Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/takepart-media/statamic-workflows/releases/tag/v1.0.0
