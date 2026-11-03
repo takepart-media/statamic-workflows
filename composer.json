@@ -1,5 +1,5 @@
 {
-    "name": "takepart-media/workflows",
+    "name": "takepart-media/statamic-workflows",
     "description": "Editorial workflow engine and CP dashboard for multi-site Statamic projects.",
     "type": "statamic-addon",
     "keywords": [
@@ -46,6 +46,7 @@
     "extra": {
         "statamic": {
             "name": "Workflows",
+            "slug": "workflows",
             "description": "Editorial workflow engine and CP dashboard for multi-site Statamic projects."
         },
         "laravel": {

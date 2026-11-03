@@ -30,7 +30,7 @@ class InstallCommand extends Command
         $this->line('');
 
         $this->task('Run migrations', function () {
-            $this->call('migrate', ['--database' => 'workflow', '--path' => 'vendor/takepart-media/workflows/database/migrations', '--realpath' => false, '--force' => true]);
+            $this->call('migrate', ['--database' => 'workflow', '--path' => dirname(__DIR__, 2).'/database/migrations', '--realpath' => true, '--force' => true]);
         });
 
         $this->task('Publish assets', function () {

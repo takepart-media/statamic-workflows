@@ -2,7 +2,7 @@
 
 Copyright (c) 2026 TAKEPART Media Science + GmbH. All rights reserved.
 
-This software ("Workflows", Composer package `takepart-media/workflows`) is
+This software ("Workflows", Composer package `takepart-media/statamic-workflows`) is
 proprietary. Its source code is publicly available for inspection only.
 
 Without prior written permission from TAKEPART Media Science + GmbH, you may not

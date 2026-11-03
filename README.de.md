@@ -4,7 +4,7 @@
 
 Redaktionelle Workflows für **Statamic 6**. Führe Einträge durch Prüf- und Freigabeschritte, weise die richtigen Leute zu, diskutiere Änderungen direkt am Text, lass dich benachrichtigen und halte Inhalte aktuell, alles im Control Panel.
 
-[![Packagist Version](https://img.shields.io/packagist/v/takepart-media/workflows)](https://packagist.org/packages/takepart-media/workflows)
+[![Packagist Version](https://img.shields.io/packagist/v/takepart-media/statamic-workflows)](https://packagist.org/packages/takepart-media/statamic-workflows)
 [![Statamic 6](https://img.shields.io/badge/Statamic-6-ff269e)](https://statamic.com)
 [![PHP 8.3+](https://img.shields.io/badge/PHP-8.3%2B-777bb4)](https://www.php.net)
 
@@ -29,7 +29,7 @@ Redaktionelle Workflows für **Statamic 6**. Führe Einträge durch Prüf- und F
 ## Installation
 
 ```bash
-composer require takepart-media/workflows
+composer require takepart-media/statamic-workflows
 php artisan workflows:install
 ```
 

@@ -5,7 +5,7 @@
         "dev": "vite",
         "dev3001": "vite --port 3001",
         "build": "vite build",
-        "publish": "vite build && cd ../../../ && rm -rf public/vendor/workflows/build && php artisan vendor:publish --tag=workflows --force && cd addons/takepart-media/workflows/",
+        "publish": "vite build && cd ../../../ && rm -rf public/vendor/statamic-workflows/build && php artisan vendor:publish --tag=workflows --force && cd addons/takepart-media/statamic-workflows/",
         "workflows:build": "node scripts/build-diagrams.mjs",
         "test": "vitest run"
     },

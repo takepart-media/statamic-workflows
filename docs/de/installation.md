@@ -18,13 +18,13 @@ Node oder npm brauchst du nicht. Das Addon bringt fertig gebaute CP-Assets mit.
 
 ## Paket installieren
 
-Das Addon liegt auf [Packagist](https://packagist.org/packages/takepart-media/workflows):
+Das Addon liegt auf [Packagist](https://packagist.org/packages/takepart-media/statamic-workflows):
 
 ```bash
-composer require takepart-media/workflows
+composer require takepart-media/statamic-workflows
 ```
 
-Composer installiert das Addon nach `vendor/takepart-media/workflows`, Statamic registriert es automatisch. `composer require` legt die aktuelle Hauptversion fest (zum Beispiel `^1.0`). Releases folgen [Semantic Versioning](https://semver.org/): Innerhalb von 1.x bekommst du Fehlerbehebungen und neue Funktionen, aber keine Breaking Changes.
+Composer installiert das Addon nach `vendor/takepart-media/statamic-workflows`, Statamic registriert es automatisch. `composer require` legt die aktuelle Hauptversion fest (zum Beispiel `^1.0`). Releases folgen [Semantic Versioning](https://semver.org/): Innerhalb von 1.x bekommst du Fehlerbehebungen und neue Funktionen, aber keine Breaking Changes.
 
 ## Installer ausführen
 
@@ -35,7 +35,7 @@ php artisan workflows:install
 Der Installer führt dich durch diese Schritte:
 
 1. **Migrationen ausführen.** Das Addon speichert seine Daten in einer eigenen SQLite-Datenbank unter `storage/app/workflows/workflow.sqlite`. Die Datei wird beim ersten Start des Addons automatisch angelegt. Die Migrationen erzeugen darin sieben Tabellen (Status, Verlauf, Zuständige, Kommentare, Lesestatus der Kommentare, Beobachtungen und Aufträge für Einfache Sprache).
-2. **CP-Assets veröffentlichen** nach `public/vendor/workflows/build` (wie `php artisan vendor:publish --tag=workflows --force`).
+2. **CP-Assets veröffentlichen** nach `public/vendor/statamic-workflows/build` (wie `php artisan vendor:publish --tag=workflows --force`).
 3. **Workflow-Typen auswählen.** Eine Mehrfachauswahl listet die drei Beispiel-Workflows, die das Addon mitbringt: `postmanager` (redaktionelle Prüfung und Veröffentlichung), `translation` (Übersetzung in weitere Sites) und `plainlanguage` (Fassungen in Einfacher Sprache). `postmanager` ist vorausgewählt, solange er noch nicht installiert ist. Du kannst in einem Durchlauf mehrere Typen wählen.
 4. **Für jeden gewählten Typ:**
    1. Das Beispiel wird nach `resources/workflows/<typ>.yaml` kopiert. Gibt es die Datei schon, bleibt sie unverändert.
@@ -130,7 +130,7 @@ Nimm mindestens `workflows_overview` auf. Ohne dieses Widget haben deine Nutzer 
 1. Paket aktualisieren:
 
    ```bash
-   composer update takepart-media/workflows
+   composer update takepart-media/statamic-workflows
    ```
 
 2. Neue CP-Assets veröffentlichen. `--force` ist nötig, sonst bleiben die alten Dateien liegen und das CP lädt weiter das alte Bundle:
@@ -142,7 +142,7 @@ Nimm mindestens `workflows_overview` auf. Ohne dieses Widget haben deine Nutzer 
 3. Migrationen des Addons ausführen, wenn das Release welche mitbringt (siehe [Changelog](../../CHANGELOG.md)). Die Migrationen kannst du gefahrlos mehrfach ausführen:
 
    ```bash
-   php artisan migrate --database=workflow --path=vendor/takepart-media/workflows/database/migrations
+   php artisan migrate --database=workflow --path=vendor/takepart-media/statamic-workflows/database/migrations
    ```
 
    Ein einfaches `php artisan migrate` findet sie ebenfalls.
@@ -157,14 +157,14 @@ Deine Workflow-YAMLs in `resources/workflows/` gehören dir und werden bei einem
 1. Paket entfernen:
 
    ```bash
-   composer remove takepart-media/workflows
+   composer remove takepart-media/statamic-workflows
    ```
 
 2. Entferne die Workflow-Widgets aus `widgets` in `config/statamic/cp.php`, falls du sie dort eingetragen hast.
 3. Lösche die Dateien, die das Addon in deinem Projekt angelegt hat:
 
    ```bash
-   rm -rf public/vendor/workflows storage/app/workflows resources/workflows
+   rm -rf public/vendor/statamic-workflows storage/app/workflows resources/workflows
    rm -f config/workflows.php
    rm -rf lang/vendor/workflows
    ```
@@ -186,12 +186,12 @@ Um Änderungen an einem lokalen Checkout des Addons ohne Release zu testen, bind
         { "type": "path", "url": "../statamic-workflows", "options": { "symlink": true } }
     ],
     "require": {
-        "takepart-media/workflows": "*"
+        "takepart-media/statamic-workflows": "*"
     }
 }
 ```
 
-Führe `composer update takepart-media/workflows` aus. Composer verlinkt `vendor/takepart-media/workflows` auf deinen Checkout. Veröffentliche nach `npm run build` im Addon die Assets erneut oder verlinke `public/vendor/workflows/build` auf `resources/dist/build` des Addons. Ein `vendor:publish --tag=workflows --force` ersetzt einen solchen Link durch eine Kopie.
+Führe `composer update takepart-media/statamic-workflows` aus. Composer verlinkt `vendor/takepart-media/statamic-workflows` auf deinen Checkout. Veröffentliche nach `npm run build` im Addon die Assets erneut oder verlinke `public/vendor/statamic-workflows/build` auf `resources/dist/build` des Addons. Ein `vendor:publish --tag=workflows --force` ersetzt einen solchen Link durch eine Kopie.
 
 ## Nächste Schritte
 

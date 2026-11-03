@@ -97,6 +97,14 @@ class ServiceProvider extends AddonServiceProvider
         'cp' => __DIR__.'/../routes/cp.php',
     ];
 
+    /**
+     * The package is `takepart-media/statamic-workflows`, but views stay under
+     * `workflows::` — the same name as the addon's slug (composer.json
+     * extra.statamic.slug), which keeps config, translations and publish tags
+     * on `workflows` too.
+     */
+    protected $viewNamespace = 'workflows';
+
     protected $vite = [
         'input' => [
             'resources/js/addon.js',

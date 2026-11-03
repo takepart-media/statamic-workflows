@@ -4,7 +4,7 @@
 
 Editorial workflows for **Statamic 6**. Move entries through review and approval steps, assign the right people, discuss changes in context, get notified and keep content fresh, all in the Control Panel.
 
-[![Packagist Version](https://img.shields.io/packagist/v/takepart-media/workflows)](https://packagist.org/packages/takepart-media/workflows)
+[![Packagist Version](https://img.shields.io/packagist/v/takepart-media/statamic-workflows)](https://packagist.org/packages/takepart-media/statamic-workflows)
 [![Statamic 6](https://img.shields.io/badge/Statamic-6-ff269e)](https://statamic.com)
 [![PHP 8.3+](https://img.shields.io/badge/PHP-8.3%2B-777bb4)](https://www.php.net)
 
@@ -29,7 +29,7 @@ Editorial workflows for **Statamic 6**. Move entries through review and approval
 ## Installation
 
 ```bash
-composer require takepart-media/workflows
+composer require takepart-media/statamic-workflows
 php artisan workflows:install
 ```
 

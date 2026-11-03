@@ -153,7 +153,16 @@ First release on Packagist.
 
 ### Upgrade notes
 
-1. In the host project, run `composer update takepart-media/workflows` — new
+> **Package renamed.** The package is now `takepart-media/statamic-workflows`
+> on Packagist. Projects that installed `takepart-media/workflows` from the Git
+> repository run `composer remove takepart-media/workflows`, remove the VCS
+> entry from `repositories`, then `composer require
+> takepart-media/statamic-workflows`. The CP assets now publish to
+> `public/vendor/statamic-workflows/build` (delete the old
+> `public/vendor/workflows`). Config, translations, views and publish tags keep
+> the name `workflows`.
+
+1. In the host project, run `composer update takepart-media/statamic-workflows` — new
    dependency `league/html-to-markdown`.
 2. Run the addon's migrations (`php artisan migrate`): new columns `format`
    and `plan` in `workflow_plain_language_jobs`.

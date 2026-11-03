@@ -8,17 +8,17 @@ Die meisten Befehle, die Daten ändern, haben eine Option `--dry-run`, und gesch
 
 ## Installation und Assets
 
-### Composer findet `takepart-media/workflows` nicht
+### Composer findet `takepart-media/statamic-workflows` nicht
 
 **Ursache:** Packagist ist von deinem Projekt aus nicht erreichbar, oder `packagist.org` ist in deiner `composer.json` abgeschaltet.
 
-**Lösung:** Prüfe `composer config repositories` und stell sicher, dass `packagist.org` nicht auf `false` steht. Prüfe, ob die Paketseite auf [Packagist](https://packagist.org/packages/takepart-media/workflows) existiert.
+**Lösung:** Prüfe `composer config repositories` und stell sicher, dass `packagist.org` nicht auf `false` steht. Prüfe, ob die Paketseite auf [Packagist](https://packagist.org/packages/takepart-media/statamic-workflows) existiert.
 
 ### Das CP zeigt alte oder keine Workflow-Assets
 
 Die CP-Seite bleibt leer, die Browser-Konsole zeigt JavaScript-Fehler, oder eine Korrektur aus einem Update kommt nicht an.
 
-**Ursache:** Die veröffentlichten Assets in `public/vendor/workflows/build` fehlen oder stammen aus einer älteren Version. Ohne `--force` ersetzt das Veröffentlichen vorhandene Dateien nicht, das CP lädt also weiter das alte Bundle.
+**Ursache:** Die veröffentlichten Assets in `public/vendor/statamic-workflows/build` fehlen oder stammen aus einer älteren Version. Ohne `--force` ersetzt das Veröffentlichen vorhandene Dateien nicht, das CP lädt also weiter das alte Bundle.
 
 **Lösung:**
 
@@ -35,7 +35,7 @@ Lade den Browser danach ohne Cache neu (Cmd+Shift+R bzw. Strg+Shift+R). Nimm den
 **Lösung:** Führe die Migrationen aus und prüfe, ob der PHP-Nutzer in den Ordner schreiben darf:
 
 ```bash
-php artisan migrate --database=workflow --path=vendor/takepart-media/workflows/database/migrations
+php artisan migrate --database=workflow --path=vendor/takepart-media/statamic-workflows/database/migrations
 ```
 
 ### Der Installer hat die Collections meines Workflows geändert
