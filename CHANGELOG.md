@@ -1,9 +1,14 @@
 # Changelog
 
 Alle nennenswerten Änderungen am Addon. Format nach
-[Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
+[Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionen nach
+[Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-03
+
+Erstes Release auf Packagist.
 
 ### Hinzugefügt
 
@@ -173,3 +178,5 @@ Alle nennenswerten Änderungen am Addon. Format nach
   Workflows keine Revisionen hat; einzuschalten mit der neuen Einstellung
   „Revisionen“.
 
+[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/takepart-media/statamic-workflows/releases/tag/v1.0.0

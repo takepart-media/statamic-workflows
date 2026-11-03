@@ -10,47 +10,27 @@ Wie du das `takepart-media/workflows`-Addon in ein Statamic-6-Projekt einbindest
 - PHP 8.3+
 - Laravel 11+
 - Composer 2.x
-- Zugriff auf `github.com/takepart-media/workflows` (SSH-Key oder Personal Access Token)
+- Eine Lizenz für das Addon (siehe [LICENSE.md](./LICENSE.md))
 
 Node/npm sind **nicht** nötig — das Addon liefert vorgebaute Frontend-Assets mit.
 
 ---
 
-## Schritt 1 — Repository und Package eintragen
+## Schritt 1 — Installieren
 
-Öffne die `composer.json` deines Projekts und ergänze:
-
-```json
-{
-  "repositories": [
-    { "type": "vcs", "url": "git@github.com:takepart-media/workflows.git" }
-  ],
-  "require": {
-    "takepart-media/workflows": "dev-main"
-  }
-}
-```
-
-Falls du bereits einen anderen `repositories`-Block hast, füg den VCS-Eintrag einfach dazu (Array-Element).
-
-**Zur Version-Constraint:**
-
-- `dev-main` — verfolgt die neueste Version des `main`-Branches. Gut für Dev, riskant für Prod.
-- `^1.0` — nur wenn im Addon-Repo ein Tag `v1.0.0` (oder höher) existiert. Reproduzierbar. Wenn Composer meldet *„does not match the constraint"* und nur `dev-*`-Versionen listet, existiert der Tag noch nicht → nimm `dev-main`.
-
----
-
-## Schritt 2 — Installieren
+Das Addon liegt auf [Packagist](https://packagist.org/packages/takepart-media/workflows):
 
 ```bash
-composer update takepart-media/workflows
+composer require takepart-media/workflows
 ```
 
-Composer klont das Repo, packt es nach `vendor/takepart-media/workflows/` und registriert den Statamic-Addon-ServiceProvider automatisch.
+Composer legt das Addon nach `vendor/takepart-media/workflows/` und registriert den Statamic-Addon-ServiceProvider automatisch.
+
+**Zur Version-Constraint:** `composer require` setzt `^1.0`. Damit bekommst du Fixes und neue Features innerhalb von 1.x, aber keine Breaking Changes. Vor einem Sprung auf eine neue Hauptversion lies den [CHANGELOG](./CHANGELOG.md).
 
 ---
 
-## Schritt 3 — Bootstrap
+## Schritt 2 — Bootstrap
 
 ```bash
 php artisan workflows:install
@@ -68,7 +48,7 @@ Der Befehl ist idempotent: wenn `resources/workflows/<type>.yaml` schon existier
 
 ---
 
-## Schritt 4 — Verifizieren
+## Schritt 3 — Verifizieren
 
 Login ins CP:
 
@@ -198,37 +178,19 @@ Bei Prod-Setups: den `vendor:publish`-Aufruf ins Post-Deploy-Script hängen, son
 
 ---
 
-## Private-Repo-Authentifizierung
-
-**SSH-Deploy-Key** (empfohlen für Server/CI):
-
-1. Auf dem Server: `ssh-keygen -t ed25519 -C "deploy@myproject"` → Public-Key in GitHub-Repo-Settings > Deploy Keys eintragen (Read-Only reicht).
-2. `git ls-remote git@github.com:takepart-media/workflows.git` testen — muss die Refs listen.
-3. `composer update takepart-media/workflows` fährt jetzt durch.
-
-**Composer-Auth-JSON** (Alternative, z.B. für Container-Builds):
-
-```bash
-composer config --auth github-oauth.github.com <PAT>
-```
-
-Legt einen Token in `~/.composer/auth.json` an. Für die App: als Env-Var `COMPOSER_AUTH` mit dem JSON-String bereitstellen.
-
----
-
 ## Alternative: Lokale Path-Repo-Einbindung (nur für Addon-Entwicklung)
 
 Wenn du parallel am Addon selbst arbeitest und Änderungen sofort ohne `git push` sehen willst:
 
-1. Adder-Repo lokal auschecken, z.B. nach `../workflows` relativ zum Projekt:
+1. Addon-Repo lokal auschecken, z.B. nach `../statamic-workflows` relativ zum Projekt:
    ```bash
-   git clone git@github.com:takepart-media/workflows.git ../workflows
+   git clone git@github.com:takepart-media/statamic-workflows.git ../statamic-workflows
    ```
 2. In `composer.json` des Projekts:
    ```json
    {
      "repositories": [
-       { "type": "path", "url": "../workflows", "options": { "symlink": true } }
+       { "type": "path", "url": "../statamic-workflows", "options": { "symlink": true } }
      ],
      "require": {
        "takepart-media/workflows": "*"
@@ -239,10 +201,10 @@ Wenn du parallel am Addon selbst arbeitest und Änderungen sofort ohne `git push
 4. Optional für Live-Assets: auch `public/vendor/workflows/build/` als Symlink:
    ```bash
    rm -rf public/vendor/workflows/build
-   ln -s ../../../../workflows/resources/dist/build public/vendor/workflows/build
+   ln -s ../../../../statamic-workflows/resources/dist/build public/vendor/workflows/build
    ```
 
-Änderungen im Addon-Repo (`../workflows`) sind dann sofort im Projekt live — nach `npm run build` (bei JS/CSS-Edits) und einem Browser-Reload.
+Änderungen im Addon-Repo (`../statamic-workflows`) sind dann sofort im Projekt live — nach `npm run build` (bei JS/CSS-Edits) und einem Browser-Reload.
 
 **Achtung:** `php artisan vendor:publish --tag=workflows --force` überschreibt den Public-Symlink mit einer echten Kopie. Nach solchen Kommandos ggf. den Symlink neu setzen.
 
@@ -261,7 +223,7 @@ Optional zusätzlich `lang/vendor/workflows/`, `config/workflows.php` falls publ
 
 ## Troubleshooting
 
-**„does not match the constraint"** — nur `dev-*`-Versionen im Addon-Repo. Setze `dev-main` als Constraint (siehe [Schritt 1](#schritt-1--repository-und-package-eintragen)) oder erzeuge einen Tag im Addon-Repo.
+**„Could not find package takepart-media/workflows"** — Packagist hat das Release noch nicht eingelesen, oder dein Projekt hat `packagist.org` deaktiviert. Prüfe `composer config repositories` und die Paketseite auf Packagist.
 
 **Assets werden nicht geladen / alter Bundle-Hash** — `php artisan vendor:publish --tag=workflows --force` ausführen und im Browser Cmd+Shift+R.
 

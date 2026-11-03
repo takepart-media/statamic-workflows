@@ -2,7 +2,19 @@
     "name": "takepart-media/workflows",
     "description": "Editorial workflow engine and CP dashboard for multi-site Statamic projects.",
     "type": "statamic-addon",
+    "keywords": [
+        "statamic",
+        "statamic-addon",
+        "workflow",
+        "editorial",
+        "approval",
+        "translation",
+        "laravel"
+    ],
+    "homepage": "https://github.com/takepart-media/statamic-workflows",
+    "license": "proprietary",
     "require": {
+        "php": "^8.3",
         "statamic/cms": "^6.0",
         "symfony/workflow": "^7.0",
         "league/html-to-markdown": "^5.1"
@@ -19,14 +31,17 @@
     },
     "authors": [
         {
-            "name": "takepart media",
+            "name": "TAKEPART Media Science + GmbH",
             "email": "it@takepart-media.de",
             "homepage": "https://www.takepart-media.de",
             "role": "Developer"
         }
     ],
     "support": {
-        "email": "it@takepart-media.de"
+        "email": "it@takepart-media.de",
+        "issues": "https://github.com/takepart-media/statamic-workflows/issues",
+        "source": "https://github.com/takepart-media/statamic-workflows",
+        "docs": "https://github.com/takepart-media/statamic-workflows/blob/main/README.md"
     },
     "extra": {
         "statamic": {

@@ -26,45 +26,20 @@ For architecture, data model, and the full YAML schema see [`DOCS.md`](./DOCS.md
 
 ## Installation
 
-The addon lives at `github.com/takepart-media/workflows` and is not on
-Packagist. Add it via Composer as a VCS repository.
+### 1. Require the package
 
-### 1. Register the repository and require the package
-
-In your consuming project's `composer.json`:
-
-```json
-{
-  "repositories": [
-    { "type": "vcs", "url": "git@github.com:takepart-media/workflows.git" }
-  ],
-  "require": {
-    "takepart-media/workflows": "dev-main"
-  }
-}
-```
-
-Then:
+The addon is on [Packagist](https://packagist.org/packages/takepart-media/workflows):
 
 ```bash
-composer update takepart-media/workflows
+composer require takepart-media/workflows
 ```
 
 The addon carries pre-built frontend assets in `resources/dist/build/`, so you
 do **not** need Node or `npm run build` on the target machine.
 
-**Version pinning.** `dev-main` tracks the tip of the `main` branch — fine for
-development, risky for production because every `composer update` pulls
-whatever landed there. If the addon repo has a Git tag (e.g. `v1.0.0`), pin to
-it instead with a semver constraint:
-
-```json
-"require": { "takepart-media/workflows": "^1.0" }
-```
-
-If `composer update` returns *"does not match the constraint"* with only
-`dev-*` versions listed, no tag exists yet — either use `dev-main` for now or
-create a tag in the addon repo (`git tag v1.0.0 && git push origin v1.0.0`).
+Releases follow [Semantic Versioning](https://semver.org/). `composer require`
+pins to the current major version (e.g. `^1.0`); see
+[`CHANGELOG.md`](./CHANGELOG.md) before upgrading across a major version.
 
 ### 2. Bootstrap the addon
 
@@ -86,14 +61,6 @@ then walks you through an interactive setup:
 The command is safe to re-run: if `resources/workflows/<type>.yaml` already
 exists it aborts without overwriting.
 
-### 3. Private repo: authentication
-
-If your Git host requires authentication for the addon repo, either:
-
-- **SSH deploy key** on the target machine (recommended for servers/CI), or
-- A `~/.composer/auth.json` entry with a personal access token for
-  `github-oauth`.
-
 ---
 
 ## Alternative: Local path repo (for developing the addon in-place)
@@ -104,7 +71,7 @@ consuming project without a `git push` / `composer update` cycle:
 ```json
 {
   "repositories": [
-    { "type": "path", "url": "../workflows", "options": { "symlink": true } }
+    { "type": "path", "url": "../statamic-workflows", "options": { "symlink": true } }
   ],
   "require": {
     "takepart-media/workflows": "*"
@@ -122,7 +89,7 @@ into the addon so newly built assets show up immediately:
 
 ```bash
 rm -rf public/vendor/workflows/build
-ln -s ../../../../workflows/resources/dist/build public/vendor/workflows/build
+ln -s ../../../../statamic-workflows/resources/dist/build public/vendor/workflows/build
 ```
 
 **Caveat:** `php artisan vendor:publish --tag=workflows --force` (which
@@ -414,8 +381,8 @@ npm run workflows:build
 The addon repo is standalone — clone it separately from any consuming project:
 
 ```bash
-git clone git@github.com:takepart-media/workflows.git
-cd workflows
+git clone git@github.com:takepart-media/statamic-workflows.git
+cd statamic-workflows
 npm install
 ```
 
@@ -461,4 +428,5 @@ consuming project) picks them up on the next request.
 
 ## License
 
-Proprietary — © takepart media.
+Proprietary — © TAKEPART Media Science + GmbH. The source is public for
+inspection; using it requires a license. See [`LICENSE.md`](./LICENSE.md).
