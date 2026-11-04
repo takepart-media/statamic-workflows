@@ -154,6 +154,9 @@ Sie läuft nach jeder Transition, auch nach Transitions, die der Scheduler ausf�
 | `account_reminder.enabled` | `WORKFLOWS_ACCOUNT_REMINDER` | `true` | `false` schaltet die Account-Erinnerung ab. |
 | `account_reminder.expire_hours` | `WORKFLOWS_ACTIVATION_EXPIRE_HOURS` | `null` | Wie lange ein Aktivierungslink gültig bleibt, in Stunden. `null` übernimmt die Dauer von Statamics Aktivierungs-Password-Broker (`statamic.users.passwords.activations`). |
 
+> [!TIP]
+> Der letzte Satz der Mail (`mail_account_reminder_outro`) sagt, was nach Ablauf des Links zu tun ist. Standardmäßig verweist er an die Redaktion. Überschreibe ihn in `lang/vendor/workflows/<locale>/messages.php`, um deinen eigenen Kontakt zu nennen, zum Beispiel eine Support-Adresse. Behalte `:duration` im Text.
+
 > [!WARNING]
 > `expire_hours` ändert den Aktivierungslink auch für Statamics CP-Einladungen. Beide nutzen denselben Link; die Dauer lässt sich nicht nur für die Erinnerung ändern.
 

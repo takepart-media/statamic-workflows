@@ -154,6 +154,9 @@ It runs after every transition, including transitions run by the scheduler. It d
 | `account_reminder.enabled` | `WORKFLOWS_ACCOUNT_REMINDER` | `true` | `false` turns the account reminder off. |
 | `account_reminder.expire_hours` | `WORKFLOWS_ACTIVATION_EXPIRE_HOURS` | `null` | How long an activation link stays valid, in hours. `null` keeps the duration of Statamic's activation password broker (`statamic.users.passwords.activations`). |
 
+> [!TIP]
+> The mail's last sentence (`mail_account_reminder_outro`) tells people what to do once the link has expired. By default it points to the editorial team. Override it in `lang/vendor/workflows/<locale>/messages.php` to name your own contact, for example a support address. Keep `:duration` in the text.
+
 > [!WARNING]
 > `expire_hours` changes the activation link for Statamic's CP invitations as well. Both use the same link, so there is no way to set the duration for the reminder alone.
 
