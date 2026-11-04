@@ -6,7 +6,7 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
-## [1.0.1] - 2026-11-04
+## [1.0.2] - 2026-11-04
 
 ### Changed
 
@@ -16,6 +16,10 @@ All notable changes to this addon. The format is based on
   create in. It preselects the workflow the widget is switched to, or the
   first one when that is not possible (e.g. under "All"). With only one workflow on offer (and
   always on a manager page) the select is read-only.
+
+## [1.0.1] - 2026-11-04
+
+Superseded by 1.0.2. Use 1.0.2 instead.
 
 ## [1.0.0] - 2026-11-03
 
@@ -197,6 +201,7 @@ First release on Packagist.
   warns when a collection of a publishing workflow has no revisions; enable
   them with the new "Revisions" setting.
 
-[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.1...HEAD
-[1.0.1]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.0...v1.0.1
+[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.0...v1.0.2
+[1.0.1]: https://github.com/takepart-media/statamic-workflows/releases/tag/v1.0.1
 [1.0.0]: https://github.com/takepart-media/statamic-workflows/releases/tag/v1.0.0
