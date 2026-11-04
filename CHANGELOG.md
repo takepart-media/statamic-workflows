@@ -6,6 +6,8 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-04
+
 ### Changed
 
 - **One "New post" button.** The "All posts" widget shows a single "New post"
@@ -195,5 +197,6 @@ First release on Packagist.
   warns when a collection of a publishing workflow has no revisions; enable
   them with the new "Revisions" setting.
 
-[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/takepart-media/statamic-workflows/releases/tag/v1.0.0
