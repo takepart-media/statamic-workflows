@@ -9,12 +9,7 @@
                 <h1 class="text-2xl font-semibold dark:text-white">{{ title }}</h1>
                 <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('workflows::messages.signed_in_as', { name: currentUser }) }}</p>
             </div>
-            <CreatePostButton
-                :create-url="createUrl"
-                :create-collections="createCollections"
-                :create-cta="createCta"
-                :workflow-name="workflowName"
-            />
+            <CreatePostButton :creates="creates" />
         </header>
 
         <!-- The anchor of the dashboard's "In meiner Warteschlange" card when
@@ -112,17 +107,12 @@ const props = defineProps({
     columns: { type: Array, default: () => [] },
     myColumns: { type: Array, default: () => [] },
     filters: { type: Array, default: () => [] },
-    createUrl: { type: String, default: null },
     // Collections this workflow governs as [{handle, title}], in YAML order —
     // one tab each in the "all posts" listing.
     collections: { type: Array, default: () => [] },
-    // Collections the workflow OWNS as [{value, label}], i.e. the ones a new
-    // entry may be created in. Empty when the user can't create.
-    createCollections: { type: Array, default: () => [] },
-    // The transition the confirm button runs after creating, as
-    // {name, label, needs_pick, pickable_assignees} — or null, in which case the
-    // button only creates. See WorkflowController::createCta().
-    createCta: { type: Object, default: null },
+    // This workflow's "new post" entry, as a one-item list (or empty when the
+    // user can't create) — see CreatePostButton.
+    creates: { type: Array, default: () => [] },
     // Place handle => Badge color, from each place's `metadata.color`.
     stateColors: { type: Object, default: () => ({}) },
     stateLabels: { type: Object, default: () => ({}) },

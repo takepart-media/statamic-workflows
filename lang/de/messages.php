@@ -351,8 +351,6 @@ return [
 
     // Creating a post
     'new_post' => 'Neuer Beitrag',
-    // Eintrag im „Neuer Beitrag"-Menü des Dashboard-Widgets, eine Zeile pro Workflow.
-    'new_post_in' => ':label: neuer Beitrag',
     'assign_to' => 'Zuweisen',
     'select_site' => 'Sites wählen',
     // Label der Collection-Auswahl im „Neuer Beitrag"-Modal bei mehreren eigenen Collections.
@@ -369,6 +367,8 @@ return [
     // „Anlegen" — oder trägt das Label der gekoppelten Transition
     // (metadata.create_transition), die direkt nach dem Anlegen läuft.
     'post_title' => 'Titel',
+    'post_workflow' => 'Workflow',
+    'post_workflow_hint' => 'Für welchen Workflow der Beitrag angelegt wird.',
     'post_title_required' => 'Bitte einen Titel angeben.',
     'create' => 'Anlegen',
     // Toast, wenn der Beitrag zwar angelegt wurde, die gekoppelte Transition aber
@@ -693,8 +693,8 @@ return [
     'seed_published_place_none' => 'kein Fertig-Place',
     'post_creator_groups' => 'Darf Beiträge anlegen',
     'post_creator_groups_none' => 'nur Super-Admins',
-    'post_creator_groups_hint' => 'Nutzergruppen, die auf der Manager-Seite dieses Workflows den „Neuer Beitrag"-Button sehen. Super-Admins dürfen immer. Leer = ausschließlich Super-Admins.',
-    'post_creator_groups_hint_fallback' => 'Nutzergruppen, die auf der Manager-Seite dieses Workflows den „Neuer Beitrag"-Button sehen. Super-Admins dürfen immer. Leer = es greift die Projekt-Konfiguration (:groups).',
+    'post_creator_groups_hint' => 'Nutzergruppen, die Beiträge in diesem Workflow anlegen dürfen: Er erscheint dann in der Auswahl von „Neuer Beitrag" in der Übersicht und auf seiner Manager-Seite. Super-Admins dürfen immer. Leer = ausschließlich Super-Admins.',
+    'post_creator_groups_hint_fallback' => 'Nutzergruppen, die Beiträge in diesem Workflow anlegen dürfen: Er erscheint dann in der Auswahl von „Neuer Beitrag" in der Übersicht und auf seiner Manager-Seite. Super-Admins dürfen immer. Leer = es greift die Projekt-Konfiguration (:groups).',
     // Die Transition, die der Bestätigen-Button des „Neuer Beitrag"-Modals nach
     // dem Anlegen ausführt — der „Workflow-CTA". Siehe WorkflowController::storePost().
     'create_transition' => 'Workflow-Aktion beim Anlegen',

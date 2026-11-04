@@ -208,13 +208,14 @@ For setup, see [Translation & plain language](localization.md).
 
 ## Creating posts
 
-If you may create content in a workflow, its manager page shows "New post". The "All posts" widget shows one "<Workflow>: new post" button per workflow.
+The "All posts" widget shows **one** "New post" button for every workflow you may create in. A workflow's manager page shows the same button for that workflow alone.
 
 1. Click "New post".
 2. Enter a title.
-3. If the workflow governs several collections, pick one.
-4. If the workflow couples a first transition to creation and that transition asks for a person, pick the assignees in the same dialog. "Send email notification" works as in the assignee picker.
-5. Confirm. The button carries the coupled transition's label, for example "Start drafting", or "Create" without one.
+3. Choose the workflow. The select lists only workflows you may create in and allows exactly one. If the widget is switched to a workflow you may create in, that one is preselected; otherwise (for example under "All") the first one is. If only one workflow is available, for example on a manager page, the field is read-only and just shows it.
+4. If the workflow governs several collections, pick one.
+5. If the workflow couples a first transition to creation and that transition asks for a person, pick the assignees in the same dialog. "Send email notification" works as in the assignee picker.
+6. Confirm. The button carries the coupled transition's label, for example "Start drafting", or "Create" without one.
 
 The post is created as a draft in the first site of the collection you have access to. It gets the workflow's start state and is assigned to the workflow's default assignee group, plus you if the workflow says so. If a coupled transition is set, it runs right away. The page then reloads so you can see where the post went.
 

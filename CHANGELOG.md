@@ -6,6 +6,15 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- **One "New post" button.** The "All posts" widget shows a single "New post"
+  button instead of one per workflow. Its dialog asks for the title and then
+  the workflow, as a single select limited to the workflows the user may
+  create in. It preselects the workflow the widget is switched to, or the
+  first one when that is not possible (e.g. under "All"). With only one workflow on offer (and
+  always on a manager page) the select is read-only.
+
 ## [1.0.0] - 2026-11-03
 
 First release on Packagist.

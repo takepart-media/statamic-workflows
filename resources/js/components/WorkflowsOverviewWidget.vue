@@ -11,22 +11,11 @@
          (support/dashboardLinks.js), which filter this table, scroll here and
          move the focus onto the card without adding it to the tab order. -->
     <Widget :id="OVERVIEW_ANCHOR" tabindex="-1" :title="__('workflows::messages.all_posts')" class="h-full scroll-mt-4">
-        <!-- One "new post" button per workflow the user may create in. Named
-             after its workflow as soon as there is more than one, since a bare
-             "Neuer Beitrag" twice says nothing about where the post goes. -->
+        <!-- ONE "new post" button for every workflow the user may create in; the
+             modal asks which (read-only when there is just one) and starts on
+             the workflow the table is switched to — the first one under "All". -->
         <template v-if="creates.length" #actions>
-            <div class="flex flex-wrap items-center justify-end gap-2">
-                <CreatePostButton
-                    v-for="create in creates"
-                    :key="create.workflow"
-                    size="sm"
-                    :create-url="create.createUrl"
-                    :create-collections="create.createCollections ?? []"
-                    :create-cta="create.createCta ?? null"
-                    :workflow-name="create.workflow"
-                    :text="creates.length > 1 ? __('workflows::messages.new_post_in', { label: create.label }) : null"
-                />
-            </div>
+            <CreatePostButton size="sm" :creates="creates" :preferred="active === ALL ? null : active" />
         </template>
 
         <div class="flex min-w-0 flex-1 flex-col px-4 pt-2">

@@ -2714,9 +2714,11 @@ class WorkflowController extends CpController
                 ->map(fn (string $handle) => ['handle' => $handle, 'title' => $this->collectionTitle($handle)])
                 ->values()
                 ->all(),
-            'createUrl' => $create['createUrl'] ?? null,
-            'createCta' => $create['createCta'] ?? null,
-            'createCollections' => $create['createCollections'] ?? [],
+            // The same list the dashboard's "all posts" widget gets, with this
+            // workflow alone — so the modal shows it read-only.
+            'creates' => $create === null
+                ? []
+                : [['workflow' => $name, 'label' => app(SubjectLinks::class)->workflowLabel($name)] + $create],
             'stateColors' => $loader->placeColors(),
             'stateLabels' => $loader->placeLabels(),
         ]);

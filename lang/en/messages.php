@@ -346,8 +346,6 @@ return [
 
     // Creating a post
     'new_post' => 'New post',
-    // Entry in the dashboard widget's "New post" menu, one line per workflow.
-    'new_post_in' => ':label: new post',
     'assign_to' => 'Assign to',
     'select_site' => 'Choose sites',
     // Label of the collection select in the "New post" modal when the workflow owns several collections.
@@ -364,6 +362,8 @@ return [
     // "Create" — or carries the label of the coupled transition
     // (metadata.create_transition), which runs right after creating.
     'post_title' => 'Title',
+    'post_workflow' => 'Workflow',
+    'post_workflow_hint' => 'Which workflow the post is created in.',
     'post_title_required' => 'Please enter a title.',
     'create' => 'Create',
     // Toast when the post was created but the coupled transition could not run —
@@ -685,8 +685,8 @@ return [
     'seed_published_place_none' => 'no finished place',
     'post_creator_groups' => 'May create entries',
     'post_creator_groups_none' => 'super admins only',
-    'post_creator_groups_hint' => 'User groups that see the “New post” button on this workflow’s manager page. Super admins always may. Empty = super admins only.',
-    'post_creator_groups_hint_fallback' => 'User groups that see the “New post” button on this workflow’s manager page. Super admins always may. Empty = the project config applies (:groups).',
+    'post_creator_groups_hint' => 'User groups that may create posts in this workflow: it then appears in the “New post” workflow select in the overview and on its manager page. Super admins always may. Empty = super admins only.',
+    'post_creator_groups_hint_fallback' => 'User groups that may create posts in this workflow: it then appears in the “New post” workflow select in the overview and on its manager page. Super admins always may. Empty = the project config applies (:groups).',
     // The transition the "New post" modal's confirm button runs after creating —
     // the "workflow CTA". See WorkflowController::storePost().
     'create_transition' => 'Workflow action on create',

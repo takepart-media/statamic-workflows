@@ -208,13 +208,14 @@ Zur Einrichtung siehe [Übersetzung & Einfache Sprache](localization.md).
 
 ## Beiträge anlegen
 
-Darfst du in einem Workflow Inhalte anlegen, zeigt seine Manager-Seite „Neuer Beitrag“. Das Widget „Alle Beiträge“ zeigt je Workflow einen Button „<Workflow>: neuer Beitrag“.
+Das Widget „Alle Beiträge“ zeigt **einen** Button „Neuer Beitrag“ für alle Workflows, in denen du anlegen darfst. Die Manager-Seite eines Workflows zeigt denselben Button nur für diesen Workflow.
 
 1. Klicke auf „Neuer Beitrag“.
 2. Gib einen Titel ein.
-3. Verwaltet der Workflow mehrere Collections, wähle eine aus.
-4. Koppelt der Workflow eine erste Transition an das Anlegen und fragt diese nach einer Person, wählst du die Zugewiesenen im selben Dialog. „Benachrichtigung per E-Mail senden“ funktioniert wie in der Personenauswahl.
-5. Bestätige. Der Button trägt die Beschriftung der gekoppelten Transition, zum Beispiel „Entwurf erstellen“, oder ohne sie „Anlegen“.
+3. Wähle den Workflow. Die Auswahl zeigt nur Workflows, in denen du anlegen darfst, und erlaubt genau einen. Ist das Widget auf einen Workflow umgeschaltet, in dem du anlegen darfst, ist dieser vorausgewählt, sonst (zum Beispiel bei „Alle“) der erste. Steht nur ein Workflow zur Wahl, zum Beispiel auf einer Manager-Seite, ist das Feld schreibgeschützt und zeigt ihn nur an.
+4. Verwaltet der Workflow mehrere Collections, wähle eine aus.
+5. Koppelt der Workflow eine erste Transition an das Anlegen und fragt diese nach einer Person, wählst du die Zugewiesenen im selben Dialog. „Benachrichtigung per E-Mail senden“ funktioniert wie in der Personenauswahl.
+6. Bestätige. Der Button trägt die Beschriftung der gekoppelten Transition, zum Beispiel „Entwurf erstellen“, oder ohne sie „Anlegen“.
 
 Der Beitrag entsteht als Entwurf in der ersten Site der Collection, auf die du Zugriff hast. Er bekommt den Start-Status des Workflows und wird der Standard-Zuweisungsgruppe des Workflows zugewiesen, dazu dir, wenn der Workflow das so vorsieht. Ist eine gekoppelte Transition gesetzt, läuft sie sofort. Danach lädt die Seite neu, damit du siehst, wohin der Beitrag gegangen ist.
 
