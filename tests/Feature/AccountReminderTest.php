@@ -107,3 +107,25 @@ it('drops a retired account_reminder action when the definition is saved', funct
 
     expect(app(DefinitionLoader::class)->raw('simple')['transitions']['submit']['metadata']['actions'] ?? [])->toBe([]);
 });
+
+it('respects a still valid CP invitation stored in Statamic\'s token file', function () {
+    // File users: Statamic's broker keeps tokens in a YAML file, not in a table.
+    $manager = new \Statamic\Auth\Passwords\PasswordBrokerManager(app());
+    app()->instance('auth.password', $manager);
+    \Illuminate\Support\Facades\Password::clearResolvedInstance('auth.password');
+    $file = storage_path('statamic/password_resets/'.ActivationBroker::config()['table'].'.yaml');
+    @unlink($file);
+
+    // The CP invitation.
+    User::find('pending')->generateActivateAccountToken();
+    expect(is_file($file))->toBeTrue();
+
+    submitTo(['pending']);
+    Mail::assertNotSent(AccountReminderMail::class);
+
+    $this->travel(ActivationBroker::expireMinutes() + 1)->minutes();
+    submitTo(['pending']);
+    Mail::assertSent(AccountReminderMail::class, 1);
+
+    @unlink($file);
+});

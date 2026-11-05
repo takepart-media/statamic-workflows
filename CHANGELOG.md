@@ -6,6 +6,14 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+
+- **Account reminder sent while the activation link was still valid.** With
+  Statamic's file-based users the activation token lives in a YAML file, not
+  in a database table, so the check never found it and every transition sent
+  a new reminder (invalidating the invitation link). The check now asks the
+  password broker's own token repository.
+
 ## [1.0.2] - 2026-11-04
 
 ### Changed

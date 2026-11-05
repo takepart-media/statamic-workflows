@@ -2,10 +2,12 @@
 
 namespace TakepartMedia\Workflows\Support;
 
+use Illuminate\Auth\Passwords\DatabaseTokenRepository;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Password;
 use Statamic\Auth\Passwords\PasswordReset;
+use Statamic\Auth\Passwords\TokenRepository as StatamicTokenRepository;
 use Statamic\Contracts\Auth\User as UserContract;
 
 /**
@@ -72,37 +74,66 @@ final class ActivationBroker
 
     /**
      * Whether the user still holds an activation link that works — the last
-     * reminder's or the CP invitation's. Read from the broker's token table;
-     * a broker without one (cache driver) falls back to remembering our own
+     * reminder's or the CP invitation's.
+     *
+     * Asked of the broker's own token repository, because where the token lives
+     * depends on the user provider: with Statamic's file users it is a YAML file
+     * (storage/statamic/password_resets/<table>.yaml, Statamic's
+     * TokenRepository), with database users Laravel's token table. A repository
+     * that is neither (e.g. the cache driver) falls back to remembering our own
      * sends (markSent()).
      */
     public static function linkStillValid(UserContract $user): bool
     {
-        $config = self::config();
+        $created = self::tokenCreatedAt($user);
 
-        if (! isset($config['table'])) {
+        if ($created === false) {
             return Cache::has(self::cacheKey($user));
         }
 
-        try {
-            $created = DB::connection($config['connection'] ?? null)
-                ->table($config['table'])
-                ->where('email', $user->email())
-                ->value('created_at');
-        } catch (\Throwable) {
-            // No token table yet: then there is no token either.
-            return false;
-        }
-
-        return $created !== null && Carbon::parse($created)->addMinutes(self::expireMinutes())->isFuture();
+        return $created !== null && $created->copy()->addMinutes(self::expireMinutes())->isFuture();
     }
 
-    /** Only needed without a token table — see linkStillValid(). */
+    /** Only needed for a repository linkStillValid() cannot read. */
     public static function markSent(UserContract $user): void
     {
-        if (! isset(self::config()['table'])) {
+        if (self::tokenCreatedAt($user) === false) {
             Cache::put(self::cacheKey($user), true, now()->addMinutes(self::expireMinutes()));
         }
+    }
+
+    /**
+     * When the user's current activation token was created: a Carbon, null for
+     * no token, false when the repository cannot be read this way. The
+     * repositories keep their records behind protected methods, so they are
+     * read from inside (Closure::call) rather than duplicating their storage
+     * paths and table names here.
+     */
+    private static function tokenCreatedAt(UserContract $user): Carbon|false|null
+    {
+        $email = (string) $user->email();
+
+        try {
+            $repository = Password::broker(self::name())->getRepository();
+
+            if ($repository instanceof StatamicTokenRepository) {
+                $record = (fn () => $this->getResets()->get($email))->call($repository);
+
+                return $record === null ? null : Carbon::createFromTimestamp($record['created_at'], config('app.timezone'));
+            }
+
+            if ($repository instanceof DatabaseTokenRepository) {
+                $record = (fn () => $this->getTable()->where('email', $email)->first())->call($repository);
+
+                return $record === null ? null : Carbon::parse($record->created_at);
+            }
+        } catch (\Throwable) {
+            // No token table yet, or a broker that cannot be built: then there
+            // is no token either.
+            return null;
+        }
+
+        return false;
     }
 
     private static function cacheKey(UserContract $user): string
