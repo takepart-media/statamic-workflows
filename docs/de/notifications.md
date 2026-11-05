@@ -143,7 +143,7 @@ Erwähnt jemand einen Nutzer in einem Kommentar mit `@`, bekommt dieser die Mail
 
 ## Account-Erinnerung
 
-Oft werden Personen zugewiesen, bevor sie sich je angemeldet haben, etwa direkt nach einer Statamic-CP-Einladung. Nach jeder Transition prüft das Addon die Zugewiesenen des Eintrags. Wer seinen Account nie aktiviert hat (noch kein Passwort gesetzt), bekommt die Mail „Account aktivieren: … wartet“ mit einem neuen Aktivierungslink. Die Mail nennt den Eintrag, den Workflow und wer ihn übergeben hat, und sagt, wie lange der Link gültig ist.
+Oft werden Personen zugewiesen, bevor sie sich je angemeldet haben, etwa direkt nach einer Statamic-CP-Einladung. Nach jeder Transition prüft das Addon die Zugewiesenen des Eintrags. Wer seinen Account nie aktiviert hat (noch kein Passwort gesetzt), bekommt die Mail „Account aktivieren: … wartet“ mit einem neuen Aktivierungslink. Die Mail nennt den Eintrag, den Workflow und wer ihn übergeben hat, und sagt, wie lange der Link gültig ist. Nach dem Setzen des Passworts landet die Person direkt auf der Workflow-Seite dieses Eintrags im CP statt auf der Startseite.
 
 Die Erinnerung pausiert, solange der letzte Aktivierungslink der Person noch gültig ist. Dazu zählt auch der Link aus Statamics CP-Einladung. Eine neue Mail geht erst raus, wenn der vorherige Link abgelaufen ist, egal wie viele Schritte dazwischen laufen. Aktivierte Nutzer bekommen sie nie.
 

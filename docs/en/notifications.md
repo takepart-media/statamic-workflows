@@ -143,7 +143,7 @@ When someone mentions a user with `@` in a comment, that user gets a mail "New m
 
 ## Account reminder
 
-People are often assigned before they ever logged in, for example right after a Statamic CP invitation. After every transition, the addon checks the entry's assignees. Everyone whose account was never activated (no password set yet) gets a mail "Activate your account: … is waiting" with a fresh activation link. The mail names the entry, the workflow and who handed it over, and says how long the link is valid.
+People are often assigned before they ever logged in, for example right after a Statamic CP invitation. After every transition, the addon checks the entry's assignees. Everyone whose account was never activated (no password set yet) gets a mail "Activate your account: … is waiting" with a fresh activation link. The mail names the entry, the workflow and who handed it over, and says how long the link is valid. After setting a password, the person lands directly on that entry's workflow page in the CP instead of the home page.
 
 The reminder pauses while the person's last activation link is still valid. That includes the link from Statamic's CP invitation. A new mail only goes out after the previous link has expired, however many steps run in between. Activated users never get it.
 

@@ -90,11 +90,12 @@ final class AccountReminder
         $actorName = $actor === null ? null : ((string) ($actor->name() ?: $actor->email()) ?: null);
         $title = (string) ($entry->value('title') ?: $entry->slug());
         $hours = ActivationBroker::expireHours();
+        $redirect = app(InstanceUrl::class)->for($subjectId, $workflow);
         $sent = 0;
 
         foreach ($recipients as $user) {
             try {
-                $url = PasswordReset::url($user->generateActivateAccountToken(), PasswordReset::BROKER_ACTIVATIONS);
+                $url = self::activationUrl($user->generateActivateAccountToken(), $redirect);
 
                 Mail::to($user->email(), $user->name())
                     ->locale($user->preferredLocale())
@@ -114,5 +115,20 @@ final class AccountReminder
         }
 
         return $sent;
+    }
+
+    /**
+     * Statamic's activation link plus `redirect`: after the password is set,
+     * Statamic's ResetPasswordController sends the user there instead of the
+     * home page (internal URLs only). The post's workflow page, because that is
+     * what the reminder is about. Appended here rather than through
+     * PasswordReset::redirectAfterReset(), which is static and would follow
+     * every later reset in the same process.
+     */
+    private static function activationUrl(string $token, string $redirect): string
+    {
+        $url = rtrim(PasswordReset::url($token, PasswordReset::BROKER_ACTIVATIONS), '?');
+
+        return $url.(str_contains($url, '?') ? '&' : '?').http_build_query(['redirect' => $redirect]);
     }
 }

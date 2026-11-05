@@ -7,6 +7,7 @@ use Statamic\Facades\User;
 use TakepartMedia\Workflows\Mail\AccountReminderMail;
 use TakepartMedia\Workflows\Support\ActivationBroker;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
+use TakepartMedia\Workflows\Workflow\InstanceUrl;
 use TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter;
 use TakepartMedia\Workflows\Workflow\WorkflowStateStore;
 use TakepartMedia\Workflows\Workflow\WorkflowTransitioner;
@@ -46,6 +47,12 @@ it('reminds unactivated assignees on every transition, without any action', func
     Mail::assertSent(AccountReminderMail::class, 1);
     Mail::assertSent(AccountReminderMail::class, fn ($mail) => $mail->hasTo('pending@example.com')
         && str_contains($mail->url, 'activate'));
+    // After activation Statamic sends the user to the post, not the home page.
+    Mail::assertSent(AccountReminderMail::class, function ($mail) {
+        parse_str((string) parse_url($mail->url, PHP_URL_QUERY), $query);
+
+        return ($query['redirect'] ?? null) === app(InstanceUrl::class)->for($this->entry->id(), 'simple');
+    });
     // Test broker: Laravel's default, 60 minutes.
     Mail::assertSent(AccountReminderMail::class, fn ($mail) => str_contains($mail->render(), 'Post')
         && str_contains($mail->render(), '1 hour'));

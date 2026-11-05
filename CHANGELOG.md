@@ -6,6 +6,13 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- **Account reminder opens the entry after activation.** The activation link
+  in the reminder mail now carries Statamic's `redirect` parameter, so after
+  setting a password the person lands on the entry's workflow page in the CP
+  instead of the site's home page. Statamic's own CP invitation is unchanged.
+
 ### Fixed
 
 - **Account reminder sent while the activation link was still valid.** With
