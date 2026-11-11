@@ -3,6 +3,7 @@
 namespace TakepartMedia\Workflows\Workflow;
 
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 
 /**
  * Keeps an entry's Statamic published flag in step with its workflow state:
@@ -19,8 +20,14 @@ class PublishedFlag
     /**
      * @param  array<string, mixed>  $raw
      */
-    public function sync(EntryContract $entry, array $raw, string $state): void
+    public function sync(EntryContract|EloquentSubject $entry, array $raw, string $state): void
     {
+        // Statamic's published flag is an entry concept; a model subject keeps its
+        // place in its own attribute (WorkflowStateStore::set).
+        if ($entry instanceof EloquentSubject) {
+            return;
+        }
+
         // Revision-pending places keep the live (published) version online while an
         // unpublished working copy exists — never touch the published flag.
         if (($raw['places'][$state]['metadata']['revision_pending'] ?? false) === true) {

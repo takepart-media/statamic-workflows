@@ -14,6 +14,8 @@ use Statamic\Facades\Site;
 use Statamic\Facades\User;
 use Statamic\Facades\UserGroup;
 use Statamic\Http\Controllers\CP\CpController;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use TakepartMedia\Workflows\Http\Controllers\Concerns\WorkflowControllerHelpers;
 use TakepartMedia\Workflows\Content\ContentTimestamp;
 use TakepartMedia\Workflows\Content\EntryContentPreview;
@@ -45,6 +47,7 @@ use TakepartMedia\Workflows\Workflow\FailedTranslationRetry;
 use TakepartMedia\Workflows\Workflow\QsNotesVisibility;
 use TakepartMedia\Workflows\Workflow\RevisionPublishers;
 use TakepartMedia\Workflows\Workflow\TransitionActions;
+use TakepartMedia\Workflows\Workflow\TransitionBlocked;
 use TakepartMedia\Workflows\Workflow\TransitionGates;
 use TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter;
 use TakepartMedia\Workflows\Workflow\Filters\AssigneeFilter;
@@ -1374,6 +1377,12 @@ class WorkflowController extends CpController
     {
         $user = User::current();
 
+        // A model has no site: Runway's own `edit <resource>` permission is the
+        // equivalent precondition.
+        if ($entry instanceof EloquentSubject) {
+            return $entry->editableBy($user);
+        }
+
         if ($user === null || ! is_object($entry) || ! method_exists($entry, 'locale')) {
             return false;
         }
@@ -1398,6 +1407,13 @@ class WorkflowController extends CpController
     private function workflowFor($entry, ?string $requested): ?string
     {
         $loader = app(DefinitionLoader::class);
+
+        if ($entry instanceof EloquentSubject) {
+            return $requested && in_array($requested, $loader->all(), true)
+                && in_array($entry->resourceHandle(), app(WorkflowResolver::class)->resources($loader->raw($requested)), true)
+                ? $requested
+                : app(WorkflowResolver::class)->forEntry($entry);
+        }
 
         if ($requested && in_array($requested, $loader->all(), true)
             && in_array($entry->collectionHandle(), $loader->raw($requested)['collections'] ?? [], true)) {
@@ -1960,6 +1976,21 @@ class WorkflowController extends CpController
      */
     private function mechanicalBlocker(array $transition, $entry, string $workflow, string $name): ?string
     {
+        // The project's own vetoes (TransitionGuard), first: they are the
+        // business rules, and apply() refuses on exactly the same answer.
+        $guarded = app(WorkflowTransitioner::class)->blocker(
+            $entry, $workflow, $name, app(DefinitionLoader::class)->raw($workflow), User::current()?->id(),
+        );
+
+        if ($guarded !== null) {
+            return $guarded;
+        }
+
+        // Everything below is about sites and localizations.
+        if ($entry instanceof EloquentSubject) {
+            return null;
+        }
+
         // The explicit, assignable gate: metadata.actions declaring
         // `target_missing` — see TransitionActions::TARGET_MISSING. Checked first
         // and unconditionally, ahead of the localization-specific machinery below:
@@ -2329,7 +2360,7 @@ class WorkflowController extends CpController
         // only when the entry is still resolvable.
         $currentHashes = [];
         $currentContainerHashes = [];
-        if ($entry = Entry::find($id)) {
+        if ($entry = Subjects::find($id)) {
             $passageRefs = $comments
                 ->pluck('passage_ref')
                 ->filter(fn ($ref) => is_string($ref) && $ref !== '')
@@ -2653,12 +2684,13 @@ class WorkflowController extends CpController
             return $this->mentionableCache[$key];
         }
 
-        $site = Site::get($entry->locale());
+        $site = $entry instanceof EloquentSubject ? null : Site::get($entry->locale());
 
         return $this->mentionableCache[$key] = User::all()
             ->filter(fn ($user) => ($user->isSuper() || $user->hasPermission('access cp'))
-                && $site !== null
-                && (bool) $user->can('view', $site))
+                && ($entry instanceof EloquentSubject
+                    ? $entry->viewableBy($user)
+                    : $site !== null && (bool) $user->can('view', $site)))
             ->map(fn ($user) => $this->commentUserSummary($user))
             ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
@@ -2799,7 +2831,7 @@ class WorkflowController extends CpController
      */
     public function show(Request $request, string $id)
     {
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         $workflow = $this->workflowFor($entry, $request->query('workflow'));
@@ -2923,7 +2955,7 @@ class WorkflowController extends CpController
     {
         // Honour an explicitly requested workflow (e.g. the translation manager)
         // for the context.
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         $workflow = $this->workflowFor($entry, $request->query('workflow'));
@@ -2949,7 +2981,7 @@ class WorkflowController extends CpController
         $instance = [
             'id' => $id,
             'type' => $workflow,
-            'subject' => [
+            'subject' => $entry instanceof EloquentSubject ? $this->modelSubjectPayload($entry) : [
                 'kind' => 'entry',
                 'id' => $id,
                 'collection' => $entry->collectionHandle(),
@@ -2986,11 +3018,13 @@ class WorkflowController extends CpController
 
         // Not loaded at all without the right — see canViewHistory().
         $canViewHistory = $this->canViewHistory();
+        $isModel = $entry instanceof EloquentSubject;
 
         $props = [
             'instance' => $instance,
-            'content' => app(EntryContentPreview::class)->blocks($entry, $workflow),
-            'versions' => $this->entryVersions($entry, $workflow, $id),
+            // A model has no Bard content to preview and no site versions.
+            'content' => $isModel ? [] : app(EntryContentPreview::class)->blocks($entry, $workflow),
+            'versions' => $isModel ? [] : $this->entryVersions($entry, $workflow, $id),
             'canViewHistory' => $canViewHistory,
             'history' => $canViewHistory ? $this->entryHistory($id, $workflow) : [],
             'historyDiffUrlTemplate' => cp_route('workflows.api.history.diff', ['id' => $id, 'event' => '__EVENT__']),
@@ -3019,7 +3053,7 @@ class WorkflowController extends CpController
             // the badge can never contradict each other. Carries both dates,
             // because "the source changed" is only actionable once you can see how
             // far apart the two are.
-            'sourceChanged' => $this->sourceChangedNotice($entry),
+            'sourceChanged' => $isModel ? null : $this->sourceChangedNotice($entry),
             'actions' => $actions,
             'applyUrls' => $applyUrls,
             'assigneeUrl' => cp_route('workflows.api.assignees', ['id' => $id, 'workflow' => $workflow]),
@@ -3170,6 +3204,29 @@ class WorkflowController extends CpController
     }
 
     /**
+     * The `subject` block of the instance page for a model: no site, no preview,
+     * the Runway edit page behind the "Edit" button.
+     *
+     * @return array<string, mixed>
+     */
+    private function modelSubjectPayload(EloquentSubject $subject): array
+    {
+        return [
+            'kind' => 'model',
+            'id' => $subject->id(),
+            'resource' => $subject->resourceHandle(),
+            'title' => $subject->title(),
+            'site' => null,
+            'site_name' => null,
+            'code' => null,
+            'lang' => null,
+            'cp_url' => $subject->editableBy(User::current()) ? $subject->editUrl() : null,
+            'preview_url' => null,
+            'preview_mode' => null,
+        ];
+    }
+
+    /**
      * Users that can be assigned in the workflow, shaped for the header picker.
      *
      * @return array<int, array<string, string>>
@@ -3215,7 +3272,7 @@ class WorkflowController extends CpController
 
     public function actionsJson(Request $request, string $id)
     {
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         $workflow = $this->workflowFor($entry, $request->query('workflow'));
@@ -3253,7 +3310,7 @@ class WorkflowController extends CpController
      */
     public function instanceStatus(Request $request, string $id)
     {
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         $workflow = $this->workflowFor($entry, $request->query('workflow'));
@@ -3370,7 +3427,9 @@ class WorkflowController extends CpController
                 // the pivot you click whatever cell you are looking at, and naming
                 // that as the source would be wrong as soon as a source site is
                 // configured. With a free source pick this is the preselection.
-                'source_site' => $this->siteDescriptor($this->preselectedSourceFor($entry, $workflow)),
+                'source_site' => $entry instanceof EloquentSubject
+                    ? null
+                    : $this->siteDescriptor($this->preselectedSourceFor($entry, $workflow)),
                 // Free source pick — off by default. The configured source is
                 // binding, which is the point of configuring it; a project that
                 // wants the decision per translation switches
@@ -3757,7 +3816,7 @@ class WorkflowController extends CpController
     public function applyTransition(Request $request, string $id, string $name)
     {
         // Validate the transition against the workflow definition, then persist.
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         $workflow = $this->workflowFor($entry, $request->query('workflow'));
@@ -4113,6 +4172,10 @@ class WorkflowController extends CpController
                 explicitAssignees: $explicit !== [] ? $explicit : null,
                 notify: $request->boolean('notify', true),
             );
+        } catch (TransitionBlocked $e) {
+            // A guard or a TransitionApplied listener said no, with a reason meant
+            // for the editor. Not reported: a refused step is not an error.
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\RuntimeException $e) {
             report($e);
 
@@ -4890,7 +4953,7 @@ class WorkflowController extends CpController
      */
     public function setAssignees(Request $request, string $id)
     {
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         abort_unless($this->canAccessEntrySite($entry), 403);
@@ -4930,7 +4993,7 @@ class WorkflowController extends CpController
     {
         abort_unless($this->isPrivilegedUser(), 403);
 
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         // Even a manual override may not write into a site the user cannot access.
@@ -5007,7 +5070,7 @@ class WorkflowController extends CpController
      */
     public function transfer(Request $request, string $id)
     {
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         abort_unless($this->canAccessEntrySite($entry), 403);
@@ -5518,7 +5581,7 @@ class WorkflowController extends CpController
      */
     private function resolveWorkflow(string $id, ?string $requested = null): ?string
     {
-        if ($entry = Entry::find($id)) {
+        if ($entry = Subjects::find($id)) {
             return $this->workflowFor($entry, $requested);
         }
 
@@ -5550,7 +5613,7 @@ class WorkflowController extends CpController
         // Entry-backed subjects only — a fixture-less workflow has no site to check.
         // markCommentsRead() stays ungated on purpose: it writes nothing but the
         // current user's own "seen" marker and has no effect on anyone else.
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         if ($entry) {
             abort_unless($this->canAccessEntrySite($entry), 403);
         }
@@ -5781,7 +5844,7 @@ class WorkflowController extends CpController
 
         abort_if($model === null, 404);
 
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
 
         if ($entry) {
             abort_unless($this->canAccessEntrySite($entry), 403);
@@ -5833,7 +5896,7 @@ class WorkflowController extends CpController
      */
     private function logCommentEvent(WorkflowComment $comment, string $type, array $extra = []): void
     {
-        $entry = Entry::find($comment->subject_id);
+        $entry = Subjects::find($comment->subject_id);
         $state = $entry ? app(WorkflowResolver::class)->stateFor($entry, $comment->workflow) : null;
         $preview = Str::limit((string) $comment->body, 120);
 
@@ -5875,7 +5938,7 @@ class WorkflowController extends CpController
      */
     public function watch(Request $request, string $id)
     {
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
         abort_if($entry === null, 404);
 
         $workflow = $this->resolveWorkflow($id, $request->query('workflow'));

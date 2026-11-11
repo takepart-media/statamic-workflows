@@ -27,6 +27,7 @@ Danach trägst du die gewünschten Erweiterungen in `config/workflows.php` ein.
 | [Dashboard-Widgets](dashboard-widgets.md) | Festlegen, welche Workflow-Widgets im Dashboard erscheinen | `dashboard_widgets` | – |
 | [Inhaltsfelder](content-fields.md) | Die Felder deiner Blueprints für Vorschau und Übersetzung zuordnen | `content_fields` | – |
 | [Übersetzung & Einfache Sprache](translation.md) | DeepL und den Einfache-Sprache-Dienst anbinden | `translation` | – |
+| [Eloquent-Models als Subjekte](eloquent-subjects.md) | Workflows für Runway-Models, Transitionen per Guard verhindern, in derselben Transaktion reagieren | `connection`, `actions.*.guard` | `Contracts\TransitionGuard` |
 
 > [!TIP]
 > Mit Code erweiterst du das Addon nur über die beiden Contracts `WorkflowAction` und `WorkflowMail`. Alles andere ist reine Konfiguration.

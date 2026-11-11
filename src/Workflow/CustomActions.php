@@ -2,6 +2,7 @@
 
 namespace TakepartMedia\Workflows\Workflow;
 
+use TakepartMedia\Workflows\Contracts\TransitionGuard;
 use TakepartMedia\Workflows\Contracts\WorkflowAction;
 
 /**
@@ -133,6 +134,16 @@ class CustomActions
      * Container-resolved so a handler can type-hint its dependencies. The class
      * was already checked in resolve(); this only builds it.
      */
+    /**
+     * The guard declared for an action handle, resolved through the container.
+     */
+    public static function guard(string $handle): ?TransitionGuard
+    {
+        $class = self::find($handle)['guard'] ?? null;
+
+        return $class === null ? null : app($class);
+    }
+
     public static function handler(string $handle): ?WorkflowAction
     {
         $class = self::find($handle)['handler'] ?? null;
@@ -188,6 +199,7 @@ class CustomActions
                     : null,
                 'workflows' => self::workflowList($declaration['workflows'] ?? null),
                 'handler' => self::handlerClass($declaration['handler'] ?? null),
+                'guard' => self::guardClass($declaration['guard'] ?? null),
                 'fields' => self::fieldList($declaration['fields'] ?? []),
             ])
             // No label and no scope are the two things a declaration cannot be
@@ -199,6 +211,10 @@ class CustomActions
             // failure this check exists to make loud.
             ->reject(fn (array $action, string $handle) => ($config[$handle]['handler'] ?? null) !== null
                 && $action['handler'] === null)
+            // Same for a `guard`: a veto that silently does not exist is worse
+            // than a declaration that is dropped.
+            ->reject(fn (array $action, string $handle) => ($config[$handle]['guard'] ?? null) !== null
+                && $action['guard'] === null)
             ->all();
     }
 
@@ -225,6 +241,13 @@ class CustomActions
     /**
      * @return class-string|null
      */
+    private static function guardClass(mixed $raw): ?string
+    {
+        return is_string($raw) && $raw !== '' && class_exists($raw) && is_subclass_of($raw, TransitionGuard::class)
+            ? $raw
+            : null;
+    }
+
     private static function handlerClass(mixed $raw): ?string
     {
         return is_string($raw) && $raw !== '' && class_exists($raw) && is_subclass_of($raw, WorkflowAction::class)

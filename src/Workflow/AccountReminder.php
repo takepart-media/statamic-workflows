@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Mail;
 use Statamic\Auth\Passwords\PasswordReset;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 use Statamic\Facades\User;
 use TakepartMedia\Workflows\Jobs\SendAccountReminders;
 use TakepartMedia\Workflows\Mail\AccountReminderMail;
@@ -33,7 +34,7 @@ final class AccountReminder
      * Send now, after the response or on the queue — the same switch as every
      * other workflow mail (WorkflowNotifier::queue()).
      */
-    public static function queue(EntryContract $entry, string $workflow, ?string $actorId): void
+    public static function queue(EntryContract|EloquentSubject $entry, string $workflow, ?string $actorId): void
     {
         if (! config('workflows.account_reminder.enabled', true)) {
             return;
@@ -75,7 +76,7 @@ final class AccountReminder
     }
 
     /** @return int how many mails went out */
-    public static function send(EntryContract $entry, string $workflow, ?string $actorId): int
+    public static function send(EntryContract|EloquentSubject $entry, string $workflow, ?string $actorId): int
     {
         $subjectId = (string) $entry->id();
         $recipients = self::recipients($subjectId, $workflow, $actorId);

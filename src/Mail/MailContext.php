@@ -4,6 +4,7 @@ namespace TakepartMedia\Workflows\Mail;
 
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 
 /**
  * Everything a mail is told about the moment it is sent.
@@ -28,7 +29,7 @@ use Statamic\Contracts\Entries\Entry as EntryContract;
 class MailContext
 {
     /**
-     * @param  EntryContract  $entry  the version the mail is about — already fresh,
+     * @param  EntryContract|EloquentSubject  $entry  the version the mail is about — already fresh,
      *                                so a composer reading fields sees what the step
      *                                left behind
      * @param  string  $workflow  the workflow's name
@@ -68,7 +69,7 @@ class MailContext
      *                                 intro; null everywhere else
      */
     public function __construct(
-        public readonly EntryContract $entry,
+        public readonly EntryContract|EloquentSubject $entry,
         public readonly string $workflow,
         public readonly array $definition,
         public readonly string $mailType,

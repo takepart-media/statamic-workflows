@@ -18,8 +18,10 @@ return new class extends Migration
             $table->id();
             $table->string('user_id');
             $table->string('subject_id');
-            $table->string('workflow');
-            $table->string('passage_ref');   // the fieldset/passage uuid
+            // Short enough for the 4-column unique index under InnoDB's 3072-byte
+            // key limit (utf8mb4) when the workflow tables share a MySQL connection.
+            $table->string('workflow', 100);
+            $table->string('passage_ref', 100);   // the fieldset/passage uuid
             $table->timestamp('seen_at');     // last time the user viewed this passage's comments
             $table->timestamps();
 

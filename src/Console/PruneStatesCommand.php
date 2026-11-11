@@ -4,6 +4,7 @@ namespace TakepartMedia\Workflows\Console;
 
 use Illuminate\Console\Command;
 use Statamic\Facades\Entry;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\WorkflowAssigneeStore;
 use TakepartMedia\Workflows\Workflow\WorkflowCommentStore;
@@ -90,7 +91,7 @@ class PruneStatesCommand extends Command
             $buckets = ['deleted' => [], 'ungoverned' => [], 'foreign' => [], 'unstarted' => [], 'protected' => 0];
 
             foreach ($purger->subjectIds($workflow) as $subjectId) {
-                $entry = Entry::find($subjectId);
+                $entry = Subjects::find($subjectId);
 
                 if ($entry === null) {
                     $buckets['deleted'][] = $subjectId;

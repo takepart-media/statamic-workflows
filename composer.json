@@ -64,7 +64,8 @@
     "require-dev": {
         "pestphp/pest": "^4.0",
         "orchestra/testbench": "^11.0",
-        "mockery/mockery": "^1.6"
+        "mockery/mockery": "^1.6",
+        "statamic-rad-pack/runway": "^9.0"
     },
     "scripts": {
         "test": "pest"

@@ -2,6 +2,7 @@
 
 namespace TakepartMedia\Workflows;
 
+use Illuminate\Database\DatabaseManager;
 use Statamic\Facades\CP\Nav;
 use Statamic\Facades\User;
 use Statamic\Providers\AddonServiceProvider;
@@ -148,10 +149,17 @@ class ServiceProvider extends AddonServiceProvider
         $this->app->scoped(\TakepartMedia\Workflows\Workflow\WorkflowEventStore::class);
 
         // Dedicated, isolated database for the workflow engine — pulled from
-        // config so projects may switch it to their primary connection.
-        config([
-            'database.connections.workflow' => config('workflows.database'),
-        ]);
+        // config. `workflows.connection` names a connection to share instead
+        // (e.g. the app's `mysql`): `workflow` then resolves to that very
+        // connection object, so workflow rows and the project's own models
+        // commit in one transaction. A second connection to the same database
+        // would be a second PDO session and could not do that.
+        if ($shared = config('workflows.connection')) {
+            config(['database.connections.workflow' => config("database.connections.$shared")]);
+            $this->callAfterResolving('db', fn (DatabaseManager $db) => $db->extend('workflow', fn () => $db->connection($shared)));
+        } else {
+            config(['database.connections.workflow' => config('workflows.database')]);
+        }
 
         // The workflow engine writes a Statamic revision on every transition.
         // Turn the global kill-switch on when opted-in via config. Each
@@ -323,9 +331,14 @@ class ServiceProvider extends AddonServiceProvider
     /**
      * Provision the dedicated workflow SQLite file if it is missing, so the
      * `workflow` connection and `php artisan migrate` work out of the box.
+     * Nothing to do for a shared connection or any non-SQLite driver.
      */
     private function ensureDatabaseExists(): void
     {
+        if (config('workflows.connection') || config('database.connections.workflow.driver') !== 'sqlite') {
+            return;
+        }
+
         $path = config('database.connections.workflow.database');
 
         // `:memory:` (the test suite's connection) has no file to provision —

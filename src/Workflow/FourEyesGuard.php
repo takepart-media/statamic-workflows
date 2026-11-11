@@ -3,6 +3,7 @@
 namespace TakepartMedia\Workflows\Workflow;
 
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 
 /**
  * `metadata.four_eyes` — the workflow's refusal to hand a post back to the
@@ -60,7 +61,7 @@ final class FourEyesGuard
      *
      * @param  array<string, mixed>  $raw
      */
-    public static function previousActorId(array $raw, ?EntryContract $entry, ?string $workflow): ?string
+    public static function previousActorId(array $raw, EntryContract|EloquentSubject|null $entry, ?string $workflow): ?string
     {
         if (self::settings($raw) === null || $workflow === null || $entry?->id() === null) {
             return null;

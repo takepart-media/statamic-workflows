@@ -2,6 +2,9 @@
 
 namespace TakepartMedia\Workflows\Fieldtypes;
 
+use Illuminate\Database\Eloquent\Model;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use TakepartMedia\Workflows\Support\Privileges;
 use Statamic\Facades\User;
 use Statamic\Fields\Fieldtype;
@@ -33,6 +36,12 @@ class WorkflowActions extends Fieldtype
     {
         $entry = $this->field()?->parent();
 
+        // On a Runway form the parent is the model itself; its subject carries the
+        // workflow id. A model that does not exist yet has no key and no state.
+        if ($entry instanceof Model) {
+            $entry = $entry->exists ? Subjects::forModel($entry) : null;
+        }
+
         // Also runs on the "create entry" form, before the first save — Statamic
         // gives that in-memory entry no id yet, so `method_exists` alone is not
         // enough to guard against it. Nothing here means anything for content
@@ -50,7 +59,7 @@ class WorkflowActions extends Fieldtype
         // Per entry VERSION, not per collection: a localization belongs to the
         // localization workflow, its origin to the authoring one. Otherwise the
         // editor of an English translation showed the post manager's actions.
-        $workflow = $collection ? $resolver->forEntry($entry) : null;
+        $workflow = $collection || $entry instanceof EloquentSubject ? $resolver->forEntry($entry) : null;
 
         if ($workflow === null) {
             return null;
@@ -129,7 +138,7 @@ class WorkflowActions extends Fieldtype
             // tried via ensureFieldHasConfig() and reverted because blueprints are
             // cached (see InjectWorkflowFields). This is the piece that can be
             // decided per render.
-            'lock_sites' => ! $isPrivileged && $resolver->localizationWorkflowFor((string) $collection) !== null,
+            'lock_sites' => ! $isPrivileged && $collection !== null && $resolver->localizationWorkflowFor((string) $collection) !== null,
             // Statamic's own heading for that card, resolved server-side so the
             // client matches whatever locale the CP runs in instead of guessing.
             'sites_label' => (string) __('Sites'),
