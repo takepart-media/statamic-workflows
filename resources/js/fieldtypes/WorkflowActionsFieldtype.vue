@@ -497,10 +497,14 @@ function triggerNativeSave() {
             if (done) return;
             done = true;
             window.Statamic?.$hooks?.off?.('entry.saved', onSaved);
+            window.Statamic?.$hooks?.off?.('runway.saved', onSaved);
             resolve(result);
         };
         const onSaved = () => finish('saved');
         window.Statamic?.$hooks?.on?.('entry.saved', onSaved);
+        // Runway models save through their own pipeline. Like the entry hook, this one never
+        // resolves, so Runway's after-save redirect (default: listing) cannot cut the apply short.
+        window.Statamic?.$hooks?.on?.('runway.saved', onSaved);
 
         // If the form was clean, no request will ever fire — give it a very
         // short window then proceed. If dirty, allow a full save round-trip.
