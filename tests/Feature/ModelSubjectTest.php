@@ -186,3 +186,24 @@ it('lets a listener do the domain work before the state is written', function ()
     expect($seen)->toBeNull()
         ->and($this->ticket->fresh()->only(['status', 'title']))->toBe(['status' => 'review', 'title' => 'Handled']);
 });
+
+it('purges the workflow data of a deleted model and leaves other models alone', function () {
+    $subject = Subjects::forModel($this->ticket);
+    $other = Subjects::forModel($this->makeTicket(['title' => 'Other']));
+    $raw = app(DefinitionLoader::class)->raw('tickets');
+    foreach ([$subject, $other] as $s) {
+        app(WorkflowTransitioner::class)->apply($s, 'tickets', 'submit', $raw);
+        app(WorkflowAssigneeStore::class)->set($s->id(), 'tickets', ['a']);
+    }
+
+    $this->ticket->delete();
+
+    $rows = fn (string $id) => collect([
+        TakepartMedia\Workflows\Workflow\WorkflowState::class,
+        TakepartMedia\Workflows\Workflow\WorkflowEvent::class,
+        TakepartMedia\Workflows\Workflow\WorkflowAssignee::class,
+    ])->sum(fn ($model) => $model::query()->where('subject_id', $id)->count());
+
+    expect($rows($subject->id()))->toBe(0)
+        ->and($rows($other->id()))->toBe(3);
+});

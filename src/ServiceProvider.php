@@ -73,6 +73,10 @@ class ServiceProvider extends AddonServiceProvider
         \Statamic\Events\EntryDeleted::class => [
             \TakepartMedia\Workflows\Listeners\PurgeWorkflowDataOnEntryDeleted::class,
         ],
+        // The same for Eloquent models behind a Runway resource (Runway has no event).
+        'eloquent.deleted: *' => [
+            \TakepartMedia\Workflows\Listeners\PurgeWorkflowDataOnModelDeleted::class,
+        ],
         // Move between the publish place and `pending_revision` as the entry's
         // working copy is created and published (revision-enabled collections).
         \Statamic\Events\RevisionSaved::class => [
