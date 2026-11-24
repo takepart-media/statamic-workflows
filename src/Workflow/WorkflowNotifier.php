@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 use Statamic\Facades\User;
 use TakepartMedia\Workflows\Mail\MailContext;
 use TakepartMedia\Workflows\Mail\MailTypes;
@@ -68,7 +69,7 @@ class WorkflowNotifier
      * @param  string  $place  the place the subject just arrived in
      */
     public function notifyPlaceArrival(
-        EntryContract $entry,
+        EntryContract|EloquentSubject $entry,
         string $workflow,
         array $raw,
         string $place,
@@ -98,7 +99,7 @@ class WorkflowNotifier
     }
 
     /**
-     * @param  EntryContract  $entry  the version the step acted on
+     * @param  EntryContract|EloquentSubject  $entry  the version the step acted on
      * @param  array<string, mixed>  $raw  the whole workflow definition. Passed
      *                                     down into every MailContext rather than
      *                                     re-read, so a composer that wants at the
@@ -118,7 +119,7 @@ class WorkflowNotifier
      *             reminder only when at least one did
      */
     public function notify(
-        EntryContract $entry,
+        EntryContract|EloquentSubject $entry,
         string $workflow,
         array $raw,
         string $mailType,
@@ -234,7 +235,7 @@ class WorkflowNotifier
      * @param  array<string, mixed>  $raw
      */
     public function queue(
-        EntryContract $entry,
+        EntryContract|EloquentSubject $entry,
         string $workflow,
         array $raw,
         string $mailType,

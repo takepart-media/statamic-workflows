@@ -2,6 +2,8 @@
 
 namespace TakepartMedia\Workflows\Workflow;
 
+use TakepartMedia\Workflows\Events\AssigneesChanged;
+
 /**
  * Reads/writes workflow assignments in the dedicated `workflow` SQLite database.
  * Assignment is per subject-version (entry localization) and per workflow, so
@@ -73,7 +75,8 @@ class WorkflowAssigneeStore
     public function set(string $subjectId, string $workflow, array $userIds): void
     {
         $userIds = collect($userIds)->filter()->map(fn ($id) => (string) $id)->unique()->values();
-        $added = $userIds->diff(array_map('strval', $this->idsFor($subjectId, $workflow)));
+        $previous = array_map('strval', $this->idsFor($subjectId, $workflow));
+        $added = $userIds->diff($previous);
 
         WorkflowAssignee::query()
             ->where('workflow', $workflow)
@@ -88,6 +91,8 @@ class WorkflowAssigneeStore
 
         $watches = app(WorkflowWatchStore::class);
         $added->each(fn (string $userId) => $watches->watch($userId, $subjectId, $workflow));
+
+        AssigneesChanged::dispatch($subjectId, $workflow, $userIds->all(), $previous);
     }
 
     /**

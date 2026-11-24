@@ -316,8 +316,9 @@ class WorkflowEventStore
             // (the history shows it); they are not arrivals.
             ->whereNotIn('type', self::COMMENT_TYPES)
             ->whereBetween('created_at', [$from, $to])
+            // No DISTINCT: MySQL rejects it next to ORDER BY on an unselected
+            // column (error 3065); the loop below drops repeats anyway.
             ->orderBy('created_at')
-            ->distinct()
             ->get(['workflow', 'subject_id']);
 
         $seen = [];
@@ -326,9 +327,8 @@ class WorkflowEventStore
         foreach ($rows as $row) {
             $subjectId = (string) $row->subject_id;
 
-            // The DISTINCT above is per (workflow, subject_id) pair, so the same
-            // subject can still arrive twice under two workflows. This is where
-            // it becomes one.
+            // A subject can arrive several times, also under two workflows.
+            // This is where it becomes one, under its earliest arrival.
             if (isset($seen[$subjectId])) {
                 continue;
             }

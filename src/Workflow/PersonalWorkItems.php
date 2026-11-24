@@ -7,6 +7,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Statamic\Facades\Entry;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use Statamic\Facades\Site;
 
 /**
@@ -258,7 +259,7 @@ class PersonalWorkItems
             ];
 
             return collect($subjectIdsFor($workflow))
-                ->map(fn ($id) => Entry::find($id))
+                ->map(fn ($id) => Subjects::find($id))
                 // A store row can outlive its entry — dropped silently, the
                 // remainder count is computed after this filter.
                 ->filter()
@@ -375,7 +376,7 @@ class PersonalWorkItems
             // The uppercased HANDLE, like every other site chip in the addon
             // (see WorkflowController::siteCode() for why not the locale).
             // null on single-site projects, so the view skips the chip.
-            'site_code' => $multiSite ? strtoupper($entry->locale()) : null,
+            'site_code' => $multiSite && $entry->locale() ? strtoupper($entry->locale()) : null,
             'url' => $this->urls->for($entry->id(), $workflow),
             // Open comments on this version, and how many of them are unseen —
             // the grey flag and amber `+N` the listings show.

@@ -7,6 +7,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Entry;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\PlaceActions;
 use TakepartMedia\Workflows\Workflow\WorkflowStateStore;
@@ -70,9 +71,9 @@ class AutoTransitionCommand extends Command
                         continue;
                     }
 
-                    $entry = Entry::find((string) $subjectId);
+                    $entry = Subjects::find((string) $subjectId);
 
-                    if (! $entry instanceof EntryContract) {
+                    if ($entry === null) {
                         continue;
                     }
 

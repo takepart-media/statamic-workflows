@@ -8,6 +8,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Support\Facades\Log;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Entry;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\WorkflowNotifier;
 
@@ -37,10 +38,10 @@ class SendWorkflowNotification implements ShouldQueue
 
     public function handle(DefinitionLoader $loader, WorkflowNotifier $notifier): void
     {
-        $entry = Entry::find($this->subjectId);
+        $entry = Subjects::find($this->subjectId);
 
         // Deleted between the click and the send — nothing left to announce.
-        if (! $entry instanceof EntryContract) {
+        if ($entry === null) {
             return;
         }
 

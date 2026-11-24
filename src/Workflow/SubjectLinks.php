@@ -5,6 +5,7 @@ namespace TakepartMedia\Workflows\Workflow;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
 use Statamic\Facades\Entry;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use Statamic\Facades\Site;
 
 /**
@@ -65,7 +66,7 @@ class SubjectLinks
 
         foreach ($subjectIds as $subjectId) {
             $subjectId = (string) $subjectId;
-            $entry = Entry::find($subjectId);
+            $entry = Subjects::find($subjectId);
 
             if ($entry === null) {
                 continue;

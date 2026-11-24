@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Entry;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use TakepartMedia\Workflows\Content\EntrySnapshot;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\PublishedFlag;
@@ -46,9 +47,9 @@ class UndoAutoTransitionCommand extends Command
     public function handle(DefinitionLoader $loader, WorkflowStateStore $states, WorkflowEventStore $events): int
     {
         $id = (string) $this->argument('entry');
-        $entry = Entry::find($id);
+        $entry = Subjects::find($id);
 
-        if (! $entry instanceof EntryContract) {
+        if ($entry === null) {
             $this->error("Entry [{$id}] not found.");
 
             return self::FAILURE;

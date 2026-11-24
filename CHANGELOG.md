@@ -6,6 +6,34 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **Eloquent models as workflow subjects.** A workflow lists Runway resource
+  handles under `runway:` next to `collections:`. The subject id is Runway's
+  reference (`runway::<resource>::<key>`), so no table changes. State,
+  assignees, comments, history, mails, widgets and the `workflow_actions`
+  field work for models; site versions, translation, preview, revisions and
+  content ageing stay entry-only. See `docs/en/extending/eloquent-subjects.md`.
+- **`metadata.state_attribute`** mirrors the place into a model attribute in
+  the same transaction as the state row.
+- **`workflows.connection`** shares an app connection (e.g. `mysql`) instead of
+  the dedicated SQLite database, so workflow rows and the project's models
+  commit together.
+- **Transition guards** (`actions.<handle>.guard`, `Contracts\TransitionGuard`)
+  veto a step before anything is written — in the UI and in
+  `WorkflowTransitioner::apply()` for every caller.
+- **Events** `TransitionApplying` (before the state is written) and
+  `TransitionApplied` (after it), both inside the transaction — a listener that
+  throws rolls the step back — and `AssigneesChanged`.
+
+### Changed
+
+- A transition now writes state, assignees and history in one database
+  transaction with a row lock on the state, so two simultaneous clicks cannot
+  both apply.
+- `workflow_comment_reads` uses shorter `workflow` and `passage_ref` columns so
+  its unique index fits MySQL/InnoDB.
+
 ## [1.0.3] - 2026-11-05
 
 ### Changed

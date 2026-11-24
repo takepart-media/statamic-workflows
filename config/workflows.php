@@ -12,6 +12,11 @@ return [
     | connection at boot time using the values below. Change the driver if you
     | want workflow state to share your primary database instead.
     |
+    | `connection` names an existing connection of the app (e.g. `mysql`) to
+    | share instead; `database` is then ignored. Workflow state and the
+    | project's own models (Runway subjects) then commit in one transaction,
+    | which syncing a place into a model attribute needs.
+    |
     | Lives under storage/, not database/: this file is runtime-generated state,
     | not schema — the same reason migrations and seeders live in database/ while
     | logs, caches and uploads live in storage/. The nested `workflows/` folder
@@ -19,6 +24,8 @@ return [
     | storage/app.
     |
     */
+
+    'connection' => env('WORKFLOWS_DB_CONNECTION'),
 
     'database' => [
         'driver' => 'sqlite',

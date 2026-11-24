@@ -2,6 +2,7 @@
 
 namespace TakepartMedia\Workflows\Workflow;
 
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Site;
 use TakepartMedia\Workflows\Content\ContentFieldResolver;
@@ -68,6 +69,46 @@ class WorkflowResolver
     }
 
     /**
+     * The workflow that governs a Runway resource: the first one listing its
+     * handle under `runway:`. A model has no localizations, so there is only
+     * ever one.
+     */
+    public function forResource(string $resource): ?string
+    {
+        foreach ($this->loader->all() as $name) {
+            if (in_array($resource, $this->resources($this->loader->raw($name)), true)) {
+                return $name;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The Runway resource handles a workflow governs (`runway:` in the YAML).
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array<int, string>
+     */
+    public function resources(array $raw): array
+    {
+        return array_values(array_filter((array) ($raw['runway'] ?? []), 'is_string'));
+    }
+
+    /**
+     * The model attribute a workflow mirrors its place into
+     * (`metadata.state_attribute`), or null when it keeps none.
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    public function stateAttribute(array $raw): ?string
+    {
+        $attribute = $raw['metadata']['state_attribute'] ?? null;
+
+        return is_string($attribute) && $attribute !== '' ? $attribute : null;
+    }
+
+    /**
      * The workflow that governs one specific entry version.
      *
      * A localization is the subject of the localization workflow, its origin is
@@ -93,6 +134,12 @@ class WorkflowResolver
      */
     public function forEntry($entry): ?string
     {
+        // A model subject has no collection: its workflow is the one listing its
+        // Runway resource. Answered here so every caller holding a subject works.
+        if ($entry instanceof EloquentSubject) {
+            return $this->forResource($entry->resourceHandle());
+        }
+
         if (! is_object($entry) || ! method_exists($entry, 'collectionHandle')) {
             return null;
         }

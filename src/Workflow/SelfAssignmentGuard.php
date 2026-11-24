@@ -3,6 +3,7 @@
 namespace TakepartMedia\Workflows\Workflow;
 
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 
 /**
  * `metadata.self_assignment` — the workflow's refusal to hand a post back to the
@@ -69,7 +70,7 @@ final class SelfAssignmentGuard
      * @param  array<string, mixed>  $raw
      * @param  array<string, mixed>  $transition
      */
-    public static function applies(array $raw, array $transition, ?EntryContract $entry, ?string $actorId): bool
+    public static function applies(array $raw, array $transition, EntryContract|EloquentSubject|null $entry, ?string $actorId): bool
     {
         if ($actorId === null || $actorId === '' || self::settings($raw) === null) {
             return false;

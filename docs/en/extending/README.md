@@ -27,6 +27,7 @@ Then add the extensions you need to `config/workflows.php`.
 | [Dashboard widgets](dashboard-widgets.md) | Choose which workflow widgets the dashboard shows | `dashboard_widgets` | – |
 | [Content fields](content-fields.md) | Map your blueprint fields for preview and translation | `content_fields` | – |
 | [Translation & plain language](translation.md) | Connect DeepL and the plain-language service | `translation` | – |
+| [Eloquent models as subjects](eloquent-subjects.md) | Run workflows on Runway models, veto transitions, react in the same transaction | `connection`, `actions.*.guard` | `Contracts\TransitionGuard` |
 
 > [!TIP]
 > Code-level extensions go through just two contracts, `WorkflowAction` and `WorkflowMail`. Everything else is configuration.

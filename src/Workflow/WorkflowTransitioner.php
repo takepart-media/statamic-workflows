@@ -2,10 +2,14 @@
 
 namespace TakepartMedia\Workflows\Workflow;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 use TakepartMedia\Workflows\Content\ContentTimestamp;
 use TakepartMedia\Workflows\Content\EntrySnapshot;
+use TakepartMedia\Workflows\Events\TransitionApplied;
+use TakepartMedia\Workflows\Events\TransitionApplying;
 use TakepartMedia\Workflows\Support\EventLogSuppressor;
 
 /**
@@ -48,7 +52,7 @@ class WorkflowTransitioner
      *                        this run — the editor switched it off in the assignee picker
      */
     public function apply(
-        EntryContract $entry,
+        EntryContract|EloquentSubject $entry,
         string $workflow,
         string $transitionName,
         array $raw,
@@ -83,55 +87,87 @@ class WorkflowTransitioner
 
         $to = $transition['to'];
 
+        if (($reason = $this->blocker($entry, $workflow, $transitionName, $raw, $actorId, $current)) !== null) {
+            throw new TransitionBlocked($reason);
+        }
+
         // The publish-flag sync and the revision below are saves the addon makes on
         // the editor's behalf. Suppressed as one scope so they don't show up in the
         // History as draft saves — this step logs its own event, with its own
         // snapshot, a few lines down.
         return EventLogSuppressor::while(function () use ($entry, $workflow, $transitionName, $transition, $raw, $actorId, $explicitAssignees, $current, $to, $note, $notify) {
-            $this->states->set($entry->id(), $workflow, $to);
-            app(PublishedFlag::class)->sync($entry, $raw, $to);
-            $this->stampContentTimestamp($entry, $raw, $to);
+            // State, assignees, history and the TransitionApplied listeners commit
+            // together. For a model subject on a shared connection the model's own
+            // attribute (WorkflowStateStore::set) is part of the same commit, so a
+            // refused save or a throwing listener leaves nothing behind.
+            $fresh = DB::connection('workflow')->transaction(function () use ($entry, $workflow, $transitionName, $transition, $raw, $actorId, $explicitAssignees, $current, $to, $note) {
+                // Two clicks at once: the second waits here, then finds the place moved.
+                $locked = WorkflowState::query()
+                    ->where('subject_id', $entry->id())
+                    ->where('workflow', $workflow)
+                    ->lockForUpdate()
+                    ->value('state');
 
-            // Assignment happens ONLY where a transition says so — its
-            // `user_assignment` action (TransitionActions::USER_ASSIGNMENT),
-            // resolved by the caller into $explicitAssignees.
-            //
-            // A transition without one leaves the responsible people exactly as
-            // they were. It used to hand the subject to the destination place's
-            // group instead, which is why a step could quietly widen
-            // responsibility from two named people back to a whole group: the
-            // place had the last word, not the action. Now nothing assigns behind
-            // the action's back, and "who is responsible" is answerable by reading
-            // the transitions alone.
-            //
-            // The consequence is deliberate and worth knowing: a workflow whose
-            // transitions declare no `user_assignment` never changes assignment
-            // after the subject entered it (initialAssignees() at creation), and
-            // since canApplyTransition() gates on being an assignee, a downstream
-            // group cannot act until some transition hands the subject over. The
-            // hand-over is now something the definition has to state.
-            $takeOver = $explicitAssignees ?? $this->automaticAssignees($transition, $entry);
+                if ($locked !== null && $locked !== $current) {
+                    throw new \RuntimeException("Transition [{$transitionName}] not allowed from [{$locked}].");
+                }
 
-            if ($takeOver !== null) {
-                $this->assignees->set($entry->id(), $workflow, $takeOver);
-            }
+                TransitionApplying::dispatch($entry, $workflow, $transitionName, $current, $to, $actorId);
 
-            $fresh = $entry->fresh() ?? $entry;
+                $this->states->set($entry->id(), $workflow, $to);
 
-            $this->events->log($entry->id(), $workflow, 'transition', [
-                'transition' => $transitionName,
-                'from' => $current,
-                'to' => $to,
-                'user_id' => $actorId,
-                // No note: the History row already prints the transition label,
-                // localized via DefinitionLoader::transitionLabel(). Storing the
-                // raw YAML label here would repeat it in whatever language the
-                // definition happens to be written in.
-                // A caller that is not a click (AutoTransitionCommand) may say
-                // why it ran; a click never passes one.
-                'note' => $note,
-                'snapshot' => app(EntrySnapshot::class)->take($fresh),
-            ]);
+                // Publish flag and content clock are entry concepts; a model keeps
+                // its place in its own attribute instead (WorkflowStateStore::set).
+                if (! $entry instanceof EloquentSubject) {
+                    app(PublishedFlag::class)->sync($entry, $raw, $to);
+                    $this->stampContentTimestamp($entry, $raw, $to);
+                }
+
+                // Assignment happens ONLY where a transition says so — its
+                // `user_assignment` action (TransitionActions::USER_ASSIGNMENT),
+                // resolved by the caller into $explicitAssignees.
+                //
+                // A transition without one leaves the responsible people exactly as
+                // they were. It used to hand the subject to the destination place's
+                // group instead, which is why a step could quietly widen
+                // responsibility from two named people back to a whole group: the
+                // place had the last word, not the action. Now nothing assigns behind
+                // the action's back, and "who is responsible" is answerable by reading
+                // the transitions alone.
+                //
+                // The consequence is deliberate and worth knowing: a workflow whose
+                // transitions declare no `user_assignment` never changes assignment
+                // after the subject entered it (initialAssignees() at creation), and
+                // since canApplyTransition() gates on being an assignee, a downstream
+                // group cannot act until some transition hands the subject over. The
+                // hand-over is now something the definition has to state.
+                $takeOver = $explicitAssignees ?? $this->automaticAssignees($transition, $entry);
+
+                if ($takeOver !== null) {
+                    $this->assignees->set($entry->id(), $workflow, $takeOver);
+                }
+
+                $fresh = $entry->fresh() ?? $entry;
+
+                $this->events->log($entry->id(), $workflow, 'transition', [
+                    'transition' => $transitionName,
+                    'from' => $current,
+                    'to' => $to,
+                    'user_id' => $actorId,
+                    // No note: the History row already prints the transition label,
+                    // localized via DefinitionLoader::transitionLabel(). Storing the
+                    // raw YAML label here would repeat it in whatever language the
+                    // definition happens to be written in.
+                    // A caller that is not a click (AutoTransitionCommand) may say
+                    // why it ran; a click never passes one.
+                    'note' => $note,
+                    'snapshot' => app(EntrySnapshot::class)->take($fresh),
+                ]);
+
+                TransitionApplied::dispatch($fresh, $workflow, $transitionName, $current, $to, $actorId);
+
+                return $fresh;
+            });
 
             $this->createStatamicRevision(
                 $fresh,
@@ -224,6 +260,49 @@ class WorkflowTransitioner
     }
 
     /**
+     * Why a transition may not run right now — the first reason any guard on it
+     * gives — or null. Writes nothing: the instance page asks this to disable the
+     * button, and apply() asks it again before every write.
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    public function blocker(
+        EntryContract|EloquentSubject $entry,
+        string $workflow,
+        string $transitionName,
+        array $raw,
+        ?string $actorId = null,
+        ?string $current = null,
+    ): ?string {
+        $transition = $raw['transitions'][$transitionName] ?? null;
+
+        if ($transition === null) {
+            return null;
+        }
+
+        $current ??= (string) $this->resolver->stateFor($entry, $workflow, $raw);
+
+        foreach (TransitionActions::custom($transition) as $action) {
+            $reason = CustomActions::guard($action['type'])?->check(new ActionContext(
+                entry: $entry,
+                workflow: $workflow,
+                scope: CustomActions::SCOPE_TRANSITION,
+                handle: $transitionName,
+                from: $current,
+                to: (string) $transition['to'],
+                values: $action['values'],
+                actorId: $actorId,
+            ));
+
+            if ($reason !== null && $reason !== '') {
+                return $reason;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Run one scope's project handlers, in the order the definition lists them.
      *
      * Every handler is isolated: a throw is logged and the next one still runs.
@@ -240,7 +319,7 @@ class WorkflowTransitioner
     private function runHandlers(
         string $scope,
         array $actions,
-        EntryContract $entry,
+        EntryContract|EloquentSubject $entry,
         string $workflow,
         string $handle,
         string $from,
@@ -319,7 +398,7 @@ class WorkflowTransitioner
      * @param  array<string, mixed>  $transition
      * @return array<int, string>|null
      */
-    private function automaticAssignees(array $transition, EntryContract $entry): ?array
+    private function automaticAssignees(array $transition, EntryContract|EloquentSubject $entry): ?array
     {
         $assignment = TransitionActions::userAssignment($transition);
 
@@ -330,7 +409,7 @@ class WorkflowTransitioner
         return $this->candidates->ids($assignment, $entry);
     }
 
-    private function createStatamicRevision(EntryContract $entry, string $message, ?string $actorId): void
+    private function createStatamicRevision(EntryContract|EloquentSubject $entry, string $message, ?string $actorId): void
     {
         if (! method_exists($entry, 'createRevision')) {
             return;

@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Statamic\Facades\Entry;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use Statamic\Facades\User;
 use TakepartMedia\Workflows\Content\EntryContentPreview;
 use TakepartMedia\Workflows\Jobs\SendCommentMentionNotification;
@@ -68,7 +69,7 @@ class CommentMentionNotifier
             return 0;
         }
 
-        $entry = Entry::find($comment->subject_id);
+        $entry = Subjects::find($comment->subject_id);
         $title = $entry ? (string) ($entry->value('title') ?: $entry->slug()) : (string) $comment->subject_id;
         $actorName = (string) ($comment->author_name ?: '—');
         $excerpt = Str::limit(trim(preg_replace('/\s+/u', ' ', (string) $comment->body)), 280);

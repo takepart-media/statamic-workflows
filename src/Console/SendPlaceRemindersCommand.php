@@ -7,6 +7,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Entry;
+use TakepartMedia\Workflows\Subjects\Subjects;
 use TakepartMedia\Workflows\Workflow\DefinitionLoader;
 use TakepartMedia\Workflows\Workflow\PlaceActions;
 use TakepartMedia\Workflows\Workflow\WorkflowEventStore;
@@ -115,9 +116,9 @@ class SendPlaceRemindersCommand extends Command
             return false;
         }
 
-        $entry = Entry::find($subjectId);
+        $entry = Subjects::find($subjectId);
 
-        if (! $entry instanceof EntryContract) {
+        if ($entry === null) {
             return false;
         }
 

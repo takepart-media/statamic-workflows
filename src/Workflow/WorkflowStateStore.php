@@ -2,6 +2,9 @@
 
 namespace TakepartMedia\Workflows\Workflow;
 
+use Illuminate\Support\Facades\DB;
+use TakepartMedia\Workflows\Subjects\Subjects;
+
 /**
  * Reads/writes persisted workflow states. This is the foundation of the
  * (eventual) workflow engine — for now it just tracks the current place of each
@@ -67,16 +70,50 @@ class WorkflowStateStore
      */
     public function set(string $subjectId, string $workflow, string $state): void
     {
-        $row = WorkflowState::query()->firstOrNew(['subject_id' => $subjectId, 'workflow' => $workflow]);
+        DB::connection('workflow')->transaction(function () use ($subjectId, $workflow, $state) {
+            $row = WorkflowState::query()->firstOrNew(['subject_id' => $subjectId, 'workflow' => $workflow]);
 
-        if (! $row->exists || $row->state !== $state || $row->entered_at === null) {
-            $row->entered_at = now();
-        }
+            if (! $row->exists || $row->state !== $state || $row->entered_at === null) {
+                $row->entered_at = now();
+            }
 
-        $row->state = $state;
-        $row->save();
+            $row->state = $state;
+            $row->save();
+
+            $this->syncAttribute($subjectId, $workflow, $state);
+        });
 
         $this->forget($workflow);
+    }
+
+    /**
+     * Mirror the place into the model attribute the workflow names
+     * (`metadata.state_attribute`), for model subjects only. Every writer of a
+     * state ends in set(), so none can leave the two apart. A save the model
+     * refuses (a project invariant) throws and rolls the state row back with it
+     * — on a shared connection (`workflows.connection`) that is one commit.
+     */
+    private function syncAttribute(string $subjectId, string $workflow, string $state): void
+    {
+        if (! Subjects::isModelId($subjectId)) {
+            return;
+        }
+
+        try {
+            $attribute = app(WorkflowResolver::class)->stateAttribute(app(DefinitionLoader::class)->raw($workflow));
+        } catch (\InvalidArgumentException) {
+            return;
+        }
+
+        // Read fresh: a TransitionApplying listener may have moved the model there
+        // already, and then there is nothing left to write.
+        $model = $attribute === null ? null : Subjects::find($subjectId)?->model();
+
+        if ($model === null || $model->getAttribute($attribute) === $state) {
+            return;
+        }
+
+        $model->forceFill([$attribute => $state])->save();
     }
 
     /**

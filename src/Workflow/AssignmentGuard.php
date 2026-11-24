@@ -3,6 +3,7 @@
 namespace TakepartMedia\Workflows\Workflow;
 
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 
 /**
  * Who a click may NOT hand a subject to, and where the picker turns instead —
@@ -39,7 +40,7 @@ final class AssignmentGuard
      * @param  array<int, string>  $ids
      * @return array<int, string>
      */
-    public static function filter(array $raw, array $ids, ?EntryContract $entry, ?string $workflow, ?string $actorId, ?string $mode): array
+    public static function filter(array $raw, array $ids, EntryContract|EloquentSubject|null $entry, ?string $workflow, ?string $actorId, ?string $mode): array
     {
         if ($actorId === null || $actorId === '') {
             return $ids;
@@ -68,7 +69,7 @@ final class AssignmentGuard
      * @param  array<string, mixed>  $raw
      * @param  array<string, mixed>  $transition
      */
-    public static function reason(array $raw, array $transition, ?EntryContract $entry, ?string $workflow, ?string $actorId): ?string
+    public static function reason(array $raw, array $transition, EntryContract|EloquentSubject|null $entry, ?string $workflow, ?string $actorId): ?string
     {
         if ($actorId === null || $actorId === '') {
             return null;
@@ -95,7 +96,7 @@ final class AssignmentGuard
      * @param  array<string, mixed>  $raw
      * @param  array<string, mixed>  $transition
      */
-    public static function applies(array $raw, array $transition, ?EntryContract $entry, ?string $workflow, ?string $actorId): bool
+    public static function applies(array $raw, array $transition, EntryContract|EloquentSubject|null $entry, ?string $workflow, ?string $actorId): bool
     {
         return self::reason($raw, $transition, $entry, $workflow, $actorId) !== null;
     }
@@ -109,7 +110,7 @@ final class AssignmentGuard
      * @param  array<string, mixed>  $transition
      * @return array<int, string>
      */
-    public static function fallbackIds(array $raw, array $transition, ?EntryContract $entry, ?string $workflow, ?string $actorId): array
+    public static function fallbackIds(array $raw, array $transition, EntryContract|EloquentSubject|null $entry, ?string $workflow, ?string $actorId): array
     {
         $settings = match (self::reason($raw, $transition, $entry, $workflow, $actorId)) {
             self::FOUR_EYES => FourEyesGuard::settings($raw),
@@ -130,7 +131,7 @@ final class AssignmentGuard
      * @param  array<string, mixed>  $raw
      * @param  array<string, mixed>  $transition
      */
-    public static function hint(array $raw, array $transition, ?EntryContract $entry, ?string $workflow, ?string $actorId): ?string
+    public static function hint(array $raw, array $transition, EntryContract|EloquentSubject|null $entry, ?string $workflow, ?string $actorId): ?string
     {
         return match (self::reason($raw, $transition, $entry, $workflow, $actorId)) {
             self::FOUR_EYES => FourEyesGuard::hint($raw),

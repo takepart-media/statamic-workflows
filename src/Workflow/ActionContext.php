@@ -3,6 +3,7 @@
 namespace TakepartMedia\Workflows\Workflow;
 
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use TakepartMedia\Workflows\Subjects\EloquentSubject;
 
 /**
  * Everything a project's action handler is told about the moment it runs.
@@ -19,7 +20,7 @@ use Statamic\Contracts\Entries\Entry as EntryContract;
 class ActionContext
 {
     /**
-     * @param  EntryContract  $entry  the version the transition acted on — already
+     * @param  EntryContract|EloquentSubject  $entry  the version the transition acted on — already
      *                                fresh, so a handler reading fields sees the
      *                                state the transition left behind
      * @param  string  $workflow  the workflow's name
@@ -39,7 +40,7 @@ class ActionContext
      *                                find out.
      */
     public function __construct(
-        public readonly EntryContract $entry,
+        public readonly EntryContract|EloquentSubject $entry,
         public readonly string $workflow,
         public readonly string $scope,
         public readonly string $handle,
