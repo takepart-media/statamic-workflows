@@ -53,6 +53,25 @@ By default the field is placed in the blueprint's first tab. To place it elsewhe
 
 The addon fills in everything else. Don't set `visibility` in the YAML: it would apply to everyone and override the super-admin rule.
 
+### Setting the date by hand only
+
+By default the addon keeps the clock. If "content updated" should be an editorial statement instead, switch that off in `config/workflows.php`:
+
+```php
+'content_timestamp' => [
+    'auto' => false,
+    'permission' => true,
+],
+```
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `auto` | `true` | `false`: no transition and no published working copy sets the date. Someone enters it in the entry editor. |
+| `permission` | `false` | `true`: registers the permission **Set "Content updated" date** (`edit content updated date`, group "Workflows" in the role editor). Roles holding it may edit the field, in addition to super admins. |
+
+> [!IMPORTANT]
+> With `auto` off, "Mark up to date" still moves an aged entry back to its published place, but it no longer restarts the deadline. Set the date first, otherwise the next ageing run moves the entry straight back. Translations and plain-language versions are not dated on approval either, so they count as out of date until someone sets their date.
+
 ### Backfilling existing content
 
 To give existing content its own stored value, run once:

@@ -283,6 +283,7 @@ All keys go under `metadata` and require `plain_language_site`.
 | `plain_language_site` | "Target site" | The one site this manager writes into. Makes the workflow a plain-language manager. |
 | `plain_language_completed_place` | "Target place after job completion" | Where a version moves once its rewrite is written back successfully. Without it, the version stays put until somebody clicks the next transition. |
 | `plain_language_failed_place` | "Target place on failed translation" | Where a version moves once the rewrite has failed for good. Without it, the untouched copy is deleted. |
+| `plain_language_intro_field` | "Introduction" | The content field a post opens with. Only this section is wrapped in `<div class="intro">` and sends `generate_intro: true`, so the service writes the introduction itself. Has to be one of the picked content fields. Empty = `content_fields.intro` from the config. |
 | `plain_language_skip_fields` | "Never rewrite" | Text fields that are never sent and keep their value: `field`, `set.field` or `*.field`. For anchor IDs, embed codes, button labels. |
 | `plain_language_clear_fields` | – | Top-level fields emptied on the plain-language version after a rewrite, such as a reference list. YAML only. |
 
@@ -440,6 +441,7 @@ All keys go under `metadata` of a localization workflow.
 | `translation_exclude_fields` | list | Top-level fields never translated or rewritten. |
 | `plain_language_completed_place` | place | Where a finished rewrite moves the version. |
 | `plain_language_failed_place` | place | Where a failed rewrite moves the version. |
+| `plain_language_intro_field` | string | The content field that is the introduction (`generate_intro`). |
 | `plain_language_skip_fields` | list | Text fields never sent to the plain-language service. |
 | `plain_language_clear_fields` | list | Fields emptied after a rewrite. |
 | `qs_notes_visible` | bool | Show the QA notes. Default `true`. |

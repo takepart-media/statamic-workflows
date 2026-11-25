@@ -365,9 +365,16 @@ class WorkflowTransitioner
      * `revision_pending` is excluded for the same reason PublishedFlag::sync() excludes
      * it: that place means "published, with a working copy open", not a fresh
      * approval, and stamping there would restart the deadline on every draft.
+     *
+     * A project that keeps the clock by hand switches all of this off with
+     * `workflows.content_timestamp.auto` — see ContentTimestamp::automatic().
      */
     private function stampContentTimestamp(EntryContract $entry, array $raw, string $state): void
     {
+        if (! ContentTimestamp::automatic()) {
+            return;
+        }
+
         if (($raw['places'][$state]['metadata']['revision_pending'] ?? false) === true) {
             return;
         }

@@ -322,6 +322,8 @@ describe('metadata cleanup', () => {
     });
 
     it('keeps plain-language skip fields trimmed and unique, and drops an empty list', () => {
+        expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('plain_language_intro_field');
+        expect(serialize(normalize({ metadata: { plain_language_intro_field: 'intro' } })).metadata.plain_language_intro_field).toBe('intro');
         expect(serialize(normalize({ metadata: {} })).metadata).not.toHaveProperty('plain_language_skip_fields');
         const model = normalize({ metadata: { plain_language_skip_fields: [' *.embed_code ', 'anchor.anchor_id', '*.embed_code', ''] } });
         expect(serialize(model).metadata.plain_language_skip_fields).toEqual(['*.embed_code', 'anchor.anchor_id']);

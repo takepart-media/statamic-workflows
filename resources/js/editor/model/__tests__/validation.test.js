@@ -195,6 +195,21 @@ describe('rules.js', () => {
             expect(find(validate(ok, ctx), 'skip_fields_not_list')).toBeUndefined();
         });
 
+        it('plain-language intro field: shape, site, and one of the content fields', () => {
+            const make = (patch) => {
+                const m = localization(patch);
+                m.transitions[0].metadata.actions = [{ type: 'start_localization' }];
+                return m;
+            };
+            expect(find(validate(make({ content_fields: ['intro'], plain_language_intro_field: 'intro' }), ctx), 'intro_field_needs_site').path)
+                .toBe('metadata.plain_language_intro_field');
+            expect(find(validate(make({ plain_language_site: 'plain', plain_language_intro_field: 'a.b' }), ctx), 'intro_field_invalid')).toBeDefined();
+            expect(find(validate(make({ plain_language_site: 'plain', content_fields: ['sections'], plain_language_intro_field: 'intro' }), ctx), 'intro_field_not_content'))
+                .toBeDefined();
+            const ok = validate(make({ plain_language_site: 'plain', content_fields: ['intro', 'sections'], plain_language_intro_field: 'intro' }), ctx);
+            expect(ok.filter((p) => p.code.startsWith('intro_field_'))).toEqual([]);
+        });
+
         it('a source-draft place that publishes', () => {
             const m = localization({ source_draft_place: 'published' });
             m.transitions[0].metadata.actions = [{ type: 'start_localization' }];

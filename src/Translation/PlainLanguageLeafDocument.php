@@ -40,6 +40,13 @@ class PlainLanguageLeafDocument
 {
     public const FORMAT = PlainLanguageJob::FORMAT_SECTIONS;
 
+    /**
+     * The class of the wrapper around the intro inside its section. Part of the
+     * protocol, so it is fixed whatever the intro field is called: the service
+     * recognises `<div class="intro">`, not a project's field handle.
+     */
+    public const INTRO_CLASS = 'intro';
+
     /** Fieldtypes whose empty value is `[]` rather than `''` — see emptyValueFor(). */
     private const LIST_FIELD_TYPES = [
         'bard', 'replicator', 'grid', 'assets', 'entries', 'terms', 'taxonomy',
@@ -107,7 +114,7 @@ class PlainLanguageLeafDocument
 
         $leaves = $this->walker->leaves($source, $data, $fields, $skip);
         $skipped = $this->walker->skipped();
-        $intro = ContentFields::intro();
+        $intro = $this->workflows->plainLanguageIntroField($raw);
 
         $planned = [];
 
@@ -168,8 +175,8 @@ class PlainLanguageLeafDocument
 
             $inner = $this->render($leaf);
 
-            if (($planned['intro'] ?? false) && ($intro = ContentFields::intro()) !== null) {
-                $inner = '<div class="'.$this->escape($intro).'">'.$inner.'</div>';
+            if ($planned['intro'] ?? false) {
+                $inner = '<div class="'.self::INTRO_CLASS.'">'.$inner.'</div>';
             }
 
             $texts[] = '<section data-wf-leaf="'.(int) $planned['n'].'" data-wf-type="'.$leaf->type.'">'
@@ -222,7 +229,7 @@ class PlainLanguageLeafDocument
 
         foreach ($planned as $n => $leafPlan) {
             $leaf = $leaves[$n];
-            $result = $this->writer->write($leaf, $this->prepare($parsed['sections'][$n], (bool) ($leafPlan['intro'] ?? false)));
+            $result = $this->writer->write($leaf, $this->prepare($parsed['sections'][$n], ($leafPlan['intro'] ?? false) ? (string) $leaf->path : null));
 
             array_push($warnings, ...$result['warnings']);
 
@@ -464,8 +471,12 @@ class PlainLanguageLeafDocument
     /**
      * A section's inner HTML without the markers that only travel: every
      * `data-modules` envelope and, in the intro section, the intro wrapper.
+     *
+     * $introField is the intro leaf's field handle, null for any other section.
+     * The wrapper is `<div class="intro">` (INTRO_CLASS); jobs submitted before
+     * that was fixed carried the field handle as the class, so both are taken.
      */
-    private function prepare(string $html, bool $intro): string
+    private function prepare(string $html, ?string $introField): string
     {
         [$document, $root] = PlainLanguageSections::load($html);
 
@@ -473,17 +484,18 @@ class PlainLanguageLeafDocument
             return $html;
         }
 
-        $introClass = ContentFields::intro();
         $xpath = new \DOMXPath($document);
 
         foreach (iterator_to_array($xpath->query('.//div[@data-modules]', $root)) as $wrapper) {
             $this->unwrap($wrapper);
         }
 
-        if ($intro && $introClass !== null) {
+        if ($introField !== null) {
+            $classes = array_unique([self::INTRO_CLASS, $introField]);
+
             foreach (iterator_to_array($root->childNodes) as $node) {
                 if ($node instanceof DOMElement && strtolower($node->nodeName) === 'div'
-                    && explode(' ', trim($node->getAttribute('class')))[0] === $introClass) {
+                    && in_array(explode(' ', trim($node->getAttribute('class')))[0], $classes, true)) {
                     $this->unwrap($node);
                 }
             }

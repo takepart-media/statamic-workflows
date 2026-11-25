@@ -222,6 +222,7 @@ Nur für Lokalisierungs-Workflows (`detail: translation`). Der Bereich passt sic
 | **Ziel-Site** | `metadata.plain_language_site` | Einfache Sprache |
 | **Ziel-Place nach Job-Abschluss** | `metadata.plain_language_completed_place` | Einfache Sprache |
 | **Ziel-Place bei fehlgeschlagener Übersetzung** | `metadata.plain_language_failed_place` | Einfache Sprache |
+| **Einleitung** | `metadata.plain_language_intro_field` (eines der Inhaltsfelder) | Einfache Sprache |
 | **Nicht umschreiben** | `metadata.plain_language_skip_fields` (kommagetrennt) | Einfache Sprache |
 | **QS-Hinweise anzeigen** | `metadata.qs_notes_visible` | Einfache Sprache |
 | **QS-Hinweise anzeigen für:** | `metadata.qs_notes_audience` | Einfache Sprache |

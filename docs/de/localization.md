@@ -283,6 +283,7 @@ Alle Keys stehen unter `metadata` und setzen `plain_language_site` voraus.
 | `plain_language_site` | „Ziel-Site“ | Die eine Site, in die dieser Manager schreibt. Macht den Workflow zum Einfache-Sprache-Manager. |
 | `plain_language_completed_place` | „Ziel-Place nach Job-Abschluss“ | Wohin eine Fassung wandert, sobald ihre Umschreibung erfolgreich zurückgeschrieben ist. Ohne diesen Key bleibt sie stehen, bis jemand die nächste Transition klickt. |
 | `plain_language_failed_place` | „Ziel-Place bei fehlgeschlagener Übersetzung“ | Wohin eine Fassung wandert, wenn die Umschreibung endgültig gescheitert ist. Ohne diesen Key wird die unberührte Kopie gelöscht. |
+| `plain_language_intro_field` | „Einleitung“ | Das Inhaltsfeld, mit dem ein Beitrag beginnt. Nur dieser Abschnitt steckt in `<div class="intro">` und schickt `generate_intro: true` – der Dienst schreibt die Einleitung dann selbst. Muss eines der gewählten Inhaltsfelder sein. Leer = `content_fields.intro` aus der Config. |
 | `plain_language_skip_fields` | „Nicht umschreiben“ | Textfelder, die nie gesendet werden und ihren Wert behalten: `field`, `set.field` oder `*.field`. Für Anker-IDs, Embed-Codes, Button-Labels. |
 | `plain_language_clear_fields` | – | Top-Level-Felder, die nach einer Umschreibung auf der Einfache-Sprache-Fassung geleert werden, etwa eine Quellenliste. Nur in der YAML. |
 
@@ -440,6 +441,7 @@ Alle Keys stehen unter `metadata` eines Lokalisierungs-Workflows.
 | `translation_exclude_fields` | Liste | Top-Level-Felder, die nie übersetzt oder umgeschrieben werden. |
 | `plain_language_completed_place` | Place | Wohin eine fertige Umschreibung die Fassung setzt. |
 | `plain_language_failed_place` | Place | Wohin eine gescheiterte Umschreibung die Fassung setzt. |
+| `plain_language_intro_field` | String | Das Inhaltsfeld, das die Einleitung ist (`generate_intro`). |
 | `plain_language_skip_fields` | Liste | Textfelder, die nie an den Dienst gehen. |
 | `plain_language_clear_fields` | Liste | Felder, die nach einer Umschreibung geleert werden. |
 | `qs_notes_visible` | bool | QS-Hinweise anzeigen. Standard `true`. |

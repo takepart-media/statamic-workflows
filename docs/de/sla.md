@@ -53,6 +53,25 @@ Standardmäßig landet das Feld im ersten Tab des Blueprints. Um es woanders zu 
 
 Alles Weitere ergänzt das Addon. Setze `visibility` nicht in der YAML: der Wert gälte dann für alle und hebelte die Super-Admin-Regel aus.
 
+### Das Datum nur von Hand setzen
+
+Standardmäßig führt das Addon die Uhr. Soll „Inhaltlich aktualisiert“ stattdessen eine redaktionelle Aussage sein, schaltest du das in `config/workflows.php` ab:
+
+```php
+'content_timestamp' => [
+    'auto' => false,
+    'permission' => true,
+],
+```
+
+| Schlüssel | Standard | Was er tut |
+| --- | --- | --- |
+| `auto` | `true` | `false`: keine Transition und keine veröffentlichte Arbeitskopie setzt das Datum. Jemand trägt es im Eintrags-Editor ein. |
+| `permission` | `false` | `true`: registriert die Berechtigung **„Inhaltlich aktualisiert“ setzen** (`edit content updated date`, Gruppe „Workflows“ im Rollen-Editor). Rollen mit dieser Berechtigung dürfen das Feld bearbeiten, zusätzlich zu Super-Admins. |
+
+> [!IMPORTANT]
+> Ist `auto` aus, bringt „Als aktuell markieren“ einen gealterten Eintrag weiterhin zurück in seinen Veröffentlicht-Place, startet die Frist aber nicht mehr neu. Setze vorher das Datum, sonst schiebt der nächste Alterungslauf den Eintrag sofort wieder zurück. Auch Übersetzungen und Fassungen in Einfacher Sprache bekommen bei ihrer Freigabe kein Datum und gelten als veraltet, bis jemand es setzt.
+
 ### Bestandsinhalte nachtragen
 
 Um bestehenden Inhalten einen eigenen gespeicherten Wert zu geben, führst du einmalig aus:

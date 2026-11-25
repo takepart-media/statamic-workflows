@@ -160,7 +160,7 @@ The blueprint field handles the translation, the plain-language rewrite and the 
 | Key | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- |
 | `content_fields.title` | `string\|null` | `'title'` | – | The entry's title field. |
-| `content_fields.intro` | `string\|null` | `null` | – | Bard field with the opening paragraph. |
+| `content_fields.intro` | `string\|null` | `null` | – | Bard field with the opening paragraph. A plain-language workflow can override it with `metadata.plain_language_intro_field`. |
 | `content_fields.body` | `string\|null` | `'content'` | – | The main Bard field. |
 | `content_fields.seo` | `string\|null` | `'seo'` | – | The SEO field. |
 | `content_fields.entity` | `string\|null` | `null` | – | Field naming the entity or module an entry belongs to. Sent to the plain-language service as context. |

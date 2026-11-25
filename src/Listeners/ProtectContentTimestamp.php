@@ -8,10 +8,11 @@ use TakepartMedia\Workflows\Content\ContentTimestamp;
 use TakepartMedia\Workflows\Support\EventLogSuppressor;
 
 /**
- * Only a super admin may change `content_updated_at` by hand. Everybody else's
- * save keeps whatever was stored.
+ * Only a super admin may change `content_updated_at` by hand — or, where the
+ * project opted in (`workflows.content_timestamp.permission`), a user holding
+ * ContentTimestamp::PERMISSION. Everybody else's save keeps whatever was stored.
  *
- * The blueprint renders the field read-only for non-super-admins, but a rendered
+ * The blueprint renders the field read-only for everybody else, but a rendered
  * `read_only` is a client-side courtesy: Statamic's entry save does not reject
  * read-only values (only UsersController does), and the field config itself is
  * resolved per request, which is exactly the kind of thing that must not be the
@@ -48,7 +49,7 @@ class ProtectContentTimestamp
             return;
         }
 
-        if (User::current()?->isSuper() ?? false) {
+        if (ContentTimestamp::editableBy(User::current())) {
             return;
         }
 

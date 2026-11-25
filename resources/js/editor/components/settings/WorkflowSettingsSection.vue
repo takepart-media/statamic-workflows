@@ -295,6 +295,26 @@
                             @update:model-value="(v) => setMeta('plain_language_failed_place', v ?? null)"
                         />
                     </ProblemField>
+                    <!-- The intro: one of the picked content fields; the service
+                         writes it itself (generate_intro). Empty = project config. -->
+                    <ProblemField
+                        :label="__('workflows::messages.plain_language_intro_field')"
+                        :instructions="__('workflows::messages.plain_language_intro_field_hint')"
+                        path="metadata.plain_language_intro_field"
+                    >
+                        <Select
+                            v-if="contentFields.length"
+                            adaptive-width
+                            clearable
+                            :model-value="meta.plain_language_intro_field ?? null"
+                            :options="introFieldOptions"
+                            :placeholder="__('workflows::messages.plain_language_intro_field_none')"
+                            @update:model-value="(v) => setMeta('plain_language_intro_field', v ?? null)"
+                        />
+                        <p v-else class="text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('workflows::messages.plain_language_intro_field_needs_content') }}
+                        </p>
+                    </ProblemField>
                     <ProblemField
                         :label="__('workflows::messages.plain_language_skip_fields')"
                         :instructions="__('workflows::messages.plain_language_skip_fields_hint')"
@@ -637,7 +657,7 @@ import AudienceRows from '../shared/AudienceRows.vue';
 import ProblemField from '../shared/ProblemField.vue';
 import OrderList from '../panels/OrderList.vue';
 import ContentFieldList from './ContentFieldList.vue';
-import { autoContentFields, contentFieldChoices, contentFieldSelectOptions } from '../../model/contentFields.js';
+import { autoContentFields, contentFieldChoices, contentFieldSelectOptions, introFieldSelectOptions } from '../../model/contentFields.js';
 
 const props = defineProps({
     // 'general' | 'permissions' | 'localization' | 'collections' | 'content' | 'sla' | 'order' | 'advanced'
@@ -802,6 +822,9 @@ const contentFieldOptions = computed(() => contentFieldSelectOptions(
         staleText: (handle) => `${handle} — ${__('workflows::messages.content_fields_stale')}`,
     },
 ));
+// The plain-language intro: only the picked content fields, in reading order —
+// a field that is not sent cannot be the introduction (the writer refuses it).
+const introFieldOptions = computed(() => introFieldSelectOptions(contentFieldOptions.value, contentFields.value, meta.value.plain_language_intro_field));
 const autoFields = computed(() => autoContentFields(
     editor.options.contentFieldOptions ?? {},
     editor.options.contentFieldAuto ?? {},

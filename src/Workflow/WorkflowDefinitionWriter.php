@@ -1489,6 +1489,32 @@ class WorkflowDefinitionWriter
             }
         });
 
+        // The content field that opens a plain-language rewrite — the one section
+        // the service may write itself (`generate_intro`). Absent means the
+        // project's `content_fields.intro`. It has to be one of the PICKED content
+        // fields: only those are sent, and an intro that never goes out would make
+        // the setting look effective while asking for nothing. Same pairing as the
+        // other plain_language_* keys.
+        $this->at('metadata.plain_language_intro_field', function () use ($definition) {
+            $intro = $definition['metadata']['plain_language_intro_field'] ?? null;
+
+            if ($intro === null || $intro === '') {
+                return;
+            }
+
+            if (! is_string($intro) || preg_match('~^[A-Za-z0-9_-]+$~', trim($intro)) !== 1) {
+                $this->fail('intro_field_invalid');
+            }
+
+            if (($definition['metadata']['plain_language_site'] ?? null) === null) {
+                $this->fail('intro_field_needs_site');
+            }
+
+            if (! in_array(trim($intro), (array) ($definition['metadata']['content_fields'] ?? []), true)) {
+                $this->fail('intro_field_not_content', ['field' => trim($intro)]);
+            }
+        });
+
         // The site that carries the plain-language version, and the site a
         // localization workflow translates FROM. Both optional.
         //

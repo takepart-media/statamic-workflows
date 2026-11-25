@@ -69,13 +69,14 @@ class InjectWorkflowFields
                 // isStale() levels both sides to the day.
                 'type' => 'date',
                 'display' => (string) __('workflows::messages.column_content_updated_at'),
-                'instructions' => (string) __('workflows::messages.content_updated_at_instructions'),
+                'instructions' => $this->timestampInstructions(),
                 // Every version carries its OWN value — that is what lets a
                 // localization be behind the post it belongs to. Without this the
                 // origin's value would be inherited and every translation would
                 // report itself as current.
                 'localizable' => true,
-                // Visible to everyone, editable by a super admin only. NOT
+                // Visible to everyone, editable by a super admin only (or by
+                // ContentTimestamp::PERMISSION, where the project opted in). NOT
                 // `computed`: computed values are rejected by Fields::values() on
                 // save, which is right for the actions panel (it has nothing to
                 // store) and fatal here.
@@ -95,14 +96,25 @@ class InjectWorkflowFields
     /**
      * Whether the current user may type into the clock.
      *
-     * Super admin only. The field is the SLA's whole input — moving it forward
-     * postpones an ageing deadline for a year, moving it back can take a post
-     * offline at the next scheduler tick — so it is not an editorial field, it is
-     * an administrative one that happens to live on the entry.
+     * Never simply "may edit the entry": the field is the SLA's whole input —
+     * moving it forward postpones an ageing deadline, moving it back can take a
+     * post offline at the next scheduler tick. Super admin by default, a
+     * permission of its own where the project keeps the clock by hand.
      */
     private function mayEditTimestamp(): bool
     {
-        return User::current()?->isSuper() ?? false;
+        return ContentTimestamp::editableBy(User::current());
+    }
+
+    /**
+     * The hint under the field: how it gets its value, and who may change it.
+     * Both halves follow `workflows.content_timestamp`.
+     */
+    private function timestampInstructions(): string
+    {
+        return __('workflows::messages.content_updated_at_instructions').' '
+            .__('workflows::messages.content_updated_at_set_'.(ContentTimestamp::automatic() ? 'auto' : 'manual')).' '
+            .__('workflows::messages.content_updated_at_edit_'.(ContentTimestamp::usesPermission() ? 'permission' : 'super'));
     }
 
     /**

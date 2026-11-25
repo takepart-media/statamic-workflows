@@ -97,6 +97,7 @@ export function serializeMetadata(source) {
         'translation_source_site',
         'plain_language_completed_place',
         'plain_language_failed_place',
+        'plain_language_intro_field',
     ]) {
         if (!metadata[key]) delete metadata[key];
     }

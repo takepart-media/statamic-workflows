@@ -49,7 +49,7 @@ Die Schlüssel werden **einzeln** mit den Standardwerten zusammengeführt. Setzt
 | Schlüssel | Typ | Pflicht | Standard | Beschreibung |
 | --- | --- | --- | --- | --- |
 | `title` | `string` | nein | `'title'` | Titelfeld. Bei Einfacher Sprache landet die zurückgegebene `<h1>` hier. Der Titel geht nie als Inhaltsblock an den Dienst. |
-| `intro` | `string\|null` | nein | `null` | Bard-Feld mit dem Einleitungsabsatz. Dient der Auto-Erkennung. Bei Einfacher Sprache steckt dieser Block in `<div class="intro">`, und `generate_intro` ist nur dann `true`. Quelle der abgeleiteten `seo.description`. |
+| `intro` | `string\|null` | nein | `null` | Bard-Feld mit dem Einleitungsabsatz. Dient der Auto-Erkennung. Bei Einfacher Sprache steckt dieser Block in `<div class="intro">`, und `generate_intro` ist nur dann `true` – außer der Workflow nennt seine eigene Einleitung (`metadata.plain_language_intro_field`), die dann gilt. Quelle der abgeleiteten `seo.description`. |
 | `body` | `string` | nein | `'content'` | Haupt-Inhaltsfeld. Dient der Auto-Erkennung. Ältere Einfache-Sprache-Jobs (`format = null`) ersetzen beim Zurückschreiben dieses Feld. |
 | `seo` | `string` | nein | `'seo'` | SEO-Pro-Feld. Geht nie an den Einfache-Sprache-Dienst. `seo.title` und `seo.description` werden stattdessen aus der Antwort abgeleitet. |
 | `entity` | `string\|array\|null` | nein | `null` | Terms-Feld (einzeln oder Liste) mit dem Modul des Eintrags. Die Handles gehen als `modules` im Request mit. Nur der Einfache-Sprache-Dienst nutzt diesen Kontext, DeepL ignoriert ihn. |

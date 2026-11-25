@@ -268,6 +268,7 @@ Nur mit `detail: translation` sinnvoll. Siehe [Übersetzung & Einfache Sprache](
 | `plain_language_site` | string | Macht diesen Workflow zum Einfache-Sprache-Manager und nennt seine Ziel-Site. |
 | `plain_language_completed_place` | string | Wohin eine Fassung wandert, sobald ihre Umschreibung da ist. Setzt `plain_language_site` voraus. |
 | `plain_language_failed_place` | string | Wohin eine Fassung wandert, wenn ihre Umschreibung endgültig scheitert. Ohne diesen Schlüssel wird die unübersetzte Kopie gelöscht. Setzt `plain_language_site` voraus. |
+| `plain_language_intro_field` | string | Das Inhaltsfeld, das die Einleitung ist: steckt in `<div class="intro">`, schickt `generate_intro: true`. Muss in `content_fields` stehen. Setzt `plain_language_site` voraus. Fällt auf `content_fields.intro` aus der Config zurück. |
 | `plain_language_skip_fields` | list | Felder, die nie an den Dienst gehen: `field`, `set.field` oder `*.field`. Setzt `plain_language_site` voraus. |
 | `plain_language_clear_fields` | list | Felder, die eine fertige Umschreibung in der Einfache-Sprache-Fassung leert. Setzt `plain_language_site` voraus. |
 | `qs_notes_visible` | bool | `false` verbirgt den Prüfbericht des Dienstes vor allen. Standard: `true`. |

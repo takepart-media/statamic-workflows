@@ -22,7 +22,8 @@ use TakepartMedia\Workflows\Support\EventLogSuppressor;
  * Statamic bumps it on every CP save (`EntriesController::update()` calls
  * `updateLastModified()`), so a typo fix would extend a post's deadline by a year.
  * This one moves only when a version ENTERS a publish place — see
- * WorkflowTransitioner::apply() and SyncWorkflowOnRevision. Statamic's value is
+ * WorkflowTransitioner::apply() and SyncWorkflowOnRevision — or, where a project
+ * switched that off (automatic()), only when somebody sets it by hand. Statamic's value is
  * still the seed for entries that predate the field, which is what `for()` is for.
  *
  * The distinction between `own()` and `for()` carries the stale-marker, so it is
@@ -43,6 +44,50 @@ class ContentTimestamp
      * so a value written into it would neither survive nor read back.
      */
     public const FIELD = 'content_updated_at';
+
+    /**
+     * The Statamic permission that lets a user set the field by hand — only
+     * registered, and only asked for, when `workflows.content_timestamp.permission`
+     * is on. Without it the field stays a super-admin matter.
+     */
+    public const PERMISSION = 'edit content updated date';
+
+    /**
+     * Does the addon stamp the clock itself — on reaching a publish place and on
+     * publishing a working copy?
+     *
+     * On by default. A project where "substantively updated" is an editorial
+     * statement rather than a side effect of approving switches it off with
+     * `workflows.content_timestamp.auto`; the field then only ever changes by
+     * hand, which also means a "back to current" transition no longer restarts
+     * the ageing deadline and a localization stays behind until somebody dates it.
+     */
+    public static function automatic(): bool
+    {
+        return (bool) config('workflows.content_timestamp.auto', true);
+    }
+
+    /**
+     * Is editing by hand governed by PERMISSION instead of super-admin status?
+     */
+    public static function usesPermission(): bool
+    {
+        return (bool) config('workflows.content_timestamp.permission', false);
+    }
+
+    /**
+     * May this user set the clock by hand? A super admin always; anybody else
+     * only where the project opted into PERMISSION and their role holds it.
+     */
+    public static function editableBy(?\Statamic\Contracts\Auth\User $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        return $user->isSuper()
+            || (self::usesPermission() && $user->hasPermission(self::PERMISSION));
+    }
 
     /**
      * This version's own timestamp, without the origin fallback. Null means the

@@ -70,6 +70,7 @@ export function normalize(def, { labelLocales = DEFAULT_LABEL_LOCALES } = {}) {
     copy.metadata.plain_language_site ??= null;
     copy.metadata.plain_language_completed_place ??= null;
     copy.metadata.plain_language_failed_place ??= null;
+    copy.metadata.plain_language_intro_field ??= null;
     // A real list for the comma-separated input; serialize() drops it when empty.
     copy.metadata.plain_language_skip_fields = Array.isArray(copy.metadata.plain_language_skip_fields)
         ? [...copy.metadata.plain_language_skip_fields]

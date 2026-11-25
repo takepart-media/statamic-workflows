@@ -7,6 +7,7 @@ use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Site;
 use TakepartMedia\Workflows\Content\ContentFieldResolver;
 use TakepartMedia\Workflows\Content\ContentTimestamp;
+use TakepartMedia\Workflows\Support\ContentFields;
 
 /**
  * Resolves which workflow governs a collection and whether an entry is allowed
@@ -312,6 +313,34 @@ class WorkflowResolver
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * The content field that is the introduction of a plain-language rewrite
+     * (`metadata.plain_language_intro_field`), falling back to the project's
+     * `workflows.content_fields.intro`. Null when neither names one.
+     *
+     * Only the intro section asks the service to write the introduction itself
+     * (`generate_intro`) — see PlainLanguageLeafDocument::requestExtras(). The
+     * setting lives on the workflow because which field opens a post is a
+     * blueprint fact, and the content fields it has to be one of are chosen per
+     * workflow too. Null for a workflow that is not the plain-language manager.
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    public function plainLanguageIntroField(array $raw): ?string
+    {
+        if (! $this->isPlainLanguageWorkflow($raw)) {
+            return null;
+        }
+
+        $field = $raw['metadata']['plain_language_intro_field'] ?? null;
+
+        if (is_string($field) && trim($field) !== '') {
+            return trim($field);
+        }
+
+        return ContentFields::intro();
     }
 
     /**

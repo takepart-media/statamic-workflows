@@ -268,6 +268,7 @@ Only meaningful with `detail: translation`. See [Translation & plain language](l
 | `plain_language_site` | string | Makes this workflow the plain-language manager and names its target site. |
 | `plain_language_completed_place` | string | Where a version moves once its rewrite has landed. Requires `plain_language_site`. |
 | `plain_language_failed_place` | string | Where a version moves when its rewrite fails for good. Without it, the untranslated copy is deleted. Requires `plain_language_site`. |
+| `plain_language_intro_field` | string | The content field that is the introduction: wrapped in `<div class="intro">`, sends `generate_intro: true`. Must be one of `content_fields`. Requires `plain_language_site`. Falls back to `content_fields.intro` in the config. |
 | `plain_language_skip_fields` | list | Fields never sent to the service: `field`, `set.field` or `*.field`. Requires `plain_language_site`. |
 | `plain_language_clear_fields` | list | Fields a finished rewrite empties on the plain-language version. Requires `plain_language_site`. |
 | `qs_notes_visible` | bool | `false` hides the service's QA report from everyone. Default `true`. |

@@ -484,3 +484,56 @@ it('validates plain_language_skip_fields in the definition writer', function () 
         ->and($codes(['plain_language_site' => 'default', 'plain_language_skip_fields' => ['a.b.c']]))->toContain('skip_fields_not_list')
         ->and($codes(['plain_language_skip_fields' => ['intro']]))->toContain('skip_fields_needs_site');
 });
+
+// ---- Intro field per workflow --------------------------------------------------
+
+it('takes the intro from the workflow setting over the project config', function () {
+    config()->set('workflows.content_fields.intro', null);
+    $entry = $this->makeEntry('pages', plData());
+    $document = app(PlainLanguageLeafDocument::class);
+
+    // Without either, the intro is a section like any other.
+    $plain = $document->plan($entry, plRaw());
+    expect($document->requestExtras($plain))->toBe(['generate_intro' => false])
+        ->and($document->texts($plain, $entry)[1])->not->toContain('<div class="intro">');
+
+    $raw = plRaw(['plain_language_intro_field' => 'intro']);
+    $plan = $document->plan($entry, $raw);
+
+    expect($document->requestExtras($plan))->toBe(['generate_intro' => true])
+        ->and($document->texts($plan, $entry)[1])->toStartWith('<section data-wf-leaf="1" data-wf-type="bard"><div class="intro"><p>Die Einleitung.</p>');
+
+    // The wrapper only travels: the intro field gets the paragraphs, not the div.
+    $result = $document->apply($entry, plAnswer(), $plan, $raw);
+
+    expect($result->errors)->toBe([])
+        ->and($result->data['intro'])->toBe([plParsed('Neue Einleitung.')]);
+});
+
+it('marks the intro as `intro` whatever the field is called', function () {
+    $entry = $this->makeEntry('pages', plData());
+    $document = app(PlainLanguageLeafDocument::class);
+    $raw = plRaw(['content_fields' => ['sections', 'intro'], 'plain_language_intro_field' => 'intro']);
+    config()->set('workflows.content_fields.intro', 'something_else');
+
+    $plan = $document->plan($entry, $raw);
+    $intro = collect($plan['leaves'])->firstWhere('intro', true);
+
+    expect($intro['path'])->toBe('intro')
+        ->and($document->texts($plan, $entry)[$intro['n']])->toContain('<div class="intro">');
+});
+
+it('validates plain_language_intro_field in the definition writer', function () {
+    $writer = app(\TakepartMedia\Workflows\Workflow\WorkflowDefinitionWriter::class);
+    $codes = fn (array $metadata) => collect($writer->check($this->minimalWorkflow('plain', ['metadata' => $metadata])))
+        ->pluck('code')
+        ->all();
+
+    expect($codes(['plain_language_site' => 'default', 'content_fields' => ['intro'], 'plain_language_intro_field' => 'intro']))
+        ->not->toContain('intro_field_invalid')
+        ->not->toContain('intro_field_not_content')
+        ->and($codes(['plain_language_site' => 'default', 'plain_language_intro_field' => 'a.b']))->toContain('intro_field_invalid')
+        ->and($codes(['content_fields' => ['intro'], 'plain_language_intro_field' => 'intro']))->toContain('intro_field_needs_site')
+        ->and($codes(['plain_language_site' => 'default', 'content_fields' => ['sections'], 'plain_language_intro_field' => 'intro']))->toContain('intro_field_not_content')
+        ->and($codes(['plain_language_site' => 'default', 'plain_language_intro_field' => 'intro']))->toContain('intro_field_not_content');
+});

@@ -113,7 +113,11 @@ class SyncWorkflowOnRevision
             // through a transition (WorkflowTransitioner::stampContentTimestamp()).
             // Without this an ordinary editorial revision would leave the clock
             // untouched and the post would age as if nobody had worked on it.
-            app(ContentTimestamp::class)->touch($entry);
+            // Unless the project keeps the clock by hand
+            // (`workflows.content_timestamp.auto`).
+            if (ContentTimestamp::automatic()) {
+                app(ContentTimestamp::class)->touch($entry);
+            }
             $events->log($entry->id(), $workflow, 'revision_sync', [
                 'from' => $current,
                 'to' => $publishPlaces[0],

@@ -3,7 +3,7 @@ import { fromDefinition, toPayload } from '../editorModel.js';
 import { validate } from '../rules.js';
 import { serializeMetadata } from '../serialize.js';
 import { sectionForPath } from '../validationPaths.js';
-import { autoContentFields, contentFieldChoices, contentFieldSelectOptions } from '../contentFields.js';
+import { autoContentFields, contentFieldChoices, contentFieldSelectOptions, introFieldSelectOptions } from '../contentFields.js';
 
 const t = (key, replace = {}) => `${key}${Object.keys(replace).length ? ` ${JSON.stringify(replace)}` : ''}`;
 
@@ -131,5 +131,16 @@ describe('contentFields.js', () => {
             { collection: 'empty', handle: null, label: null },
             { collection: 'missing', handle: null, label: null },
         ]);
+    });
+});
+
+describe('introFieldSelectOptions', () => {
+    it('lists the picked content fields in reading order and keeps a stale intro', () => {
+        const select = contentFieldSelectOptions(options, ['pages', 'articles'], ['sections', 'intro']);
+        const list = introFieldSelectOptions(select, ['sections', 'intro'], 'teaser');
+        expect(list.map((o) => o.value)).toEqual(['sections', 'intro', 'teaser']);
+        expect(list[1].label).toContain('intro');
+        expect(list[2].stale).toBe(true);
+        expect(introFieldSelectOptions(select, [], null)).toEqual([]);
     });
 });

@@ -83,3 +83,26 @@ export function autoContentFields(options, auto, collections) {
             return { collection, handle, label: handle ? (field?.label || handle) : null };
         });
 }
+
+/**
+ * Options for the plain-language intro (`metadata.plain_language_intro_field`):
+ * the picked content fields in reading order, labelled like the content-field
+ * select. A stored intro that is no longer a picked content field stays listed
+ * (`stale: true`) so the Select does not hide what the YAML still says — the
+ * rule (rules.js) reports it.
+ *
+ * @param {Array<{value, label}>} selectOptions  contentFieldSelectOptions() result
+ * @param {string[]} contentFields               the picked content fields
+ * @param {string|null} current                  the stored intro
+ */
+export function introFieldSelectOptions(selectOptions, contentFields, current = null) {
+    const labels = new Map((selectOptions ?? []).map((option) => [option.value, option.label]));
+    const list = (contentFields ?? [])
+        .filter((handle) => typeof handle === 'string' && handle !== '')
+        .map((handle) => ({ value: handle, label: labels.get(handle) ?? handle }));
+    if (typeof current === 'string' && current !== '' && !list.some((o) => o.value === current)) {
+        list.push({ value: current, label: current, stale: true });
+    }
+
+    return list;
+}

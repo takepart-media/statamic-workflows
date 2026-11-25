@@ -4,6 +4,7 @@ namespace TakepartMedia\Workflows;
 
 use Illuminate\Database\DatabaseManager;
 use Statamic\Facades\CP\Nav;
+use Statamic\Facades\Permission;
 use Statamic\Facades\User;
 use Statamic\Providers\AddonServiceProvider;
 use TakepartMedia\Workflows\Console\AutoTransitionCommand;
@@ -50,9 +51,10 @@ class ServiceProvider extends AddonServiceProvider
     ];
 
     protected $listen = [
-        // Only a super admin may set `content_updated_at` by hand — enforced on the
-        // way in, because the blueprint's read-only rendering is a client-side
-        // courtesy and the SLA reads this field.
+        // Only a super admin (or, where configured, a holder of
+        // ContentTimestamp::PERMISSION) may set `content_updated_at` by hand —
+        // enforced on the way in, because the blueprint's read-only rendering is a
+        // client-side courtesy and the SLA reads this field.
         \Statamic\Events\EntrySaving::class => [
             \TakepartMedia\Workflows\Listeners\ProtectContentTimestamp::class,
         ],
@@ -209,6 +211,27 @@ class ServiceProvider extends AddonServiceProvider
         ], 'workflows-config');
 
         $this->bootNav();
+
+        $this->bootPermissions();
+    }
+
+    /**
+     * The addon's one registered permission: setting `content_updated_at` by hand.
+     * Opt-in (`workflows.content_timestamp.permission`) — by default that is a
+     * super-admin matter and no permission appears in the role editor.
+     */
+    private function bootPermissions(): void
+    {
+        Permission::extend(function () {
+            if (! Content\ContentTimestamp::usesPermission()) {
+                return;
+            }
+
+            Permission::group('workflows', 'Workflows', function () {
+                Permission::register(Content\ContentTimestamp::PERMISSION)
+                    ->label(__('workflows::messages.permission_edit_content_updated_at'));
+            });
+        });
     }
 
     /**

@@ -222,6 +222,7 @@ Only for localization workflows (`detail: translation`). The section adapts to t
 | **Target site** | `metadata.plain_language_site` | plain language |
 | **Target place after job completion** | `metadata.plain_language_completed_place` | plain language |
 | **Target place on failed translation** | `metadata.plain_language_failed_place` | plain language |
+| **Introduction** | `metadata.plain_language_intro_field` (one of the content fields) | plain language |
 | **Never rewrite** | `metadata.plain_language_skip_fields` (comma-separated) | plain language |
 | **Show QA notes** | `metadata.qs_notes_visible` | plain language |
 | **Show QA notes to:** | `metadata.qs_notes_audience` | plain language |

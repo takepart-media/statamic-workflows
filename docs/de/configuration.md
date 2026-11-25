@@ -160,7 +160,7 @@ Die Handles der Blueprint-Felder, die Übersetzung, Umschreibung in Einfache Spr
 | Schlüssel | Typ | Standard | Env | Beschreibung |
 | --- | --- | --- | --- | --- |
 | `content_fields.title` | `string\|null` | `'title'` | – | Das Titelfeld des Eintrags. |
-| `content_fields.intro` | `string\|null` | `null` | – | Bard-Feld mit dem einleitenden Absatz. |
+| `content_fields.intro` | `string\|null` | `null` | – | Bard-Feld mit dem einleitenden Absatz. Ein Einfache-Sprache-Workflow kann es mit `metadata.plain_language_intro_field` überschreiben. |
 | `content_fields.body` | `string\|null` | `'content'` | – | Das Haupt-Bard-Feld. |
 | `content_fields.seo` | `string\|null` | `'seo'` | – | Das SEO-Feld. |
 | `content_fields.entity` | `string\|null` | `null` | – | Feld mit der Einheit oder dem Modul, zu dem ein Eintrag gehört. Geht als Kontext an den Dienst für Einfache Sprache. |

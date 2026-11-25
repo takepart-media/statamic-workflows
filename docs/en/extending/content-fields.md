@@ -49,7 +49,7 @@ Keys are merged with the defaults **one by one**. If you only set `body`, you ke
 | Key | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `title` | `string` | no | `'title'` | Title field. With plain language, the returned `<h1>` is written here. The title is never sent to the service as a content block. |
-| `intro` | `string\|null` | no | `null` | Bard field with the opening paragraph. Used for auto-detection. With plain language, this block is wrapped in `<div class="intro">`, and only then is `generate_intro` `true`. Source of the derived `seo.description`. |
+| `intro` | `string\|null` | no | `null` | Bard field with the opening paragraph. Used for auto-detection. With plain language, this block is wrapped in `<div class="intro">`, and only then is `generate_intro` `true` — unless the workflow names its own intro (`metadata.plain_language_intro_field`), which wins. Source of the derived `seo.description`. |
 | `body` | `string` | no | `'content'` | Main content field. Used for auto-detection. Older plain-language jobs (`format = null`) replace this field on write-back. |
 | `seo` | `string` | no | `'seo'` | SEO Pro field. Never sent to the plain-language service. `seo.title` and `seo.description` are derived from the answer instead. |
 | `entity` | `string\|array\|null` | no | `null` | Terms field (single or list) holding the entry's module. The handles are sent as `modules` in the request. Only the plain-language service uses this context; DeepL ignores it. |

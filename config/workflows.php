@@ -518,6 +518,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | "Content updated" date
+    |--------------------------------------------------------------------------
+    |
+    | `content_updated_at` is the clock the content ageing counts from.
+    |
+    | auto        true: the addon sets it to today whenever a version reaches a
+    |             publish place through a transition, or its working copy is
+    |             published. false: nothing sets it; somebody enters the date in
+    |             the entry editor. A "mark up to date" transition then no longer
+    |             restarts the deadline, and a localization counts as out of date
+    |             until its own date is set.
+    |
+    | permission  false: only super admins may edit the field by hand. true: the
+    |             addon registers the permission "edit content updated date"
+    |             (group "Workflows" in the role editor) and every role holding
+    |             it may edit the field as well.
+    |
+    */
+
+    'content_timestamp' => [
+        'auto' => true,
+        'permission' => false,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Reminder scheduler
     |--------------------------------------------------------------------------
     |

@@ -327,6 +327,18 @@ export function validate(model, ctx = {}) {
     } else if (skipFields.length && !plainLanguageSite) {
         error('skip_fields_needs_site', 'metadata.plain_language_skip_fields', null, 'writer_skip_fields_needs_site');
     }
+    // The intro: a handle, paired with the site, and one of the picked content
+    // fields — like WorkflowDefinitionWriter.
+    const introField = meta.plain_language_intro_field;
+    if (introField != null && introField !== '') {
+        if (typeof introField !== 'string' || !/^[A-Za-z0-9_-]+$/.test(introField.trim())) {
+            error('intro_field_invalid', 'metadata.plain_language_intro_field', null, 'writer_intro_field_invalid');
+        } else if (!plainLanguageSite) {
+            error('intro_field_needs_site', 'metadata.plain_language_intro_field', null, 'writer_intro_field_needs_site');
+        } else if (!(Array.isArray(meta.content_fields) ? meta.content_fields : []).includes(introField.trim())) {
+            error('intro_field_not_content', 'metadata.plain_language_intro_field', null, 'writer_intro_field_not_content', { field: introField.trim() });
+        }
+    }
 
     // --- places marked for deletion ---
     for (const deletion of model.deletions ?? []) {
