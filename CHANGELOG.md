@@ -6,6 +6,8 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-25
+
 ### Added
 
 - **SLA assignment by criteria.** A stage's `<stage>_assign` can be
@@ -285,7 +287,8 @@ First release on Packagist.
   warns when a collection of a publishing workflow has no revisions; enable
   them with the new "Revisions" setting.
 
-[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/takepart-media/statamic-workflows/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/takepart-media/statamic-workflows/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.2...v1.0.3
