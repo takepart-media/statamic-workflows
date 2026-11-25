@@ -168,7 +168,9 @@ return [
     |
     |   label       Shown in the dropdown. Passed through the translator, so a
     |               translation key works here as well as a plain string.
-    |   user_field  The field on the User blueprint this criterion reads.
+    |   user_field  The field on the User blueprint this criterion reads. Or
+    |               `:id` for the user themself: with an `entry_field` of type
+    |               `users` that selects whoever is named on the entry.
     |   entry_field The field on the ENTRY this criterion reads.
     |   operators   Optional. Narrows the operator dropdown to these, in THIS
     |               order — which also picks what a fresh condition row starts

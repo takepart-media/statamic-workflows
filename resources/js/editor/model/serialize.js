@@ -18,6 +18,7 @@ import {
     DEFAULT_MAIL_TYPE,
     DEFAULT_PROGRESS_ORIENTATION,
     DEFAULT_REMINDER_MAIL_TYPE,
+    SLA_ASSIGN_CRITERIA,
     SLA_STAGES,
     TMP_PLACE_HANDLE,
     TMP_TRANSITION_HANDLE,
@@ -69,7 +70,18 @@ export function serializeMetadata(source) {
             // Only a complete pick goes along: a type without anyone chosen
             // would assign nobody, and the writer refuses it.
             const assign = sla[`${stage}_assign`];
-            if (assign?.by && assign.handles?.length) {
+            if (assign?.by === SLA_ASSIGN_CRITERIA) {
+                // By criteria: unfinished rows are dropped like on a transition,
+                // and without one left there is nothing to assign by.
+                const criteria = cleanCriteria(assign.criteria);
+                if (criteria.length) {
+                    stages[`${stage}_assign`] = { by: assign.by, match: assign.match ?? 'all', criteria };
+                    // Who takes over when the criteria select nobody for a post.
+                    if (assign.fallback?.by && assign.fallback.handles?.length) {
+                        stages[`${stage}_assign`].fallback = { by: assign.fallback.by, handles: [...assign.fallback.handles] };
+                    }
+                }
+            } else if (assign?.by && assign.handles?.length) {
                 stages[`${stage}_assign`] = { by: assign.by, handles: [...assign.handles] };
             }
         }

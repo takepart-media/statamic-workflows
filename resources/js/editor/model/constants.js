@@ -46,6 +46,10 @@ export const DEFAULT_REMINDER_MAIL_TYPE = 'reminder';
 // pair plus an optional `<stage>_assign`.
 export const SLA_STAGES = ['needs_update', 'outdated'];
 
+// `<stage>_assign.by` for "whoever the assignment criteria select" — next to
+// group / role / user (SlaSettings::BY_CRITERIA).
+export const SLA_ASSIGN_CRITERIA = 'criteria';
+
 // ProgressSteps::orientation() reads an absent key as this — so it is never written.
 export const DEFAULT_PROGRESS_ORIENTATION = 'horizontal';
 

@@ -25,7 +25,7 @@
 //       contentFieldOptions,         // {collection: [{handle, label, type, supported}]}
 //   }
 
-import { SLA_STAGES } from './constants.js';
+import { SLA_ASSIGN_CRITERIA, SLA_STAGES } from './constants.js';
 import { cleanCriteria } from './serialize.js';
 import { findPlace, findTransition, handleProblems, keyOf } from './editorModel.js';
 
@@ -293,7 +293,15 @@ export function validate(model, ctx = {}) {
         }
         configured[stage] = Number(days);
         const assign = sla[`${stage}_assign`];
-        if (assign && (assign.by || assign.handles?.length) && !(assign.by && assign.handles?.length)) {
+        if (assign?.by === SLA_ASSIGN_CRITERIA) {
+            if (!cleanCriteria(assign.criteria).length) {
+                error('sla_assign_invalid', `metadata.sla.${stage}_assign`, null, 'writer_sla_assign_invalid', { stage });
+            }
+            const fallback = assign.fallback;
+            if (fallback && (fallback.by || fallback.handles?.length) && !(fallback.by && fallback.handles?.length)) {
+                error('sla_assign_fallback_invalid', `metadata.sla.${stage}_assign`, null, 'writer_sla_assign_fallback_invalid', { stage });
+            }
+        } else if (assign && (assign.by || assign.handles?.length) && !(assign.by && assign.handles?.length)) {
             error('sla_assign_invalid', `metadata.sla.${stage}_assign`, null, 'writer_sla_assign_invalid', { stage });
         }
     }

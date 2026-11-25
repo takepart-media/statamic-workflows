@@ -123,7 +123,7 @@ transitions:
 | --- | --- | --- | --- |
 | `needs_update_days` | `int` | – | Alter in Tagen für die erste Stufe. `0` heißt: beim nächsten Scheduler-Lauf. |
 | `needs_update_place` | `string` | – | Place-Handle der ersten Stufe. |
-| `needs_update_assign` | `object` | – | Optional. Wer bei der Ankunft zuständig wird: `{by: group\|role\|user, handles: [...]}`. |
+| `needs_update_assign` | `object` | – | Optional. Wer bei der Ankunft zuständig wird: `{by: group\|role\|user, handles: [...]}`, oder nach Kriterien (siehe [Nach Kriterien zuweisen](#nach-kriterien-zuweisen)). |
 | `outdated_days` | `int` | – | Alter in Tagen für die zweite Stufe. Mindestens `needs_update_days`. |
 | `outdated_place` | `string` | – | Place-Handle der zweiten Stufe. |
 | `outdated_assign` | `object` | – | Optional. Wie `needs_update_assign`, für die zweite Stufe. |
@@ -146,6 +146,31 @@ Beim Speichern prüft das Addon, dass:
 - der Place jeder Stufe in diesem Workflow existiert,
 - die Tage leer oder eine ganze Zahl ab `0` sind,
 - die zweite Stufe nicht vor der ersten liegt.
+
+### Nach Kriterien zuweisen
+
+Statt einer festen Gruppe, Rolle oder Person kann eine Stufe den Eintrag an die Personen geben, die die [Zuweisungskriterien](extending/assignment-criteria.md) für ihn auswählen. Das sind dieselben Kriterien wie bei einer Benutzerzuweisung an einer Transition, einschließlich derer, die dein Projekt deklariert.
+
+```yaml
+sla:
+  needs_update_days: 365
+  needs_update_place: needs_update
+  needs_update_assign:
+    by: criteria
+    match: all
+    criteria:
+      - { field: owner, operator: matches_entry }
+    fallback: { by: group, handles: [editors] }
+```
+
+| Schlüssel | Typ | Standard | Beschreibung |
+| --- | --- | --- | --- |
+| `by` | `string` | – | `criteria`. |
+| `match` | `string` | `all` | `all` oder `any`: wie die Kriterien verknüpft werden. |
+| `criteria` | `array` | – | Mindestens ein Kriterium. Gruppen eine Ebene tief funktionieren wie an einer Transition. |
+| `fallback` | `object` | – | Optional. Eine feste Zielgruppe `{by: group\|role\|user, handles: [...]}` für einen Eintrag, für den die Kriterien niemanden auswählen, etwa weil das gelesene Feld leer ist. |
+
+Für die Kriterien gelten die Regeln einer automatischen Benutzerzuweisung: mindestens eines muss Personen eingrenzen. Ohne `fallback` behält ein Eintrag, für den die Kriterien niemanden auswählen, seine bisherigen Zugewiesenen.
 
 ### So gestaltest du die Stufen
 
@@ -179,7 +204,7 @@ Für jeden Workflow mit `sla`-Block macht ein Lauf Folgendes:
 3. Er berechnet das Alter jeder Fassung in Tagen anhand ihrer Uhr.
 4. Er bestimmt das Ziel und prüft dabei zuerst die zweite Stufe: ein Eintrag, der für beide alt genug ist, wandert direkt in die zweite.
 5. Steht der Eintrag schon im Ziel-Place oder ist er nicht alt genug, bleibt er, wo er ist.
-6. Hat die Stufe ein eigenes `_assign`, macht er diese Personen zuständig. Passt niemand, bleiben die bisher Zugewiesenen, und der Lauf gibt eine Warnung aus.
+6. Hat die Stufe ein eigenes `_assign`, macht er diese Personen zuständig. Eine Zuweisung nach Kriterien wird für diesen Eintrag ausgewertet; trifft sie niemanden, greift ihr `fallback`. Passt dann immer noch niemand, bleiben die bisher Zugewiesenen, und der Lauf gibt eine Warnung aus.
 7. Er verschiebt den Eintrag:
    - **Mit einer Transition** vom aktuellen Place ins Ziel: Die Transition läuft wie ein Klick, nur ohne Person. Ihre automatische Zuweisung, ihre Mail und das Published-Flag wirken wie definiert.
    - **Ohne Transition:** Der Eintrag wird direkt verschoben. Das Published-Flag folgt dem `allow_publish` des Ziels, die `mail`-Action des Ziels feuert, und der Verlauf vermerkt „Seit N Tagen nicht aktualisiert.“ Die Zuständigkeit bleibt, wo sie war, außer die Stufe hat `_assign`.

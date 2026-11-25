@@ -82,6 +82,17 @@ class AssignmentCriteria
     public const MATCHES_ENTRY = 'matches_entry';
 
     /**
+     * `user_field` value for "the user themself": the criterion reads the user's
+     * ID instead of a blueprint field. With an `entry_field` of type `users` that
+     * says "whoever is named on this subject" — its owner, its reviewer.
+     *
+     * A reserved word rather than a field, because a user's id is not one: it is
+     * not in the blueprint and `get()` does not return it. The colon keeps it out
+     * of the way of every real handle.
+     */
+    public const USER_ID = ':id';
+
+    /**
      * The operators that compare against a value the author writes down.
      * `matches_entry` is the one that does not — it takes its value from the
      * subject — which is why the writer keys its "value required" check on this
@@ -382,7 +393,7 @@ class AssignmentCriteria
             }
 
             $shared = array_intersect(
-                self::valueList($user->get($definition['user_field'])),
+                self::valueList(self::userValue($user, $definition)),
                 self::valueList($entry->value($definition['entry_field'])),
             );
 
@@ -403,7 +414,7 @@ class AssignmentCriteria
                 // and role membership is not stored where get() would find it.
                 self::GROUP => (bool) $user->isInGroup($value),
                 self::ROLE => (bool) $user->hasRole($value),
-                default => in_array(self::bareSlug($value), self::valueList($user->get($definition['user_field'])), true),
+                default => in_array(self::bareSlug($value), self::valueList(self::userValue($user, $definition)), true),
             };
 
             return $operator === self::IS ? $has : ! $has;
@@ -459,6 +470,20 @@ class AssignmentCriteria
         return str_contains($value, '::') ? Str::after($value, '::') : $value;
     }
 
+    /**
+     * What a criterion reads on the user's side: the field it names, or the
+     * user's own id for USER_ID.
+     *
+     * @param  \Statamic\Contracts\Auth\User  $user
+     * @param  array{user_field: string|null}  $definition
+     */
+    private static function userValue($user, array $definition): mixed
+    {
+        return $definition['user_field'] === self::USER_ID
+            ? (string) $user->id()
+            : $user->get($definition['user_field']);
+    }
+
     private static function handleOrNull($value): ?string
     {
         return is_string($value) && $value !== '' ? $value : null;
@@ -496,12 +521,29 @@ class AssignmentCriteria
             return false;
         }
 
-        if ($definition['user_field'] !== null && ! self::userFields()->contains($definition['user_field'])) {
+        // USER_ID is not a blueprint field and needs none.
+        if ($definition['user_field'] !== null
+            && $definition['user_field'] !== self::USER_ID
+            && ! self::userFields()->contains($definition['user_field'])) {
             return false;
         }
 
         return $definition['entry_field'] === null
             || self::entryFields()->contains($definition['entry_field']);
+    }
+
+    /**
+     * Forget what was read from the config and the blueprints.
+     *
+     * The registry is cached for the process because neither changes during a
+     * request. A long-running process that edits blueprints does — a test suite
+     * is the everyday case — and has to say so.
+     */
+    public static function flush(): void
+    {
+        self::$memo = [];
+        self::$userFields = null;
+        self::$entryFields = null;
     }
 
     /**

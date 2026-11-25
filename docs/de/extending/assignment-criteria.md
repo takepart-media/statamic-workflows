@@ -62,7 +62,7 @@ Ein Eintrag pro Kriterium. Der Array-Schlüssel ist der Handle, der in der YAML 
 | Schlüssel | Typ | Pflicht | Standard | Beschreibung |
 | --- | --- | --- | --- | --- |
 | `label` | `string` | nein | der Handle | Anzeigename im Editor. Läuft durch `__()`, ein Übersetzungs-Key funktioniert also auch. |
-| `user_field` | `string` | mind. eines von beiden | – | Feld-Handle im User-Blueprint. |
+| `user_field` | `string` | mind. eines von beiden | – | Feld-Handle im User-Blueprint. Oder `:id` für die eigene ID des Benutzers (siehe [Die am Eintrag genannte Person](#die-am-eintrag-genannte-person)). |
 | `entry_field` | `string` | mind. eines von beiden | – | Feld-Handle in einem beliebigen Entry-Blueprint des Projekts. |
 | `operators` | `array` | nein | alle, die die Felder erlauben | Liste aus `is`, `is_not`, `matches_entry`. Schränkt die Operatoren ein. Die Reihenfolge zählt: Der erste ist der Startwert einer neuen Zeile. |
 | `options` | `array` \| `string` | nein | keine | Vorschläge für das Wert-Feld (siehe unten). |
@@ -173,6 +173,21 @@ actions:
           - { field: role, operator: is, value: editor }
           - { field: group, operator: is, value: chefredaktion }
 ```
+
+## Die am Eintrag genannte Person
+
+Um die Person auszuwählen, die ein Eintrag in einem `users`-Feld nennt, etwa seine Verantwortliche oder seinen Prüfer, setzt du `user_field` auf `:id`. Das Kriterium vergleicht dann die eigene ID des Benutzers mit dem Eintragsfeld:
+
+```php
+'owner' => [
+    'label' => 'Verantwortlich (Feld am Eintrag)',
+    'user_field' => ':id',
+    'entry_field' => 'owner',
+    'operators' => ['matches_entry'],
+],
+```
+
+`:id` ist kein Blueprint-Feld, im User-Blueprint muss also nichts existieren. `entry_field` wird wie gewohnt geprüft. Ein Eintrag mit leerem Feld trifft niemanden.
 
 ## Hinweise & Grenzen
 

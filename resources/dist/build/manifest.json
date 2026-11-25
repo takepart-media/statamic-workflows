@@ -9,7 +9,7 @@
     ]
   },
   "resources/js/addon.js": {
-    "file": "assets/addon-D3Kva82K.js",
+    "file": "assets/addon-ZdJ7ICbF.js",
     "name": "addon",
     "src": "resources/js/addon.js",
     "isEntry": true,
@@ -21,7 +21,7 @@
     ]
   },
   "resources/js/editor/components/WorkflowEditor.vue": {
-    "file": "assets/WorkflowEditor-Ckjvfne4.js",
+    "file": "assets/WorkflowEditor-k6uee4Ty.js",
     "name": "WorkflowEditor",
     "src": "resources/js/editor/components/WorkflowEditor.vue",
     "isDynamicEntry": true,

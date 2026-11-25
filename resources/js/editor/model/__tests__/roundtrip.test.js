@@ -224,6 +224,25 @@ describe('metadata cleanup', () => {
         });
     });
 
+    it('round-trips an SLA assignment by criteria, with its fallback', () => {
+        const assign = {
+            by: 'criteria',
+            match: 'any',
+            criteria: [{ field: 'owner', operator: 'matches_entry' }],
+            fallback: { by: 'group', handles: ['desk'] },
+        };
+        const model = normalize({ metadata: { sla: { outdated_days: 5, outdated_place: 'b', outdated_assign: assign } } });
+
+        expect(serialize(model).metadata.sla.outdated_assign).toEqual(assign);
+
+        // A half-picked fallback is left out; without a criterion there is no assignment.
+        model.metadata.sla.outdated_assign.fallback = { by: 'group', handles: [] };
+        expect(serialize(model).metadata.sla.outdated_assign).not.toHaveProperty('fallback');
+
+        model.metadata.sla.outdated_assign.criteria = [];
+        expect(serialize(model).metadata.sla).not.toHaveProperty('outdated_assign');
+    });
+
     it('drops cleared selects, the default orientation, empty source-view rules and credentials', () => {
         const model = normalize({
             metadata: {

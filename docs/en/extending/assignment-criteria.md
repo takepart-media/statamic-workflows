@@ -62,7 +62,7 @@ One entry per criterion. The array key is the handle stored as `field` in the YA
 | Key | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `label` | `string` | no | the handle | Name shown in the editor. Passed through `__()`, so a translation key works too. |
-| `user_field` | `string` | at least one of the two | – | Field handle on the User blueprint. |
+| `user_field` | `string` | at least one of the two | – | Field handle on the User blueprint. Or `:id` for the user's own ID (see [The user named on the entry](#the-user-named-on-the-entry)). |
 | `entry_field` | `string` | at least one of the two | – | Field handle on any entry blueprint of the project. |
 | `operators` | `array` | no | all the fields allow | List of `is`, `is_not`, `matches_entry`. Narrows the operators. Order matters: the first one is what a new row starts on. |
 | `options` | `array` \| `string` | no | none | Suggestions for the value input (see below). |
@@ -173,6 +173,21 @@ actions:
           - { field: role, operator: is, value: editor }
           - { field: group, operator: is, value: chief_editors }
 ```
+
+## The user named on the entry
+
+To select the person an entry names in a `users` field, for example its owner or reviewer, set `user_field` to `:id`. The criterion then compares the user's own ID with the entry field:
+
+```php
+'owner' => [
+    'label' => 'Owner (field on the entry)',
+    'user_field' => ':id',
+    'entry_field' => 'owner',
+    'operators' => ['matches_entry'],
+],
+```
+
+`:id` is not a blueprint field, so nothing has to exist on the User blueprint. `entry_field` is checked as usual. An entry whose field is empty matches nobody.
 
 ## Notes & limitations
 

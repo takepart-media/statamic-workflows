@@ -37,6 +37,16 @@ export function normalize(def, { labelLocales = DEFAULT_LABEL_LOCALES } = {}) {
         copy.metadata.sla[`${stage}_assign`] = {
             by: assign?.by ?? null,
             handles: [...(assign?.handles ?? [])],
+            // `by: criteria` — the same shape a user_assignment action carries,
+            // so CriteriaBuilder edits it as it is. Always present, like the
+            // fallback audience below, so the form has a model before the type
+            // is picked; serialize() writes them only for `criteria`.
+            match: ASSIGNMENT_MATCHES.includes(assign?.match) ? assign.match : 'all',
+            criteria: toCriteria(assign?.criteria),
+            fallback: {
+                by: assign?.fallback?.by ?? null,
+                handles: [...(assign?.fallback?.handles ?? [])],
+            },
         };
     }
     // The self-assignment guard: always an object, so the picker has a model;

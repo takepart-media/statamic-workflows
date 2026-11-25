@@ -594,6 +594,32 @@
                             @update:by="(v) => (assignOf(stage).by = v)"
                             @update:handles="(v) => (assignOf(stage).handles = v)"
                         />
+                        <!-- By criteria: the builder of the user-assignment action,
+                             asked for the ageing post — and who takes over for a
+                             post the criteria select nobody for. -->
+                        <div v-if="assignOf(stage).by === SLA_ASSIGN_CRITERIA" class="mt-2 space-y-3 border-t border-gray-200 pt-3 dark:border-gray-700!">
+                            <Select
+                                adaptive-width
+                                :model-value="assignOf(stage).match"
+                                :options="assignMatchOptions"
+                                size="sm"
+                                @update:model-value="(v) => (assignOf(stage).match = v ?? 'all')"
+                            />
+                            <CriteriaBuilder :action="assignOf(stage)" />
+                            <Field
+                                :label="__('workflows::messages.sla_assign_fallback')"
+                                :instructions="__('workflows::messages.sla_assign_fallback_hint')"
+                            >
+                                <AudiencePicker
+                                    :by="assignOf(stage).fallback.by"
+                                    :handles="assignOf(stage).fallback.handles"
+                                    :by-options="slaFallbackByOptions"
+                                    :placeholder="__('workflows::messages.sla_assign_handles_none')"
+                                    @update:by="(v) => (assignOf(stage).fallback.by = v)"
+                                    @update:handles="(v) => (assignOf(stage).fallback.handles = v)"
+                                />
+                            </Field>
+                        </div>
                     </ProblemField>
                 </div>
                 <!-- What the writer says about the block as a whole. -->
@@ -647,13 +673,14 @@
 import { computed, inject, ref, watch } from 'vue';
 import { Button, Checkbox, CodeEditor, Field, Icon, Input, Select, Textarea } from '@statamic/cms/ui';
 import EnvStatusLine from '../../../components/EnvStatusLine.vue';
-import { SLA_STAGES } from '../../model/constants.js';
+import { ASSIGNMENT_MATCHES, SLA_ASSIGN_CRITERIA, SLA_STAGES } from '../../model/constants.js';
 import { hasPublishPlace, isLocalizationWorkflow, isPlainLanguageWorkflow } from '../../model/actionRules.js';
 import { keyOf } from '../../model/editorModel.js';
 import { placeDisplayName } from '../../model/labels.js';
 import { EDITOR_CONTEXT } from '../context.js';
 import AudiencePicker from '../shared/AudiencePicker.vue';
 import AudienceRows from '../shared/AudienceRows.vue';
+import CriteriaBuilder from '../shared/CriteriaBuilder.vue';
 import ProblemField from '../shared/ProblemField.vue';
 import OrderList from '../panels/OrderList.vue';
 import ContentFieldList from './ContentFieldList.vue';
@@ -749,8 +776,12 @@ const toggleFourEyes = (on) => setMeta('four_eyes', on
 
 // normalize() always gives each stage an assign object; a hand-made one may not.
 function assignOf(stage) {
-    sla.value[`${stage}_assign`] ??= { by: null, handles: [] };
-    return sla.value[`${stage}_assign`];
+    const assign = (sla.value[`${stage}_assign`] ??= { by: null, handles: [] });
+    // The `by: criteria` half of the model — see normalize().
+    assign.match ??= 'all';
+    assign.criteria ??= [];
+    assign.fallback ??= { by: null, handles: [] };
+    return assign;
 }
 
 const view = computed(() => editor.api.view.value);
@@ -845,7 +876,18 @@ const audienceOptions = computed(() => [
 const slaAssignByOptions = computed(() => [
     { value: null, label: __('workflows::messages.sla_assign_keep') },
     ...audienceOptions.value,
+    { value: SLA_ASSIGN_CRITERIA, label: __('workflows::messages.sla_assign_by_criteria') },
 ]);
+
+// The fallback of a criteria assignment is a fixed audience, or none.
+const slaFallbackByOptions = computed(() => [
+    { value: null, label: __('workflows::messages.sla_assign_fallback_none') },
+    ...audienceOptions.value,
+]);
+
+const assignMatchOptions = computed(() =>
+    ASSIGNMENT_MATCHES.map((value) => ({ value, label: __(`workflows::messages.assignment_match_${value}`) })),
+);
 
 // What a save would send right now — read-only, for the curious and for bug
 // reports. Only computed while that section is open.

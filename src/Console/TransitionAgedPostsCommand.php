@@ -170,7 +170,7 @@ class TransitionAgedPostsCommand extends Command
         }
 
         $target = $stage['place'];
-        $takeOver = $stage['assign'] !== null ? SlaSettings::assigneeIds($stage['assign']) : [];
+        $takeOver = $stage['assign'] !== null ? SlaSettings::stageAssigneeIds($stage['assign'], $entry) : [];
 
         $transition = $this->transitionInto($raw, $current, $target);
         $how = $transition ?? 'direct';

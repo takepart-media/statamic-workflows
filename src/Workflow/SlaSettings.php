@@ -37,6 +37,14 @@ class SlaSettings
     public const STAGE_OUTDATED = 'outdated';
 
     /**
+     * `<stage>_assign.by` value for "whoever the criteria select" — the same
+     * criteria a `user_assignment` action uses, evaluated against the ageing
+     * post. Next to group / role / user (SourceViewRules::BY), and SLA-only: the
+     * other audiences in this addon are asked without a subject to inspect.
+     */
+    public const BY_CRITERIA = 'criteria';
+
+    /**
      * The stages a definition actually configures, as
      * `stage => ['days' => int, 'place' => string]`, in ageing order.
      *
@@ -108,21 +116,66 @@ class SlaSettings
     }
 
     /**
-     * Who becomes responsible when a post reaches this stage:
-     * `<stage>_assign: {by: group|role|user, handles: [...]}`, cleaned, or null.
+     * Who becomes responsible when a post reaches this stage, cleaned, or null.
+     * `<stage>_assign` is one of two shapes:
+     *
+     * - `{by: group|role|user, handles: [...]}` — a fixed audience;
+     * - `{by: criteria, match, criteria: [...], fallback: {by, handles}}` — the
+     *   people the assignment criteria select FOR THIS POST, and optionally a
+     *   fixed audience for a post they select nobody for.
      *
      * Needed because nobody clicks into an ageing step — the scheduler moves the
      * post — so there is no transition dialog to ask, and a move without a
      * transition leaves the old assignees in charge (PlaceMover). Those are
-     * typically whoever approved the post a year ago. The audience types are the
-     * ones SourceViewRules already speaks, so the editor reuses its picker.
+     * typically whoever approved the post a year ago. The fixed audience types
+     * are the ones SourceViewRules already speaks, so the editor reuses its
+     * picker; the criteria are the ones of the `user_assignment` action, so it
+     * reuses that builder.
      *
      * @param  array<string, mixed>  $sla
-     * @return array{by: string, handles: array<int, string>}|null
+     * @return array{by: string, handles?: array<int, string>, match?: string, criteria?: array<int, array<string, mixed>>, fallback?: array{by: string, handles: array<int, string>}|null}|null
      */
     public static function assign(array $sla, string $stage): ?array
     {
-        return self::audience($sla[$stage.'_assign'] ?? null);
+        $block = $sla[$stage.'_assign'] ?? null;
+
+        if (is_array($block) && ($block['by'] ?? null) === self::BY_CRITERIA) {
+            return self::criteriaAudience($block);
+        }
+
+        return self::audience($block);
+    }
+
+    /**
+     * A `by: criteria` block, with its criteria normalised the way a
+     * `user_assignment` action's are — or null when no criterion is left.
+     *
+     * Read through TransitionActions on purpose: the criteria tree (groups one
+     * level deep, legacy spellings) has exactly one reader there, and a second
+     * one here would drift.
+     *
+     * @param  array<string, mixed>  $block
+     * @return array{by: string, match: string, criteria: array<int, array<string, mixed>>, fallback: array{by: string, handles: array<int, string>}|null}|null
+     */
+    private static function criteriaAudience(array $block): ?array
+    {
+        $assignment = TransitionActions::userAssignment(['metadata' => ['actions' => [[
+            'type' => TransitionActions::USER_ASSIGNMENT,
+            'mode' => TransitionActions::MODE_AUTOMATIC,
+            'match' => $block['match'] ?? TransitionActions::MATCH_ALL,
+            'criteria' => $block['criteria'] ?? [],
+        ]]]]);
+
+        if ($assignment === null || $assignment['criteria'] === []) {
+            return null;
+        }
+
+        return [
+            'by' => self::BY_CRITERIA,
+            'match' => $assignment['match'] ?? TransitionActions::MATCH_ALL,
+            'criteria' => $assignment['criteria'],
+            'fallback' => self::audience($block['fallback'] ?? null),
+        ];
     }
 
     /**
@@ -152,7 +205,38 @@ class SlaSettings
     }
 
     /**
-     * The user ids an `assign` block resolves to right now: members of any of
+     * Who a stage's `assign` hands THIS post to.
+     *
+     * A fixed audience is the same for every post. A criteria audience is asked
+     * per post, and when it selects nobody — the field the criterion reads is
+     * empty, the person is gone — its `fallback` audience answers instead. Empty
+     * when neither names anyone; the caller then keeps the current assignees.
+     *
+     * @param  array<string, mixed>  $assign  As returned by assign().
+     * @param  \Statamic\Contracts\Entries\Entry|null  $entry
+     * @return array<int, string>
+     */
+    public static function stageAssigneeIds(array $assign, $entry): array
+    {
+        if ($assign['by'] !== self::BY_CRITERIA) {
+            return self::assigneeIds($assign);
+        }
+
+        $ids = app(AssignmentCandidates::class)->ids([
+            'mode' => TransitionActions::MODE_AUTOMATIC,
+            'match' => $assign['match'],
+            'criteria' => $assign['criteria'],
+        ], $entry);
+
+        if ($ids !== [] || ($assign['fallback'] ?? null) === null) {
+            return $ids;
+        }
+
+        return self::assigneeIds($assign['fallback']);
+    }
+
+    /**
+     * The user ids a FIXED audience resolves to right now: members of any of
      * the groups, holders of any of the roles, or the named users that still
      * exist. Empty when nobody matches — the caller then leaves the assignment
      * alone rather than hand the post to nobody.

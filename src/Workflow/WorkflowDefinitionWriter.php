@@ -815,6 +815,37 @@ class WorkflowDefinitionWriter
     }
 
     /**
+     * One stage's `<stage>_assign`: a fixed audience, or `by: criteria`.
+     *
+     * The criteria are held to the rules of an AUTOMATIC `user_assignment` —
+     * known fields and operators, at least one criterion, and one that narrows
+     * people — because that is what this is: nobody is there to pick, the
+     * scheduler hands the post over. A `fallback`, where given, has to be a
+     * complete fixed audience; half of one would be dropped on read and the post
+     * would stay with whoever had it, without anybody having been told.
+     */
+    private function validateSlaAssign(string $stage, mixed $block): void
+    {
+        if (! is_array($block) || ($block['by'] ?? null) !== SlaSettings::BY_CRITERIA) {
+            if (! is_array($block) || SlaSettings::audience($block) === null) {
+                $this->fail('sla_assign_invalid', ['stage' => $stage]);
+            }
+
+            return;
+        }
+
+        $this->validateAssignment(SlaSettings::KEY.'.'.$stage.'_assign', [
+            'mode' => TransitionActions::MODE_AUTOMATIC,
+            'match' => $block['match'] ?? TransitionActions::MATCH_ALL,
+            'criteria' => $block['criteria'] ?? [],
+        ]);
+
+        if (($block['fallback'] ?? null) !== null && SlaSettings::audience($block['fallback']) === null) {
+            $this->fail('sla_assign_fallback_invalid', ['stage' => $stage]);
+        }
+    }
+
+    /**
      * `metadata.four_eyes` — the fallback audience when the person who passed
      * the subject on last would be the only candidate (FourEyesGuard). Refused
      * when unusable, like self_assignment.
@@ -886,8 +917,8 @@ class WorkflowDefinitionWriter
             // Optional: who takes over on arrival. Present means usable — an
             // unknown audience type or an empty handle list would silently assign
             // nobody, so it is refused instead (SlaSettings::assign()).
-            if (array_key_exists($stage.'_assign', $sla) && SlaSettings::assign($sla, $stage) === null) {
-                $this->fail('sla_assign_invalid', ['stage' => $stage]);
+            if (array_key_exists($stage.'_assign', $sla)) {
+                $this->validateSlaAssign($stage, $sla[$stage.'_assign']);
             }
 
             $configured[$stage] = $days;

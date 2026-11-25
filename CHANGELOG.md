@@ -6,6 +6,19 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **SLA assignment by criteria.** A stage's `<stage>_assign` can be
+  `by: criteria`: the assignment criteria of the `user_assignment` action,
+  asked for the ageing entry, with an optional `fallback` audience for an
+  entry they select nobody for. In the workflow editor's SLA section as
+  "By criteria".
+- **`user_field: ':id'` in assignment criteria.** A criterion can compare
+  the user's own ID with an entry field, which selects whoever a `users` field
+  on the entry names. No field on the User blueprint is needed.
+- `AssignmentCriteria::flush()` resets the cached registry and blueprint
+  fields for long-running processes that change blueprints.
+
 ## [1.2.0] - 2026-11-25
 
 ### Added

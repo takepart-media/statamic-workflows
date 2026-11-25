@@ -123,7 +123,7 @@ transitions:
 | --- | --- | --- | --- |
 | `needs_update_days` | `int` | – | Age in days for the first stage. `0` means at the next scheduler run. |
 | `needs_update_place` | `string` | – | Place handle of the first stage. |
-| `needs_update_assign` | `object` | – | Optional. Who becomes responsible on arrival: `{by: group\|role\|user, handles: [...]}`. |
+| `needs_update_assign` | `object` | – | Optional. Who becomes responsible on arrival: `{by: group\|role\|user, handles: [...]}`, or by criteria (see [Assigning by criteria](#assigning-by-criteria)). |
 | `outdated_days` | `int` | – | Age in days for the second stage. Must be at least `needs_update_days`. |
 | `outdated_place` | `string` | – | Place handle of the second stage. |
 | `outdated_assign` | `object` | – | Optional. As `needs_update_assign`, for the second stage. |
@@ -146,6 +146,31 @@ When saving, the addon checks that:
 - each stage's place exists in this workflow,
 - days are empty or a whole number from `0`,
 - the second stage doesn't come before the first.
+
+### Assigning by criteria
+
+Instead of a fixed group, role or person, a stage can hand the entry to whoever the [assignment criteria](extending/assignment-criteria.md) select for it. These are the same criteria a user assignment on a transition uses, including the ones your project declares.
+
+```yaml
+sla:
+  needs_update_days: 365
+  needs_update_place: needs_update
+  needs_update_assign:
+    by: criteria
+    match: all
+    criteria:
+      - { field: owner, operator: matches_entry }
+    fallback: { by: group, handles: [editors] }
+```
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `by` | `string` | – | `criteria`. |
+| `match` | `string` | `all` | `all` or `any`: how the criteria are joined. |
+| `criteria` | `array` | – | At least one criterion. Groups one level deep work as on a transition. |
+| `fallback` | `object` | – | Optional. A fixed audience `{by: group\|role\|user, handles: [...]}` for an entry the criteria select nobody for, for example when the field they read is empty. |
+
+The criteria follow the rules of an automatic user assignment: at least one of them must narrow people. Without a `fallback`, an entry the criteria select nobody for keeps its current assignees.
 
 ### How to design the stages
 
@@ -179,7 +204,7 @@ For each workflow with an `sla` block, a run:
 3. Computes each version's age in days from its clock.
 4. Picks the target, checking the second stage first: an entry old enough for both goes straight into the second stage.
 5. Leaves the entry alone if it is already in the target place or not old enough.
-6. If the stage has its own `_assign`, makes those people responsible. If nobody matches, the current assignees stay and the run prints a warning.
+6. If the stage has its own `_assign`, makes those people responsible. An assignment by criteria is asked for this entry; if it selects nobody, its `fallback` is used. If still nobody matches, the current assignees stay and the run prints a warning.
 7. Moves the entry:
    - **With a transition** from the current place into the target: the transition runs like a click, without a person. Its automatic assignment, its mail and the published flag work as defined.
    - **Without one:** the entry is moved straight in. The published flag follows the target's `allow_publish`, the target's `mail` action fires, and the history notes "Not updated for N days." Responsibility stays where it was, unless the stage has `_assign`.
