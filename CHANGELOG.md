@@ -6,6 +6,32 @@ All notable changes to this addon. The format is based on
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-25
+
+### Added
+
+- **Introduction as a workflow setting for plain language.** A plain-language
+  workflow can name the content field its posts open with ("Introduction",
+  `metadata.plain_language_intro_field`). That section is wrapped in
+  `<div class="intro">` and the request sends `generate_intro: true`, so the
+  service writes the introduction itself. It has to be one of the picked
+  content fields; empty falls back to `content_fields.intro` in the config.
+- **"Content updated" can be kept by hand.** New config block
+  `content_timestamp`: `auto => false` stops the addon from stamping
+  `content_updated_at` on approval and on publishing a working copy, and
+  `permission => true` registers the permission `edit content updated date`
+  so chosen roles may edit the field, not only super admins. Defaults keep the
+  previous behaviour.
+
+### Changed
+
+- **The intro wrapper is always `<div class="intro">`.** It used to carry the
+  intro field's handle as its class, which the service only recognised when the
+  field happened to be called `intro`. Answers to jobs sent the old way are
+  still unwrapped.
+
+## [1.1.0] - 2026-11-24
+
 ### Added
 
 - **Eloquent models as workflow subjects.** A workflow lists Runway resource
@@ -25,18 +51,6 @@ All notable changes to this addon. The format is based on
 - **Events** `TransitionApplying` (before the state is written) and
   `TransitionApplied` (after it), both inside the transaction — a listener that
   throws rolls the step back — and `AssigneesChanged`.
-- **Introduction as a workflow setting for plain language.** A plain-language
-  workflow can name the content field its posts open with ("Introduction",
-  `metadata.plain_language_intro_field`). That section is wrapped in
-  `<div class="intro">` and the request sends `generate_intro: true`, so the
-  service writes the introduction itself. It has to be one of the picked
-  content fields; empty falls back to `content_fields.intro` in the config.
-- **"Content updated" can be kept by hand.** New config block
-  `content_timestamp`: `auto => false` stops the addon from stamping
-  `content_updated_at` on approval and on publishing a working copy, and
-  `permission => true` registers the permission `edit content updated date`
-  so chosen roles may edit the field, not only super admins. Defaults keep the
-  previous behaviour.
 
 ### Changed
 
@@ -45,10 +59,6 @@ All notable changes to this addon. The format is based on
   both apply.
 - `workflow_comment_reads` uses shorter `workflow` and `passage_ref` columns so
   its unique index fits MySQL/InnoDB.
-- **The intro wrapper is always `<div class="intro">`.** It used to carry the
-  intro field's handle as its class, which the service only recognised when the
-  field happened to be called `intro`. Answers to jobs sent the old way are
-  still unwrapped.
 
 ## [1.0.3] - 2026-11-05
 
@@ -262,7 +272,9 @@ First release on Packagist.
   warns when a collection of a publishing workflow has no revisions; enable
   them with the new "Revisions" setting.
 
-[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/takepart-media/statamic-workflows/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/takepart-media/statamic-workflows/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/takepart-media/statamic-workflows/compare/v1.0.0...v1.0.2
 [1.0.1]: https://github.com/takepart-media/statamic-workflows/releases/tag/v1.0.1
